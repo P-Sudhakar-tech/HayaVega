@@ -1,0 +1,2 @@
+class BlogConfig:
+    name = 'blog'

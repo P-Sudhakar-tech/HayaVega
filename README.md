@@ -1,0 +1,147 @@
+# Mangoo
+
+Mangoo is an early, runnable experiment in a Django-like developer experience backed by a Rust core.
+
+## What works now
+
+- `startproject` and `startapp` scaffolding
+- Django-style `manage.py`, `settings.py`, and `urls.py`
+- A development server and Python views
+- A small PyO3 native module (`mangoo_native`) for the Rust/Python boundary
+
+## Quick start
+
+```powershell
+cd D:\separate_code\mangoo
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+mangoo-admin startproject mysite
+cd mysite
+python manage.py startapp blog
+python manage.py runserver
+```
+
+Open `http://127.0.0.1:8000/`.
+
+## Settings
+
+Each project has a Django-familiar `project/settings.py`, but Mangoo uses its own explicit runtime sections:
+
+- `BASE_DIR`, `SECRET_KEY`, `DEBUG`, and `ALLOWED_HOSTS` for project identity and environment behavior.
+- `INSTALLED_APPS`, `MIDDLEWARE`, and `ROOT_URLCONF` for application composition.
+- `DATABASES['default']` for the SQLite database location.
+- `SERVER` for the development host and port.
+
+For example, change the default development port in `SERVER['PORT']`, or override it temporarily with `python manage.py runserver 8001`.
+
+## Databases
+
+Mangoo's database layer accepts SQLite, PostgreSQL, MySQL, and MariaDB through Django-style `DATABASES['default']` configuration. SQLite works with Python alone. For other engines, add the driver with UV before starting the project:
+
+```powershell
+uv add "psycopg[binary]"   # PostgreSQL
+uv add pymysql              # MySQL or MariaDB
+```
+
+Example PostgreSQL configuration:
+
+```python
+DATABASES = {
+    "default": {
+        "ENGINE": "postgresql",
+        "NAME": "mangoo",
+        "HOST": "localhost",
+        "PORT": 5432,
+        "USER": "mangoo",
+        "PASSWORD": os.getenv("MANGOO_DATABASE_PASSWORD"),
+    },
+}
+```
+
+## REST and GraphQL
+
+Mangoo includes a small dependency-free API layer. The bundled example exposes:
+
+- `GET /api/health` - JSON REST health response.
+- `POST /graphql` - GraphQL JSON endpoint. Send `{"query":"{ greeting }"}`.
+
+Use `api_route('api/items', view, methods=('GET', 'POST'))` for REST endpoints. Define GraphQL fields with `Schema(query={'field': resolver})` and mount them with `path('graphql', graphql_view(schema), methods=('POST',))`.
+
+## Development autoreload
+
+Mangoo can launch directly from this source checkout without pip. From the repository root, run `./mango.cmd launch 8001`. It watches Python files in the project and automatically restarts the development server after code changes. Use `./mango.cmd launch 8001 --noreload` to disable this behavior.
+
+If you later install Mangoo as a package, `mango launch 8001` is also available as a terminal command.
+
+Press `Ctrl+C` in the same terminal to stop the server cleanly, including when autoreload is enabled.
+
+## Rust-native Mangoo types
+
+Use Mangoo-specific types where performance-sensitive code benefits from a Rust implementation:
+
+```python
+from mangoo import mango_list
+
+items = mango_list(["first", "second"])
+items.append("third")
+```
+
+`mango_list` remains usable without a Rust toolchain through a compatible fallback. When the `mangoo_native` PyO3 extension is built, it automatically becomes a Rust-owned collection. The next Rust migration targets are request routing, JSON serialization, authentication operations, and database execution.
+
+## Declarative data entities
+
+Mangoo uses modern entity definitions and distinct query names rather than copying Django's ORM API:
+
+```python
+from mangoo import Decimal, Entity, Text
+
+class Product(Entity):
+    name = Text(unique=True)
+    price = Decimal()
+
+products = Product.collection(DATABASES["default"])
+products.append(name="Notebook", price=9.5)
+items = products.seek(price__above=5).arrange("-price").window(20).fetch()
+```
+
+`collection`, `seek`, `arrange`, `window`, `fetch`, `only`, `revise`, and `erase` provide the query workflow. The Python implementation works now; its selection-plan compiler also exists in the Rust core for the native path.
+
+## API serializers
+
+Use a schema-driven `Serializer` for external payload validation or an `EntitySerializer` for model output:
+
+```python
+from mangoo import EntitySerializer
+
+product_view = EntitySerializer(Product)
+payload = product_view.json(product)
+```
+
+The serializer normalizes entities, mappings, lists, and dates. Its native JSON encoder is included in the Rust binding source and becomes active automatically when `mangoo_native` is built.
+
+## Superuser
+
+Create the first administrator for a project with:
+
+```powershell
+python manage.py createsuperuser
+```
+
+Mangoo prompts for a username, email address, and password confirmation. It stores users in the project's local SQLite database (`mangoo.sqlite3` by default), with salted scrypt password hashes. Application code can validate credentials with `mangoo.authenticate(database_path, username, password)`.
+
+## Authentication security
+
+Mangoo's built-in authentication uses salted, memory-hard scrypt password hashes; requires passwords of at least 12 characters with lowercase, uppercase, numeric, and symbol characters; locks an account for 15 minutes after five failed attempts; and stores only hashes of session tokens. Enable authenticator-app two-factor authentication with:
+
+```powershell
+python manage.py enable2fa admin
+```
+
+The command prints a secret to add to a TOTP-compatible authenticator app. Keep it private: it is shown only when two-factor authentication is enabled.
+
+The generated project also exposes JSON authentication endpoints: `POST /api/auth/login`, `GET /api/auth/me`, and `POST /api/auth/logout`. Login accepts `username`, `password`, and optional `totp_code`; it returns a Bearer session token. Use HTTPS before exposing these endpoints outside local development.
+
+The Rust extension is optional for this first scaffold. To build it, install Rust and run `maturin develop` from the repository root.
+
+See [ROADMAP.md](ROADMAP.md) for the planned delivery path and boundaries.

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mangoo"
+version = "0.1.0"
+description = "A Django-like Python framework with a Rust core"
+requires-python = ">=3.10"
+authors = [{name = "Mangoo contributors"}]
+
+[project.scripts]
+mangoo-admin = "mangoo.cli:main"
+mango = "mangoo.cli:main"
+mangoo = "mangoo.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mangoo"]
