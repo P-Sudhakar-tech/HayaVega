@@ -11,4 +11,5 @@ def api_route(pattern: str, view: Callable, methods: Iterable[str] = ("GET",)) -
         result = view(request)
         return result if isinstance(result, Response) else json_response(result)
 
-    return path(pattern, endpoint, tuple(methods))
+    route = path(pattern, endpoint, tuple(methods))
+    return Route(route.pattern, route.view, route.methods, is_api=True)

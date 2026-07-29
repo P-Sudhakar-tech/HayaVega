@@ -13,7 +13,7 @@ This guide describes the project as it exists today, how to run it from a clean 
 | Settings | Implemented: Django-like `settings.py`, typed loader, structured database/server settings |
 | REST | Implemented: JSON routes, method checks, example health endpoint |
 | GraphQL | Implemented starter: single root query field per request |
-| Authentication | Implemented: scrypt passwords, lockouts, sessions, TOTP, Bearer REST endpoints |
+| Production features | Implemented baseline: scrypt passwords, lockouts, Bearer and cookie sessions, CSRF, permissions, TOTP, and admin base |
 | Databases | SQLite works now; PostgreSQL/MySQL/MariaDB adapters activate when drivers are installed |
 | Rust native layer | Rust core and PyO3 `MangoList` source are present; it still needs to be compiled and packaged |
 
@@ -216,6 +216,24 @@ python manage.py enable2fa admin
 
 Always use HTTPS before exposing these endpoints outside local development.
 
+### Cookie sessions and CSRF
+
+Successful login also sets a host-only, `HttpOnly`, `SameSite=Lax` `mangoo_session` cookie. Browser clients should fetch `GET /api/auth/csrf`, which returns a token and sets the `mangoo_csrf` cookie. Send that token in the `X-CSRF-Token` header for unsafe requests made with the session cookie (including logout). Bearer-token clients are not subject to CSRF checks because browsers do not attach Bearer headers automatically. Pass `secure_cookies=not DEBUG` to `auth_routes` (as the example site does) so production cookies also receive the `Secure` attribute.
+
+### Permissions and admin base
+
+Use `login_required`, `superuser_required`, or `permission_required` to protect a view. The built-in admin base can be enabled with `*admin_routes(DATABASES['default'])`; it provides administrator-only `/admin` and `/admin/users` pages. Authenticate the browser session first by calling the login endpoint.
+
+```python
+from mangoo import admin_routes, login_required, path
+
+@login_required(DATABASES["default"])
+def account(request):
+    return {"detail": "private"}
+
+urlpatterns = [path("account", account), *admin_routes(DATABASES["default"])]
+```
+
 ## 11. Databases
 
 ### SQLite
@@ -318,13 +336,32 @@ The test suite covers routing, REST, GraphQL starter behavior, authentication, T
 
 ## 15. Production checklist
 
+- Configure a `SECURITY` section in `settings.py`. Mangoo applies trusted-host validation, security headers, structured audit logs, an explicit CORS allow-list, and an in-memory per-client/per-path rate limit through this configuration.
+- Keep `ALLOWED_ORIGINS` empty unless a browser application must call the API from another origin. Never use a wildcard for authenticated browser APIs.
+- The bundled rate limiter is process-local. Replace or complement it with a shared edge or Redis-backed limiter when running more than one server process.
 - Use PostgreSQL or another externally managed production database.
 - Set a unique, secret `MANGOO_SECRET_KEY`.
 - Set `MANGOO_DEBUG=false`.
 - Use HTTPS and a reverse proxy.
 - Store database credentials and TOTP encryption material in a secret manager.
-- Add CSRF protection, secure cookies, CORS rules, audit logs, password reset, email verification, and rate limiting at the edge before public deployment.
+- Enable `secure_cookies=True` for session and CSRF cookies when serving HTTPS. Add CORS rules, audit logs, password reset, email verification, and rate limiting at the edge.
 - Perform database-specific integration tests and a security review.
+
+Example hardening configuration:
+
+```python
+SECURITY = {
+    "ALLOWED_ORIGINS": ["https://app.example.com"],
+    "RATE_LIMIT": 120,
+    "RATE_WINDOW_SECONDS": 60,
+    "SECURITY_HEADERS": True,
+    "FORCE_HTTPS": True,
+    "TRUST_PROXY_HEADERS": True,  # only behind your trusted reverse proxy
+    "MAX_REQUEST_BYTES": 1_048_576,
+}
+```
+
+The runtime rejects requests whose `Host` is not in `ALLOWED_HOSTS`, rejects oversized request bodies before reading them, responds to trusted CORS preflight requests, and adds CSP, frame, MIME-sniffing, referrer-policy, permissions-policy, and cross-origin isolation headers. `FORCE_HTTPS` redirects plain HTTP and enables HSTS on secure requests. Set `TRUST_PROXY_HEADERS` only when a trusted reverse proxy removes client-supplied forwarding headers. Audit records are emitted to the `mangoo.audit` logger without request bodies, credentials, or query strings.
 
 ## 16. Current limitations
 

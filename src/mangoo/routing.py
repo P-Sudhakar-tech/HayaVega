@@ -7,6 +7,7 @@ class Route:
     pattern: str
     view: Callable
     methods: tuple[str, ...] = ("GET",)
+    is_api: bool = False
 
 
 def path(pattern: str, view: Callable, methods: tuple[str, ...] = ("GET",)) -> Route:

@@ -68,6 +68,10 @@ Mangoo includes a small dependency-free API layer. The bundled example exposes:
 
 Use `api_route('api/items', view, methods=('GET', 'POST'))` for REST endpoints. Define GraphQL fields with `Schema(query={'field': resolver})` and mount them with `path('graphql', graphql_view(schema), methods=('POST',))`.
 
+## Built-in Swagger documentation
+
+Every Mangoo application automatically exposes an OpenAPI 3 document at `/openapi.json` and an interactive Swagger UI at `/docs`. REST endpoints declared with `api_route` are added to the document automatically. The documentation routes are reserved only when an application has not defined routes with those paths itself.
+
 ## Development autoreload
 
 Mangoo can launch directly from this source checkout without pip. From the repository root, run `./mango.cmd launch 8001`. It watches Python files in the project and automatically restarts the development server after code changes. Use `./mango.cmd launch 8001 --noreload` to disable this behavior.
@@ -75,6 +79,10 @@ Mangoo can launch directly from this source checkout without pip. From the repos
 If you later install Mangoo as a package, `mango launch 8001` is also available as a terminal command.
 
 Press `Ctrl+C` in the same terminal to stop the server cleanly, including when autoreload is enabled.
+
+## MVP polish
+
+Render escaped templates with `render_template("page.html", context, directories=(BASE_DIR / "templates",))`, and expose development assets with `*static_routes(BASE_DIR / "static")`. The included `TestClient` exercises a WSGI application without a network socket. Unhandled view errors are logged to `mangoo.runtime` and return a safe `500` response without a traceback when debug mode is disabled.
 
 ## Rust-native Mangoo types
 

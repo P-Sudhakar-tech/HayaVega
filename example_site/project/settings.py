@@ -22,3 +22,13 @@ SERVER = {
     'HOST': '127.0.0.1',
     'PORT': 8000,
 }
+
+SECURITY = {
+    'ALLOWED_ORIGINS': [],
+    'RATE_LIMIT': 120,
+    'RATE_WINDOW_SECONDS': 60,
+    'SECURITY_HEADERS': True,
+    'FORCE_HTTPS': False,
+    'TRUST_PROXY_HEADERS': False,
+    'MAX_REQUEST_BYTES': 1_048_576,
+}

@@ -1,6 +1,7 @@
 import unittest
+import json
 
-from mangoo import Response, path
+from mangoo import Response, api_route, path
 from mangoo.runtime import create_application
 
 
@@ -35,3 +36,18 @@ class RuntimeTests(unittest.TestCase):
         captured, body = call(app, "/missing/")
         self.assertEqual(captured["status"], "404 Not Found")
         self.assertEqual(body, b"<h1>404 Not Found</h1>")
+
+    def test_application_serves_openapi_document_for_api_routes(self):
+        app = create_application([api_route("api/health", lambda request: {"status": "ok"})])
+        captured, body = call(app, "/openapi.json")
+        document = json.loads(body)
+        self.assertEqual(captured["headers"]["Content-Type"], "application/json; charset=utf-8")
+        self.assertEqual(document["openapi"], "3.0.3")
+        self.assertIn("/api/health", document["paths"])
+        self.assertIn("get", document["paths"]["/api/health"])
+
+    def test_application_serves_swagger_ui(self):
+        app = create_application([])
+        captured, body = call(app, "/docs")
+        self.assertEqual(captured["status"], "200 OK")
+        self.assertIn(b"SwaggerUIBundle", body)

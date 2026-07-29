@@ -20,10 +20,10 @@ flowchart LR
 | 1. Foundation | Cargo workspace, Python package, CI, native binding | 2-3 weeks | Started |
 | 2. Scaffolding | `startproject`, `startapp`, `manage.py` | 2 weeks | Implemented starter |
 | 3. HTTP and routing | Dev server, URL resolver, Python views, middleware design | 3-4 weeks | Implemented starter |
-| 4. MVP polish | Templates, static files, test client, errors, logging | 3-4 weeks | Planned |
+| 4. MVP polish | Templates, static files, test client, errors, logging | 3-4 weeks | Implemented baseline |
 | 5. Data | Models, SQLite/PostgreSQL, migrations, CRUD helpers | 5-7 weeks | Planned |
-| 6. Production features | Sessions, auth, CSRF, permissions, admin base | 4-6 weeks | Planned |
-| 7. Hardening | Documentation, benchmarks, security review, plugins, async | Ongoing | Planned |
+| 6. Production features | Sessions, auth, CSRF, permissions, admin base | 4-6 weeks | Implemented baseline |
+| 7. Hardening | Documentation, benchmarks, security review, plugins, async | Ongoing | Runtime-security baseline implemented; review pending |
 
 ## Milestone definition
 

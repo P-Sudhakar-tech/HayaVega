@@ -18,6 +18,7 @@ class ProjectSettings:
     database: dict
     server_host: str
     server_port: int
+    security: dict
 
     @property
     def database_path(self) -> Path:
@@ -61,4 +62,5 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
         database=database,
         server_host=server.get("HOST", "127.0.0.1"),
         server_port=port,
+        security=dict(getattr(module, "SECURITY", {})),
     )

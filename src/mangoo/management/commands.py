@@ -6,6 +6,7 @@ from mangoo.auth import UserAlreadyExistsError, create_superuser, enable_totp
 from mangoo.autoreload import run_with_reloader
 from mangoo.conf import load_settings
 from mangoo.runtime import serve
+from mangoo.hardening import HardeningOptions
 
 
 def execute_from_command_line(argv: list[str] | None = None) -> None:
@@ -43,7 +44,7 @@ def _runserver(args: list[str]) -> None:
     else:
         host, port = "127.0.0.1", address
     try:
-        serve(urls.urlpatterns, host, int(port or 8000))
+        serve(urls.urlpatterns, host, int(port or 8000), hardening=HardeningOptions.from_settings(allowed_hosts=getattr(settings, "allowed_hosts", ()), security=getattr(settings, "security", {})), debug=getattr(settings, "debug", False))
     except KeyboardInterrupt:
         print("\nMangoo development server stopped.")
 
