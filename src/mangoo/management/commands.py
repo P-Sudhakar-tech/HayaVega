@@ -7,6 +7,8 @@ from mangoo.autoreload import run_with_reloader
 from mangoo.conf import load_settings
 from mangoo.runtime import serve
 from mangoo.hardening import HardeningOptions
+from mangoo.migrations import MigrationGenerationError, apply as apply_migrations, generate as generate_migration, status as migration_status
+from mangoo.production import ProductionConfigurationError, validate_production
 
 
 def execute_from_command_line(argv: list[str] | None = None) -> None:
@@ -21,8 +23,14 @@ def execute_from_command_line(argv: list[str] | None = None) -> None:
         _create_superuser(args)
     elif command == "enable2fa" and len(args) == 3:
         _enable2fa(args[2])
+    elif command == "migrate":
+        _migrate()
+    elif command == "showmigrations":
+        _showmigrations()
+    elif command == "makemigrations" and len(args) == 3:
+        _makemigrations(args[2])
     else:
-        print("Commands: runserver [port] [--noreload], startapp <name>, createsuperuser, enable2fa <username>")
+        print("Commands: runserver [port] [--noreload], startapp <name>, createsuperuser, enable2fa <username>, makemigrations <app>, migrate, showmigrations")
 
 
 def _runserver(args: list[str]) -> None:
@@ -36,6 +44,11 @@ def _runserver(args: list[str]) -> None:
         return
 
     settings = load_settings()
+    try:
+        validate_production(settings)
+    except ProductionConfigurationError as error:
+        print(f"Error: {error}")
+        return
     urls = __import__(settings.root_urlconf, fromlist=["urlpatterns"])
     address_arguments = [argument for argument in args[2:] if argument != "--noreload"]
     address = address_arguments[0] if address_arguments else f"{settings.server_host}:{settings.server_port}"
@@ -74,3 +87,43 @@ def _enable2fa(username: str) -> None:
         return
     print(f"Two-factor authentication enabled for '{username}'.")
     print(f"Add this secret to an authenticator app: {secret}")
+
+
+def _migration_directories(settings) -> list:
+    directories = []
+    for app in settings.installed_apps:
+        module = __import__(app, fromlist=["__file__"])
+        if getattr(module, "__file__", None):
+            directories.append(os.path.join(os.path.dirname(module.__file__), "migrations"))
+    return directories
+
+
+def _migrate() -> None:
+    settings = load_settings()
+    applied = apply_migrations(settings.database, _migration_directories(settings))
+    print("Applied: " + ", ".join(applied) if applied else "No migrations to apply.")
+
+
+def _showmigrations() -> None:
+    settings = load_settings()
+    records = migration_status(settings.database, _migration_directories(settings))
+    if not records:
+        print("No migrations found.")
+        return
+    for record in records:
+        print(f"[{'X' if record.applied else ' '}] {record.name}")
+
+
+def _makemigrations(app: str) -> None:
+    settings = load_settings()
+    if app not in settings.installed_apps:
+        print(f"Error: {app!r} is not in INSTALLED_APPS.")
+        return
+    module = __import__(f"{app}.models", fromlist=["__file__"])
+    app_module = __import__(app, fromlist=["__file__"])
+    try:
+        generated = generate_migration(module, os.path.join(os.path.dirname(app_module.__file__), "migrations"), settings.database["ENGINE"])
+    except MigrationGenerationError as error:
+        print(f"Error: {error}")
+        return
+    print(f"Created {generated}" if generated else "No entities found; no migration created.")

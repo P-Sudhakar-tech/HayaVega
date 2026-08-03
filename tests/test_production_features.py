@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo import admin_routes, create_session, create_superuser, create_user, csrf_protect, login_required
+from mangoo import admin_routes, audit_events, create_session, create_superuser, create_user, csrf_protect, login_required
 from mangoo.request import Request
 from mangoo.security import CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, cookie, csrf_token_response
 
@@ -53,3 +53,4 @@ class ProductionFeatureTests(unittest.TestCase):
         self.assertEqual(denied.status, 403)
         self.assertIn("member@example.com", page.body)
         self.assertIn("admin@example.com", page.body)
+        self.assertEqual(audit_events(self.database)[0]["event_type"], "admin.users_viewed")

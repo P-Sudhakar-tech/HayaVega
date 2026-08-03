@@ -59,6 +59,72 @@ DATABASES = {
 }
 ```
 
+## Migrations and transactions
+
+Mangoo uses small, ordered SQL migrations. Add a numbered file such as
+`blog/migrations/0001_products.py` to an installed app:
+
+```python
+operations = [
+    "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+]
+```
+
+Run `python manage.py migrate` to apply pending migrations, or
+`python manage.py showmigrations` to inspect their state. Each migration runs
+in its own transaction; if any operation fails, neither its schema changes nor
+its history row are committed. Applied files are checksummed, so changed or
+missing migration files are rejected instead of silently proceeding.
+
+For an app with declared `Entity` classes, create the reviewed initial table
+migration with `python manage.py makemigrations blog` (after adding `"blog"`
+to `INSTALLED_APPS`). The generator intentionally stops once migrations exist:
+write later schema changes as explicit SQL migrations until safe schema-diff
+semantics are completed.
+
+## Production validation and probes
+
+Before starting with `DEBUG = False`, Mangoo requires a non-default
+`SECRET_KEY`, explicit `ALLOWED_HOSTS`, and `SECURITY` settings for
+`FORCE_HTTPS` and `SECURE_COOKIES`. Add `*health_routes(DATABASES['default'])`
+to your URL patterns to expose `GET /healthz` (liveness) and `GET /readyz`
+(database readiness) for your deployment platform.
+
+## Rate limiting
+
+The built-in limiter is process-local and intended for development or a small
+single-instance deployment. Set `SECURITY['RATE_LIMIT_MAX_CLIENTS']` to bound
+tracked client identities (default: 10,000); idle clients are pruned and the
+least-recently-used identity is evicted when full. Use an edge proxy or Redis
+rate limiter for coordinated limits across multiple application instances.
+
+## Observability
+
+Every response carries an `X-Request-ID`; a valid incoming ID is preserved,
+otherwise Mangoo generates one. Audit logs contain the ID, method, path,
+status, and duration without request headers. Enable JSON output in an
+application entrypoint with `configure_logging(json_output=True)`.
+
+## Reverse proxies
+
+Set `SECURITY['TRUST_PROXY_HEADERS'] = True` only with an explicit
+`SECURITY['TRUSTED_PROXY_IPS']` list (IP addresses or CIDR networks). Mangoo
+then honors forwarded client and HTTPS headers only from those proxies. HTTPS
+redirects retain the original query string.
+
+## Audit events
+
+Mangoo persists privacy-safe authentication and administration events in
+`mangoo_audit_events`. Use `audit_events(DATABASES['default'])` for operational
+review. Events contain an actor ID, event type, timestamp, and small metadata;
+passwords, session tokens, and request headers are never stored.
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for reverse-proxy, HTTPS, backup, restore,
+and rollback procedures, and [SECURITY_REVIEW_CHECKLIST.md](SECURITY_REVIEW_CHECKLIST.md)
+for release-review controls. PostgreSQL integration tests are opt-in: set
+`MANGOO_TEST_POSTGRES_NAME` plus optional host, port, user, and password
+variables before running the test suite. MySQL/MariaDB coverage remains planned.
+
 ## REST and GraphQL
 
 Mangoo includes a small dependency-free API layer. The bundled example exposes:

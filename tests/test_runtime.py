@@ -31,6 +31,11 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(captured["status"], "200 OK")
         self.assertEqual(body, b"healthy")
 
+    def test_application_adds_and_validates_request_id(self):
+        app = create_application([path("", lambda request: Response("ok"))])
+        captured, _ = call(app, "/")
+        self.assertRegex(captured["headers"]["X-Request-ID"], r"^[a-f0-9]{32}$")
+
     def test_application_returns_404_for_unknown_route(self):
         app = create_application([])
         captured, body = call(app, "/missing/")

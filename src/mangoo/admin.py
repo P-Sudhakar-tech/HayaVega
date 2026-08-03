@@ -7,6 +7,8 @@ from .db import connect
 from .response import Response
 from .routing import path
 from .security import superuser_required
+from .security import request_user
+from .audit import record_audit_event
 
 
 def admin_routes(database_path, prefix: str = "admin"):
@@ -18,10 +20,14 @@ def admin_routes(database_path, prefix: str = "admin"):
 
     @superuser_required(database_path)
     def index(request):
+        user = request_user(request, database_path)
+        record_audit_event(database_path, "admin.index_viewed", actor_id=user.id if user else None)
         return Response(f"<h1>Mangoo administration</h1><p><a href='/{prefix}/users'>Users</a></p>")
 
     @superuser_required(database_path)
     def users(request):
+        user = request_user(request, database_path)
+        record_audit_event(database_path, "admin.users_viewed", actor_id=user.id if user else None)
         connection = connect(database_path)
         try:
             rows = connection.execute("SELECT id, username, email, is_superuser, is_active FROM mangoo_users ORDER BY id").fetchall()

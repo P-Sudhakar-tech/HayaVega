@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sqlite3
+from contextlib import contextmanager
 
 
 class DatabaseConfigurationError(ValueError):
@@ -22,6 +23,7 @@ def normalize_config(database: str | Path | dict) -> dict:
 class Connection:
     def __init__(self, raw, engine: str):
         self.raw, self.engine = raw, engine
+        self._transaction_depth = 0
 
     def execute(self, sql: str, params=()):
         cursor = self.raw.cursor()
@@ -30,6 +32,40 @@ class Connection:
 
     def commit(self):
         self.raw.commit()
+
+    def rollback(self):
+        self.raw.rollback()
+
+    @contextmanager
+    def atomic(self):
+        """Run a block atomically, using savepoints for nested blocks.
+
+        A connection must be used for all statements in the block.  SQLite,
+        PostgreSQL, and MySQL/InnoDB all support the SQL used here.
+        """
+        depth = self._transaction_depth
+        savepoint = f"mangoo_savepoint_{depth}"
+        if depth == 0:
+            self.raw.execute("BEGIN")
+        else:
+            self.raw.execute(f"SAVEPOINT {savepoint}")
+        self._transaction_depth += 1
+        try:
+            yield self
+        except Exception:
+            if depth == 0:
+                self.raw.rollback()
+            else:
+                self.raw.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                self.raw.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise
+        else:
+            if depth == 0:
+                self.raw.commit()
+            else:
+                self.raw.execute(f"RELEASE SAVEPOINT {savepoint}")
+        finally:
+            self._transaction_depth -= 1
 
     def close(self):
         self.raw.close()

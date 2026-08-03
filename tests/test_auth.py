@@ -16,6 +16,7 @@ from mangoo.auth import (
     revoke_session,
     verify_password,
 )
+from mangoo.audit import audit_events
 
 
 PASSWORD = "Correct-Horse-7!"
@@ -82,6 +83,15 @@ class AuthenticationTests(unittest.TestCase):
         self.assertIsNotNone(authenticate_session(self.database, token))
         revoke_session(self.database, token)
         self.assertIsNone(authenticate_session(self.database, token))
+
+    def test_authentication_events_are_persisted_without_credentials(self):
+        user = create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
+        self.assertIsNone(authenticate(self.database, "admin", "Wrong-Password-7!"))
+        token = create_session(self.database, user)
+        revoke_session(self.database, token)
+        events = audit_events(self.database)
+        self.assertEqual([event["event_type"] for event in events[:4]], ["auth.session_revoked", "auth.session_created", "auth.login_failed", "auth.user_created"])
+        self.assertNotIn("Wrong-Password-7!", str(events))
 
     def test_repeated_failed_logins_lock_the_account(self):
         create_superuser(self.database, "admin", "admin@example.com", PASSWORD)

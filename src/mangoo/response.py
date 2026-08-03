@@ -4,7 +4,7 @@ import json
 
 @dataclass(frozen=True)
 class Response:
-    body: str
+    body: str | bytes
     status: int = 200
     content_type: str = "text/html; charset=utf-8"
     headers: tuple[tuple[str, str], ...] = ()

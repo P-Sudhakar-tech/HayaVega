@@ -1,6 +1,6 @@
 # Mangoo upcoming improvement roadmap
 
-## Start: next week
+## Status: active development (August 2026)
 
 This roadmap converts the current prototype into a safer, more deployable framework. Every feature below must include unit tests, regression tests for the identified risk, documentation, and a full-suite pass before it is marked complete.
 
@@ -8,22 +8,36 @@ This roadmap converts the current prototype into a safer, more deployable framew
 
 | Priority | Workstream | Outcome |
 |---|---|---|
-| P0 | Data and migrations | Reliable schema changes and transaction semantics |
-| P0 | Production validation | Real database integration tests, security review preparation, and deployment checks |
-| P1 | Runtime and static assets | Production-safe asset delivery and runtime boundaries |
+| P0 | Data and migrations | **In progress:** transactional, checksummed migrations and initial entity migration generation delivered; schema diffs/dependencies remain |
+| P0 | Production validation | **In progress:** production settings validation and DB readiness/liveness delivered; database integration tests and deployment guide remain |
+| P1 | Runtime and static assets | **In progress:** binary files, MIME types, cache-control, ETags, and conditional requests delivered; observability work remains |
 | P1 | Authentication lifecycle | Reset, verification, session management, and persistent audit events |
 | P1 | API documentation | Complete OpenAPI schemas and authentication documentation |
 | P2 | Developer experience | Richer templates, admin expansion, GraphQL work, and CI/release automation |
 | P2 | Native runtime | Rust packaging, benchmarks, then measured migrations from Python |
 
+## Future-readiness estimate (planning baseline)
+
+These estimates assume one focused developer, the current test-driven pace, and
+no delay obtaining database or email-provider infrastructure. Re-estimate after
+each milestone; external security-review or release feedback is excluded.
+
+| Workstream | Estimated effort | Expected completion |
+|---|---:|---|
+| P0 production readiness | 5–7 working days | Aug 10–12, 2026 |
+| Data phase remaining | 5–8 working days | Aug 17–20, 2026 |
+| Authentication lifecycle | 8–12 working days | Aug 28–Sep 3, 2026 |
+| API maturity | 5–7 working days | Sep 10–14, 2026 |
+| Developer experience and native-runtime preparation | 10–15 working days | Late September–early October 2026 |
+
 ## Week 1: data safety and test foundations
 
 ### Deliverables
 
-- Define migration file format, migration history table, and migration command interface.
-- Implement SQLite migration apply, status, and rollback-safe failure behavior.
-- Add explicit transaction helpers with commit, rollback, and nested-operation rules.
-- Add test database fixtures and migration test helpers.
+- [x] Define migration file format, migration history table, and migration command interface.
+- [x] Implement SQLite migration apply, status, and rollback-safe failure behavior.
+- [x] Add explicit transaction helpers with commit, rollback, and nested-operation rules.
+- [x] Add test database fixtures and migration test helpers.
 - Establish coverage reporting and a required test command for CI.
 
 ### Acceptance criteria
@@ -38,11 +52,11 @@ This roadmap converts the current prototype into a safer, more deployable framew
 
 ### Deliverables
 
-- Add PostgreSQL integration tests and document the MySQL/MariaDB test plan.
-- Add environment validation for production: secret key, debug state, allowed hosts, HTTPS, and secure cookies.
-- Add health and readiness endpoints with database connectivity checks.
-- Publish a reverse-proxy, HTTPS, backup, restore, and rollback deployment guide.
-- Begin a security-review checklist covering sessions, CSRF, CORS, proxy trust, headers, and rate limits.
+- [~] Add PostgreSQL integration tests and document the MySQL/MariaDB test plan. (Opt-in PostgreSQL harness added; MySQL/MariaDB plan remains.)
+- [x] Add environment validation for production: secret key, debug state, allowed hosts, HTTPS, and secure cookies.
+- [x] Add health and readiness endpoints with database connectivity checks.
+- [x] Publish a reverse-proxy, HTTPS, backup, restore, and rollback deployment guide. See `DEPLOYMENT.md`.
+- [x] Begin a security-review checklist covering sessions, CSRF, CORS, proxy trust, headers, and rate limits. See `SECURITY_REVIEW_CHECKLIST.md`.
 
 ### Acceptance criteria
 
@@ -56,11 +70,11 @@ This roadmap converts the current prototype into a safer, more deployable framew
 
 ### Deliverables
 
-- Upgrade static serving to support binary files, cache-control, ETag, conditional requests, and safe MIME handling.
-- Bound and instrument rate-limiter storage; document Redis/edge replacement for multi-instance use.
-- Add structured request IDs and configurable JSON logging.
-- Add persistent audit-event hooks for authentication and administration actions.
-- Preserve query strings during HTTPS redirects and improve trusted-proxy configuration.
+- [x] Upgrade static serving to support binary files, cache-control, ETag, conditional requests, and safe MIME handling.
+- [x] Bound and instrument rate-limiter storage; document Redis/edge replacement for multi-instance use.
+- [x] Add structured request IDs and configurable JSON logging.
+- [x] Add persistent audit-event hooks for authentication and administration actions.
+- [x] Preserve query strings during HTTPS redirects and improve trusted-proxy configuration.
 
 ### Acceptance criteria
 

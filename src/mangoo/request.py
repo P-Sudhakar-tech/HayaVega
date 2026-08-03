@@ -15,6 +15,7 @@ class Request:
     headers: dict[str, str]
     remote_addr: str = ""
     is_secure: bool = False
+    raw_query: str = ""
 
     @property
     def cookies(self) -> dict[str, str]:
@@ -45,6 +46,7 @@ class Request:
             headers=headers,
             remote_addr=environ.get("REMOTE_ADDR", ""),
             is_secure=environ.get("wsgi.url_scheme", "http").lower() == "https",
+            raw_query=environ.get("QUERY_STRING", ""),
         )
 
     def json(self):

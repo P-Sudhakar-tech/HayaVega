@@ -10,6 +10,7 @@ from types import ModuleType
 @dataclass(frozen=True)
 class ProjectSettings:
     base_dir: Path
+    secret_key: str
     debug: bool
     allowed_hosts: tuple[str, ...]
     installed_apps: tuple[str, ...]
@@ -54,6 +55,7 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
 
     return ProjectSettings(
         base_dir=base_dir,
+        secret_key=str(getattr(module, "SECRET_KEY", "")),
         debug=bool(getattr(module, "DEBUG", False)),
         allowed_hosts=tuple(getattr(module, "ALLOWED_HOSTS", [])),
         installed_apps=tuple(getattr(module, "INSTALLED_APPS", [])),

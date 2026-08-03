@@ -14,6 +14,7 @@ import struct
 import time
 
 from .db import connect, user_id_definition
+from .audit import record_audit_event
 
 
 SCRYPT_N = 2**14
@@ -140,7 +141,9 @@ def create_user(database_path: str | Path | dict, username: str, email: str, pas
         )
         connection.commit()
         identifier = cursor.fetchone()["id"] if connection.engine == "postgresql" else cursor.lastrowid
-        return User(identifier, username, email, is_superuser, True)
+        user = User(identifier, username, email, is_superuser, True)
+        record_audit_event(database_path, "auth.user_created", actor_id=user.id, metadata={"is_superuser": is_superuser})
+        return user
     except sqlite3.IntegrityError as error:
         raise UserAlreadyExistsError("A user with that username or email already exists.") from error
     finally:
@@ -197,19 +200,24 @@ def authenticate(database_path: str | Path | dict, username: str, password: str,
     try:
         row = connection.execute("SELECT * FROM mangoo_users WHERE username = ?", (username,)).fetchone()
         if row is None or not row["is_active"]:
+            record_audit_event(database_path, "auth.login_failed", metadata={"reason": "invalid_credentials"})
             return None
         if row["locked_until"] and row["locked_until"] > now:
+            record_audit_event(database_path, "auth.login_failed", actor_id=row["id"], metadata={"reason": "locked"})
             return None
         password_valid = verify_password(password, row["password_hash"])
         totp_valid = not row["totp_enabled"] or (totp_code is not None and verify_totp(row["totp_secret"], totp_code, now))
         if not password_valid or not totp_valid:
             _record_failure(connection, row, now)
+            record_audit_event(database_path, "auth.login_failed", actor_id=row["id"], metadata={"reason": "invalid_credentials"})
             return None
         connection.execute("UPDATE mangoo_users SET failed_attempts = 0, locked_until = NULL WHERE id = ?", (row["id"],))
         if row["password_hash"].startswith("pbkdf2_sha256$"):
             connection.execute("UPDATE mangoo_users SET password_hash = ? WHERE id = ?", (hash_password(password), row["id"]))
         connection.commit()
-        return _user_from_row(row)
+        user = _user_from_row(row)
+        record_audit_event(database_path, "auth.login_succeeded", actor_id=user.id)
+        return user
     finally:
         connection.close()
 
@@ -223,6 +231,7 @@ def create_session(database_path: str | Path | dict, user: User, duration_second
     try:
         connection.execute("INSERT INTO mangoo_sessions (user_id, token_hash, expires_at) VALUES (?, ?, ?)", (user.id, sha256(token.encode()).hexdigest(), int(time.time()) + duration_seconds))
         connection.commit()
+        record_audit_event(database_path, "auth.session_created", actor_id=user.id)
         return token
     finally:
         connection.close()
@@ -248,7 +257,10 @@ def revoke_session(database_path: str | Path | dict, token: str) -> None:
     initialize_auth_db(database_path)
     connection = _connect(database_path)
     try:
+        row = connection.execute("SELECT user_id FROM mangoo_sessions WHERE token_hash = ?", (sha256(token.encode()).hexdigest(),)).fetchone()
         connection.execute("DELETE FROM mangoo_sessions WHERE token_hash = ?", (sha256(token.encode()).hexdigest(),))
         connection.commit()
+        if row is not None:
+            record_audit_event(database_path, "auth.session_revoked", actor_id=row["user_id"])
     finally:
         connection.close()

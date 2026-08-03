@@ -20,6 +20,19 @@ class MvpPolishTests(unittest.TestCase):
             self.assertEqual(TestClient(app).get("/assets/mark.svg").text, "<svg/>")
             self.assertEqual(TestClient(app).get("/assets/../../secret").status_code, 404)
 
+    def test_static_routes_serve_binary_assets_with_etag_and_cache_headers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "icon.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+            app = create_application(static_routes(directory, "assets", max_age=600))
+            client = TestClient(app)
+            initial = client.get("/assets/icon.png")
+            cached = client.get("/assets/icon.png", headers={"If-None-Match": initial.headers["ETag"]})
+            self.assertEqual(initial.content, b"\x89PNG\r\n\x1a\n")
+            self.assertEqual(initial.headers["Content-Type"], "image/png")
+            self.assertEqual(initial.headers["Cache-Control"], "public, max-age=600")
+            self.assertEqual(cached.status_code, 304)
+            self.assertEqual(cached.content, b"")
+
     def test_test_client_posts_json_and_reads_response(self):
         app = create_application([path("echo", lambda request: Response(request.body.decode(), content_type="application/json"), methods=("POST",))])
         response = TestClient(app).post("/echo", json_data={"ok": True})

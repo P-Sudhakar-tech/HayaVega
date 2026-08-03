@@ -6,8 +6,12 @@ from .response import Response
 from .swagger import documentation_routes
 from .hardening import Hardening, HardeningOptions
 import logging
+from time import perf_counter
+import re
+from uuid import uuid4
 
 LOGGER = logging.getLogger("mangoo.runtime")
+_REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def create_application(urlpatterns, *, hardening: HardeningOptions | None = None, debug: bool = False):
@@ -23,6 +27,7 @@ def create_application(urlpatterns, *, hardening: HardeningOptions | None = None
     hardening_layer = Hardening(hardening) if hardening else None
 
     def application(environ, start_response):
+        started_at = perf_counter()
         requested = environ.get("PATH_INFO", "/").strip("/")
         route = routes.get(requested)
         if route is None:
@@ -33,6 +38,8 @@ def create_application(urlpatterns, *, hardening: HardeningOptions | None = None
             content_length = 0
         size_rejection = hardening_layer.reject_content_length(content_length) if hardening_layer else None
         request = Request.from_wsgi(environ, read_body=size_rejection is None)
+        incoming_id = request.headers.get("X-Request-Id", "")
+        request_id = incoming_id if _REQUEST_ID.fullmatch(incoming_id) else uuid4().hex
         rejection = size_rejection or (hardening_layer.reject(request) if hardening_layer else None)
         preflight = hardening_layer.preflight(request) if hardening_layer else None
         if rejection is not None:
@@ -50,10 +57,13 @@ def create_application(urlpatterns, *, hardening: HardeningOptions | None = None
             except Exception:
                 LOGGER.exception("Unhandled request error path=%s", request.path)
                 response = Response("<h1>500 Internal Server Error</h1>" if not debug else "<h1>500 Internal Server Error</h1><pre>See server log for traceback.</pre>", status=500)
+        duration_ms = (perf_counter() - started_at) * 1000
         if hardening_layer:
-            response = hardening_layer.finalize(request, response)
-        status_text = {200: "OK", 204: "No Content", 301: "Moved Permanently", 308: "Permanent Redirect", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 413: "Payload Too Large", 415: "Unsupported Media Type", 429: "Too Many Requests", 500: "Internal Server Error"}.get(response.status, "OK")
-        payload = response.body.encode("utf-8")
+            response = hardening_layer.finalize(request, response, request_id=request_id, duration_ms=duration_ms)
+        elif not any(name.lower() == "x-request-id" for name, _ in response.headers):
+            response = Response(response.body, status=response.status, content_type=response.content_type, headers=(*response.headers, ("X-Request-ID", request_id)))
+        status_text = {200: "OK", 204: "No Content", 301: "Moved Permanently", 304: "Not Modified", 308: "Permanent Redirect", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 413: "Payload Too Large", 415: "Unsupported Media Type", 429: "Too Many Requests", 500: "Internal Server Error"}.get(response.status, "OK")
+        payload = response.body if isinstance(response.body, bytes) else response.body.encode("utf-8")
         start_response(
             f"{response.status} {status_text}",
             [("Content-Type", response.content_type), ("Content-Length", str(len(payload))), *response.headers],

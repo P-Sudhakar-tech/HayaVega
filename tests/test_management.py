@@ -16,7 +16,7 @@ class ManagementTests(unittest.TestCase):
         output = io.StringIO()
         with redirect_stdout(output):
             execute_from_command_line(["manage.py"])
-        self.assertEqual(output.getvalue().strip(), "Commands: runserver [port] [--noreload], startapp <name>, createsuperuser, enable2fa <username>")
+        self.assertEqual(output.getvalue().strip(), "Commands: runserver [port] [--noreload], startapp <name>, createsuperuser, enable2fa <username>, makemigrations <app>, migrate, showmigrations")
 
     @patch("mangoo.management.commands.run_with_reloader")
     def test_runserver_enables_autoreload_by_default(self, run_with_reloader):
