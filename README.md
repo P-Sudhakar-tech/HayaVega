@@ -78,9 +78,10 @@ missing migration files are rejected instead of silently proceeding.
 
 For an app with declared `Entity` classes, create the reviewed initial table
 migration with `python manage.py makemigrations blog` (after adding `"blog"`
-to `INSTALLED_APPS`). The generator intentionally stops once migrations exist:
-write later schema changes as explicit SQL migrations until safe schema-diff
-semantics are completed.
+to `INSTALLED_APPS`). Later invocations generate only nullable `ADD COLUMN`
+operations and record a dependency on the preceding migration. New tables,
+non-nullable fields, field alterations, and removals must remain explicit,
+reviewed SQL migrations.
 
 ## Production validation and probes
 
@@ -124,6 +125,13 @@ and rollback procedures, and [SECURITY_REVIEW_CHECKLIST.md](SECURITY_REVIEW_CHEC
 for release-review controls. PostgreSQL integration tests are opt-in: set
 `MANGOO_TEST_POSTGRES_NAME` plus optional host, port, user, and password
 variables before running the test suite. MySQL/MariaDB coverage remains planned.
+
+## Planned Mangoo Pulse
+
+The deferred opt-in event contract is available under
+`mangoo.addons.pulse`. It reserves built-in lifecycle event names without
+registering handlers or changing runtime behavior. See
+`src/mangoo/addons/pulse/README.md` for the activation gates and API plan.
 
 ## REST and GraphQL
 
@@ -192,7 +200,7 @@ product_view = EntitySerializer(Product)
 payload = product_view.json(product)
 ```
 
-The serializer normalizes entities, mappings, lists, and dates. Its native JSON encoder is included in the Rust binding source and becomes active automatically when `mangoo_native` is built.
+The serializer normalizes entities, mappings, lists, and dates, then encodes them with `msgspec` for consistent high-performance JSON output.
 
 ## Superuser
 

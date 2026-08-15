@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-import json
+import msgspec
 
 
 @dataclass(frozen=True)
@@ -12,7 +12,7 @@ class Response:
 
 def json_response(data, status: int = 200, headers: tuple[tuple[str, str], ...] = ()) -> Response:
     return Response(
-        json.dumps(data, separators=(",", ":")),
+        msgspec.json.encode(data),
         status=status,
         content_type="application/json; charset=utf-8",
         headers=headers,

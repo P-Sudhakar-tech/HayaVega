@@ -1,8 +1,8 @@
 """Safe, optional structured logging for Mangoo applications."""
 from __future__ import annotations
 
-import json
 import logging
+import msgspec
 
 
 class JsonFormatter(logging.Formatter):
@@ -13,7 +13,7 @@ class JsonFormatter(logging.Formatter):
             value = getattr(record, name, None)
             if value is not None:
                 payload[name] = value
-        return json.dumps(payload, separators=(",", ":"), default=str)
+        return msgspec.json.encode(payload, enc_hook=str).decode("utf-8")
 
 
 def configure_logging(*, json_output: bool = False, level: int = logging.INFO, handler: logging.Handler | None = None) -> logging.Handler:

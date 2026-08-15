@@ -4,7 +4,7 @@ from pathlib import Path
 from types import ModuleType
 
 from mangoo.db import connect
-from mangoo.migrations import MigrationError, MigrationGenerationError, MigrationIntegrityError, apply, generate, status
+from mangoo.migrations import MigrationError, MigrationFormatError, MigrationGenerationError, MigrationIntegrityError, apply, generate, status
 from mangoo.models import Entity, Integer, Text
 
 
@@ -58,5 +58,39 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(source.name, "0001_initial.py")
             self.assertIn("CREATE TABLE product_entries", source.read_text(encoding="utf-8"))
             self.assertIn("name TEXT NOT NULL UNIQUE", source.read_text(encoding="utf-8"))
+            self.assertIsNone(generate(module, Path(temp) / "migrations"))
+
+    def test_generator_creates_only_safe_nullable_column_additions(self):
+        first = ModuleType("catalog.models")
+        first.Product = type("Product", (Entity,), {"__module__": first.__name__, "name": Text()})
+        second = ModuleType("catalog.models")
+        second.Product = type("Product", (Entity,), {"__module__": second.__name__, "name": Text(), "summary": Text(nullable=True)})
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "migrations"
+            generate(first, root)
+            source = generate(second, root)
+            self.assertEqual(source.name, "0002_auto.py")
+            self.assertIn("dependencies = ['0001_initial']", source.read_text(encoding="utf-8"))
+            self.assertIn("ALTER TABLE product_entries ADD COLUMN summary TEXT", source.read_text(encoding="utf-8"))
+            self.assertIsNone(generate(second, root))
+
+    def test_generator_rejects_removed_columns(self):
+        first = ModuleType("catalog.models")
+        first.Product = type("Product", (Entity,), {"__module__": first.__name__, "name": Text()})
+        removed = ModuleType("catalog.models")
+        removed.Product = type("Product", (Entity,), {"__module__": removed.__name__})
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "migrations"
+            generate(first, root)
             with self.assertRaises(MigrationGenerationError):
-                generate(module, Path(temp) / "migrations")
+                generate(removed, root)
+
+    def test_dependencies_control_order_and_reject_cycles(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self._migration(root, "0001_base", ["CREATE TABLE base (id INTEGER)"])
+            (root / "0002_child.py").write_text("dependencies = ['0001_base']\noperations = ['CREATE TABLE child (id INTEGER)']", encoding="utf-8")
+            self.assertEqual([item.name for item in status(Path(temp) / "data.sqlite3", [root])], ["0001_base", "0002_child"])
+            (root / "0001_base.py").write_text("dependencies = ['0002_child']\noperations = ['CREATE TABLE base (id INTEGER)']", encoding="utf-8")
+            with self.assertRaises(MigrationFormatError):
+                status(Path(temp) / "data.sqlite3", [root])

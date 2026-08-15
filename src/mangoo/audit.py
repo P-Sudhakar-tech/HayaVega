@@ -1,7 +1,7 @@
 """Persistent, privacy-safe audit events for security-relevant actions."""
 from __future__ import annotations
 
-import json
+import msgspec
 
 from .db import connect, user_id_definition
 
@@ -20,7 +20,8 @@ def record_audit_event(database, event_type: str, *, actor_id: int | None = None
     initialize_audit_db(database)
     connection = connect(database)
     try:
-        connection.execute("INSERT INTO mangoo_audit_events (actor_id, event_type, metadata) VALUES (?, ?, ?)", (actor_id, event_type, json.dumps(metadata or {}, separators=(",", ":"))))
+        metadata_json = msgspec.json.encode(metadata or {}).decode("utf-8")
+        connection.execute("INSERT INTO mangoo_audit_events (actor_id, event_type, metadata) VALUES (?, ?, ?)", (actor_id, event_type, metadata_json))
         connection.commit()
     finally:
         connection.close()
@@ -33,6 +34,6 @@ def audit_events(database, *, limit: int = 100) -> list[dict]:
     connection = connect(database)
     try:
         rows = connection.execute("SELECT id, actor_id, event_type, metadata, created_at FROM mangoo_audit_events ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-        return [{**dict(row), "metadata": json.loads(row["metadata"])} for row in rows]
+        return [{**dict(row), "metadata": msgspec.json.decode(row["metadata"])} for row in rows]
     finally:
         connection.close()

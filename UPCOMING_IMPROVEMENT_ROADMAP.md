@@ -15,6 +15,7 @@ This roadmap converts the current prototype into a safer, more deployable framew
 | P1 | API documentation | Complete OpenAPI schemas and authentication documentation |
 | P2 | Developer experience | Richer templates, admin expansion, GraphQL work, and CI/release automation |
 | P2 | Native runtime | Rust packaging, benchmarks, then measured migrations from Python |
+| P2 | Mangoo Pulse | **Planned:** opt-in lifecycle events after delivery, transaction, and privacy guarantees are implemented |
 
 ## Future-readiness estimate (planning baseline)
 
@@ -109,6 +110,7 @@ each milestone; external security-review or release feedback is excluded.
 - Maturin packaging for `mangoo_native`, benchmark automation, and measured Rust migrations.
 - CI matrix, linting, formatting, type checks, dependency scanning, release notes, and package publishing.
 - Replace the temporary WSGI server with a production-ready async/Rust runtime behind the stable Python API.
+- Mangoo Pulse: connect/disconnect registry, deterministic ordering, error isolation, optional async delivery, and lifecycle integration for request, authentication, administration, and migrations. The deferred contract lives in `src/mangoo/addons/pulse/`.
 
 ## Definition of done
 

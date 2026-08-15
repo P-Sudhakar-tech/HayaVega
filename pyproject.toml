@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "A Django-like Python framework with a Rust core"
 requires-python = ">=3.10"
 authors = [{name = "Mangoo contributors"}]
+dependencies = ["msgspec>=0.21,<0.22"]
 
 [project.scripts]
 mangoo-admin = "mangoo.cli:main"

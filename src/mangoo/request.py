@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
+import msgspec
 from urllib.parse import parse_qs
 
 
@@ -50,4 +50,4 @@ class Request:
         )
 
     def json(self):
-        return json.loads(self.body.decode("utf-8"))
+        return msgspec.json.decode(self.body)

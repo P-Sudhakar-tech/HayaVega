@@ -1,15 +1,10 @@
-"""Schema-driven API presentation with an optional native JSON encoder."""
+"""Schema-driven API presentation backed by msgspec JSON encoding."""
 from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import date, datetime
-import json
+import msgspec
 from typing import Any
-
-try:
-    from mangoo_native import serialize_json as _native_json
-except ImportError:
-    _native_json = None
 
 
 class SerializationError(ValueError):
@@ -68,7 +63,7 @@ class Serializer:
 
     def json(self, value: Any) -> str:
         data = self.present(value)
-        return _native_json(data) if _native_json is not None else json.dumps(data, separators=(",", ":"), ensure_ascii=False)
+        return msgspec.json.encode(data).decode("utf-8")
 
 
 class EntitySerializer(Serializer):
