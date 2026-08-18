@@ -12,7 +12,7 @@ class ExampleSiteTests(unittest.TestCase):
             urls = importlib.import_module("project.urls")
             home_route = next(route for route in urls.urlpatterns if route.pattern == "")
             response = home_route.view(None)
-            self.assertIn("Web development, made clear", response.body)
+            self.assertIn("Django's shape.", response.body)
             self.assertIn("<title>Mangoo", response.body)
         finally:
             sys.path.remove(str(example_root))

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Mangoo is an early, runnable Python web framework with Django-shaped project ergonomics and a Rust core taking over performance-critical paths as it matures.">
+<meta name="description" content="Mangoo is an early, runnable Python web framework with Django-shaped project ergonomics, FastAPI-style automatic API docs, and a Rust core taking over performance-critical paths as it matures.">
 <title>Mangoo</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Ctext y='104' font-size='104'%3E%F0%9F%A5%AD%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -75,7 +75,7 @@
   .hero{padding:76px 0 44px;}
   .eyebrow{display:inline-flex; align-items:center; gap:8px; font-family:"IBM Plex Mono"; font-size:.78rem; letter-spacing:.06em; text-transform:uppercase; color:var(--leaf); margin-bottom:18px;}
   .eyebrow::before{content:""; width:7px; height:7px; border-radius:50%; background:var(--mango); display:inline-block;}
-  h1.headline{font-size:clamp(2.6rem, 5.4vw, 4.4rem); font-weight:600; line-height:1.02; letter-spacing:-.02em; max-width:16ch;}
+  h1.headline{font-size:clamp(2.6rem, 5.4vw, 4.4rem); font-weight:600; line-height:1.02; letter-spacing:-.02em; max-width:18ch;}
   h1.headline em{font-style:italic; font-weight:400; color:var(--leaf);}
   .lead{font-size:1.15rem; color:var(--muted); max-width:52ch; margin:22px 0 30px;}
   .hero-actions{display:flex; gap:14px; flex-wrap:wrap;}
@@ -203,8 +203,8 @@
 
   <section class="hero wrap">
     <div class="eyebrow">Python web framework &middot; open source &middot; early and runnable</div>
-    <h1 class="headline">Django-shaped. <em>Ripening</em> toward Rust.</h1>
-    <p class="lead">Mangoo gives Python projects routing, entities, migrations, hardened authentication, REST and GraphQL, and OpenAPI documentation today &mdash; with a native Rust core taking over performance-critical paths as it matures. It's a real, tested checkout, not a finished product: see exactly what's shipped and what isn't below.</p>
+    <h1 class="headline">Django's shape. <em>FastAPI's docs.</em></h1>
+    <p class="lead">Mangoo gives Python projects Django's routing, entities, and migrations, FastAPI's automatic OpenAPI docs and Swagger UI, and hardened authentication &mdash; with a native Rust core ripening in as it matures. It's a real, tested checkout, not a finished product: see exactly what's shipped and what isn't below.</p>
     <div class="hero-actions">
       <a class="btn btn-primary" href="#getting-started">Read the quickstart</a>
       <a class="btn btn-ghost" href="https://github.com/P-Sudhakar-tech/mangoo" target="_blank" rel="noopener">View source on GitHub</a>
@@ -438,7 +438,7 @@ items = (products.seek(price__above=5)
         <article class="doc-section" id="apis">
           <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
           <h3>REST, GraphQL &amp; OpenAPI</h3>
-          <p>Every application automatically exposes an OpenAPI 3 document at <code>/openapi.json</code> and an interactive Swagger UI at <code>/docs</code>, built from whatever routes were declared with <code>api_route</code>.</p>
+          <p>Every application automatically exposes an OpenAPI 3 document at <code>/openapi.json</code> and an interactive Swagger UI at <code>/docs</code>, built from whatever routes were declared with <code>api_route</code> &mdash; the same "docs come free" ergonomics FastAPI made popular, without requiring async views to get them.</p>
           <div class="doc-grid">
             <div><div class="snippet-label">REST</div><pre>api_route(
     <span class="str">'api/items'</span>, view,

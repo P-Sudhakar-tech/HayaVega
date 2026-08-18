@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "mangoo"
 version = "0.1.0"
-description = "A Django-like Python framework with a Rust core"
+description = "A Python framework with Django-like structure, FastAPI-style automatic API docs, and a Rust core"
 requires-python = ">=3.10"
 authors = [{name = "Mangoo contributors"}]
 dependencies = ["msgspec>=0.21,<0.22"]

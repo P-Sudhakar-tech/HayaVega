@@ -1,6 +1,6 @@
 # Mangoo
 
-Mangoo is an early, runnable experiment in a Django-like developer experience backed by a Rust core.
+Mangoo is an early, runnable experiment in a Django-like project structure and FastAPI-style automatic API docs, backed by a Rust core.
 
 ## What works now
 
