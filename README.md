@@ -81,7 +81,10 @@ migration with `python manage.py makemigrations blog` (after adding `"blog"`
 to `INSTALLED_APPS`). Later invocations generate only nullable `ADD COLUMN`
 operations and record a dependency on the preceding migration. New tables,
 non-nullable fields, field alterations, and removals must remain explicit,
-reviewed SQL migrations.
+reviewed SQL migrations; `makemigrations` detects a type, nullability, or
+uniqueness change on an already-migrated column and raises an error naming
+the column, rather than silently leaving the schema out of sync with the
+declared entity.
 
 ## Production validation and probes
 

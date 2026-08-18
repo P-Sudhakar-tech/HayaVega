@@ -61,17 +61,20 @@ def _identifier(value: str) -> str:
     return value
 
 
+def _column_definition(name: str, column, engine: str) -> str:
+    """Return the deterministic ``name TYPE [NOT NULL] [UNIQUE]`` fragment for a column."""
+    definition = f"{_identifier(name)} {column.sql_type(engine)}"
+    if not column.primary:
+        if not column.nullable:
+            definition += " NOT NULL"
+        if column.unique:
+            definition += " UNIQUE"
+    return definition
+
+
 def create_table_operation(entity: type[Entity], engine: str = "sqlite3") -> str:
     """Return the deterministic CREATE TABLE statement for a declared entity."""
-    definitions = []
-    for name, column in entity._columns.items():
-        definition = f"{_identifier(name)} {column.sql_type(engine)}"
-        if not column.primary:
-            if not column.nullable:
-                definition += " NOT NULL"
-            if column.unique:
-                definition += " UNIQUE"
-        definitions.append(definition)
+    definitions = [_column_definition(name, column, engine) for name, column in entity._columns.items()]
     return f"CREATE TABLE {_identifier(entity.__table__)} ({', '.join(definitions)})"
 
 
@@ -79,8 +82,10 @@ def generate(models_module, migrations_directory: str | Path, engine: str = "sql
     """Create an initial SQL migration from entities declared in ``models.py``.
 
     The generator creates an initial migration, then supports only additive,
-    nullable columns. Destructive or data-dependent changes remain explicit
-    SQL migrations for review.
+    nullable columns. New tables, column removals, and column alterations
+    (type, nullability, or uniqueness changes on an existing column) are
+    detected and rejected here rather than silently ignored, since they
+    remain explicit SQL migrations for review.
     """
     entities = [
         value for _, value in inspect.getmembers(models_module, inspect.isclass)
@@ -102,17 +107,23 @@ def generate(models_module, migrations_directory: str | Path, engine: str = "sql
         table = _identifier(entity.__table__)
         if table not in known:
             raise MigrationGenerationError(f"New table {table} needs an explicit reviewed migration.")
-        removed = known[table] - set(entity._columns)
+        removed = set(known[table]) - set(entity._columns)
         if removed:
             raise MigrationGenerationError(
                 f"Removed columns on {table} need an explicit reviewed migration: {', '.join(sorted(removed))}."
             )
         for name, column in entity._columns.items():
+            declared_definition = _column_definition(name, column, engine)
             if name in known[table]:
+                if known[table][name] != declared_definition:
+                    raise MigrationGenerationError(
+                        f"Field alteration on {table}.{name} needs an explicit reviewed migration "
+                        f"(applied: '{known[table][name]}', declared: '{declared_definition}')."
+                    )
                 continue
             if not column.nullable:
                 raise MigrationGenerationError(f"New column {table}.{name} must be nullable; backfill required columns in an explicit migration.")
-            operations.append(f"ALTER TABLE {table} ADD COLUMN {_identifier(name)} {column.sql_type(engine)}")
+            operations.append(f"ALTER TABLE {table} ADD COLUMN {declared_definition}")
     if not operations:
         return None
     number = max(int(path.name[:4]) for path in existing) + 1
@@ -122,22 +133,27 @@ def generate(models_module, migrations_directory: str | Path, engine: str = "sql
     return target
 
 
-def _declared_columns(paths: Iterable[Path]) -> dict[str, set[str]]:
-    """Extract the conservative schema known to generator-produced SQL."""
-    tables: dict[str, set[str]] = {}
+def _declared_columns(paths: Iterable[Path]) -> dict[str, dict[str, str]]:
+    """Extract the conservative schema known to generator-produced SQL.
+
+    Each table maps its column names to the full ``name TYPE ...`` definition
+    text so ``generate`` can detect a type, nullability, or uniqueness change
+    on a column that already exists, not just its presence.
+    """
+    tables: dict[str, dict[str, str]] = {}
     create = re.compile(r"^CREATE TABLE ([A-Za-z_][A-Za-z0-9_]*) \((.*)\)$", re.DOTALL)
-    add_column = re.compile(r"^ALTER TABLE ([A-Za-z_][A-Za-z0-9_]*) ADD COLUMN ([A-Za-z_][A-Za-z0-9_]*) .+$", re.DOTALL)
+    add_column = re.compile(r"^ALTER TABLE ([A-Za-z_][A-Za-z0-9_]*) ADD COLUMN ([A-Za-z_][A-Za-z0-9_]*) (.+)$", re.DOTALL)
     for path in paths:
         namespace: dict[str, object] = {}
         exec(compile(path.read_bytes(), path, "exec"), namespace)
         for sql in namespace.get("operations", []):
             match = create.fullmatch(sql)
             if match:
-                tables[match.group(1)] = {part.strip().split()[0] for part in match.group(2).split(",")}
+                tables[match.group(1)] = {part.strip().split()[0]: part.strip() for part in match.group(2).split(",")}
                 continue
             match = add_column.fullmatch(sql)
             if match and match.group(1) in tables:
-                tables[match.group(1)].add(match.group(2))
+                tables[match.group(1)][match.group(2)] = f"{match.group(2)} {match.group(3)}"
     return tables
 
 

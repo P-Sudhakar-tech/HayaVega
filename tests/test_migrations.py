@@ -5,7 +5,7 @@ from types import ModuleType
 
 from mangoo.db import connect
 from mangoo.migrations import MigrationError, MigrationFormatError, MigrationGenerationError, MigrationIntegrityError, apply, generate, status
-from mangoo.models import Entity, Integer, Text
+from mangoo.models import Decimal, Entity, Integer, Text
 
 
 class MigrationTests(unittest.TestCase):
@@ -84,6 +84,43 @@ class MigrationTests(unittest.TestCase):
             generate(first, root)
             with self.assertRaises(MigrationGenerationError):
                 generate(removed, root)
+
+    def test_generator_rejects_column_type_alteration(self):
+        first = ModuleType("catalog.models")
+        first.Product = type("Product", (Entity,), {"__module__": first.__name__, "price": Decimal()})
+        altered = ModuleType("catalog.models")
+        altered.Product = type("Product", (Entity,), {"__module__": altered.__name__, "price": Text()})
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "migrations"
+            generate(first, root)
+            with self.assertRaises(MigrationGenerationError):
+                generate(altered, root)
+
+    def test_generator_rejects_uniqueness_alteration(self):
+        first = ModuleType("catalog.models")
+        first.Product = type("Product", (Entity,), {"__module__": first.__name__, "name": Text()})
+        altered = ModuleType("catalog.models")
+        altered.Product = type("Product", (Entity,), {"__module__": altered.__name__, "name": Text(unique=True)})
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "migrations"
+            generate(first, root)
+            with self.assertRaises(MigrationGenerationError):
+                generate(altered, root)
+
+    def test_generator_preserves_unique_nullable_column_additions(self):
+        first = ModuleType("catalog.models")
+        first.Product = type("Product", (Entity,), {"__module__": first.__name__, "name": Text()})
+        second = ModuleType("catalog.models")
+        second.Product = type("Product", (Entity,), {"__module__": second.__name__, "name": Text(), "code": Text(nullable=True, unique=True)})
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "migrations"
+            generate(first, root)
+            source = generate(second, root)
+            self.assertIn("ALTER TABLE product_entries ADD COLUMN code TEXT UNIQUE", source.read_text(encoding="utf-8"))
+            # Re-running against the same declared schema must stay a no-op:
+            # the recorded ADD COLUMN text must match what generate() would
+            # declare again, or every unchanged project would fail forever.
+            self.assertIsNone(generate(second, root))
 
     def test_dependencies_control_order_and_reject_cycles(self):
         with tempfile.TemporaryDirectory() as temp:

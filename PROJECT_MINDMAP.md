@@ -53,6 +53,7 @@ mindmap
         checksums and history
         dependency ordering
         safe nullable column additions
+        schema-diff detection for altered columns
       Serialization
         Serializer
         EntitySerializer

@@ -8,7 +8,7 @@ This roadmap converts the current prototype into a safer, more deployable framew
 
 | Priority | Workstream | Outcome |
 |---|---|---|
-| P0 | Data and migrations | **In progress:** transactional, checksummed migrations and initial entity migration generation delivered; schema diffs/dependencies remain |
+| P0 | Data and migrations | **Delivered:** transactional, checksummed migrations, initial entity migration generation, and schema-diff detection (type/nullability/uniqueness alterations on existing columns are rejected with an explicit-migration error instead of silently ignored) all shipped |
 | P0 | Production validation | **In progress:** production settings validation, DB readiness/liveness, deployment guide, and CI-run PostgreSQL integration test delivered; MySQL/MariaDB integration test remains |
 | P1 | Runtime and static assets | **In progress:** binary files, MIME types, cache-control, ETags, and conditional requests delivered; observability work remains |
 | P1 | Authentication lifecycle | Reset, verification, session management, and persistent audit events |
