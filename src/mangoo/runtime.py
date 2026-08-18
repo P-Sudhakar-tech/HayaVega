@@ -47,7 +47,7 @@ def create_application(urlpatterns, *, hardening: HardeningOptions | None = None
         incoming_id = request.headers.get("X-Request-Id", "")
         request_id = incoming_id if _REQUEST_ID.fullmatch(incoming_id) else uuid4().hex
         if pulse is not None:
-            pulse.publish_async("request.started", data={"method": request.method, "path": request.path})
+            pulse.publish("request.started", data={"method": request.method, "path": request.path})
         rejection = size_rejection or (hardening_layer.reject(request) if hardening_layer else None)
         preflight = hardening_layer.preflight(request) if hardening_layer else None
         if rejection is not None:
@@ -67,7 +67,7 @@ def create_application(urlpatterns, *, hardening: HardeningOptions | None = None
                 response = Response("<h1>500 Internal Server Error</h1>" if not debug else "<h1>500 Internal Server Error</h1><pre>See server log for traceback.</pre>", status=500)
         duration_ms = (perf_counter() - started_at) * 1000
         if pulse is not None:
-            pulse.publish_async("request.finished", data={"method": request.method, "path": request.path, "status": response.status, "duration_ms": round(duration_ms, 2)})
+            pulse.publish("request.finished", data={"method": request.method, "path": request.path, "status": response.status, "duration_ms": round(duration_ms, 2)})
         if hardening_layer:
             response = hardening_layer.finalize(request, response, request_id=request_id, duration_ms=duration_ms)
         elif not any(name.lower() == "x-request-id" for name, _ in response.headers):

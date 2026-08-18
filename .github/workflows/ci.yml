@@ -21,6 +21,25 @@ jobs:
       - name: Run tests with coverage
         run: pytest
 
+  native-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Mangoo with test dependencies
+        run: pip install -e ".[dev]"
+      - name: Build the mangoo_native extension
+        run: cargo build --release -p mangoo-python
+      - name: Install the built extension into site-packages
+        run: cp target/release/libmangoo_native.so "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/mangoo_native.so"
+      - name: Confirm the native extension loaded, then run the tests it backs
+        run: |
+          python -c "import mangoo_native; print(mangoo_native.PulseDispatcher)"
+          pytest tests/test_collections.py tests/test_signals_addon.py tests/test_pulse_integration.py --no-cov -v
+
   postgresql-integration:
     runs-on: ubuntu-latest
     services:

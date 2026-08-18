@@ -14,8 +14,8 @@ This roadmap converts the current prototype into a safer, more deployable framew
 | P1 | Authentication lifecycle | Reset, verification, session management, and persistent audit events |
 | P1 | API documentation | Complete OpenAPI schemas and authentication documentation |
 | P2 | Developer experience | **In progress:** CI (GitHub Actions, coverage gate) delivered; richer templates, admin expansion, GraphQL work, and release automation remain |
-| P2 | Native runtime | Rust packaging, benchmarks, then measured migrations from Python |
-| P2 | Mangoo Pulse | **Delivered:** opt-in in-process event bus, optional async delivery, sensitive-key rejection, and framework lifecycle wiring (request, auth, admin, migrations) all shipped; only remaining gap is that no built-in app wires a bus in by default |
+| P2 | Native runtime | **In progress:** pre-existing pyo3 API mismatches that blocked every native build fixed; `mangoo_native` now builds and loads via `maturin develop` in this environment; Pulse's dispatcher is the first concurrency primitive on it. Request routing, JSON serialization, authentication operations, and database execution remain Python-only |
+| P2 | Mangoo Pulse | **Delivered:** opt-in in-process event bus with always-async delivery (no sync/async choice for callers), a Rust-native worker-pool dispatcher (`mangoo_native.PulseDispatcher`) with a behavior-compatible Python `ThreadPoolExecutor` fallback, sensitive-key rejection, and framework lifecycle wiring (request, auth, admin, migrations) all shipped; only remaining gap is that no built-in app wires a bus in by default |
 
 ## Future-readiness estimate (planning baseline)
 
@@ -107,10 +107,10 @@ each milestone; external security-review or release feedback is excluded.
 - Template inheritance, loops, conditionals, caching, and developer-mode diagnostics.
 - Model-admin registration, pagination, validation, permissions, and change history.
 - GraphQL arguments, mutations, nesting, validation, limits, and introspection policy.
-- Maturin packaging for `mangoo_native`, benchmark automation, and measured Rust migrations.
+- Maturin packaging for `mangoo_native` as part of the published distribution (today it's a manual, documented dev-build step; `crates/mangoo-python`'s `[project] name = "mangoo"` collision with the repository root's `pyproject.toml` needs resolving first -- see `src/mangoo/addons/pulse/README.md`), benchmark automation, and measured Rust migrations.
 - CI matrix across supported Python versions is delivered (`.github/workflows/ci.yml`); linting, formatting, type checks, dependency scanning, release notes, and package publishing remain.
 - Replace the temporary WSGI server with a production-ready async/Rust runtime behind the stable Python API.
-- Mangoo Pulse: delivered. The opt-in registry provides connect/disconnect, deterministic ordering, error isolation, optional asynchronous delivery, and sensitive-key rejection in `src/mangoo/addons/pulse/`; `create_application`, `auth_routes`, `admin_routes`, and `migrations.apply` all accept a `pulse=` argument to emit request, authentication, administration, and migration events. Remaining work is optional: a generated project could wire a default bus in automatically instead of requiring each application to pass one explicitly.
+- Mangoo Pulse: delivered. The opt-in registry provides connect/disconnect, deterministic ordering, error isolation, sensitive-key rejection, and always-async delivery through a Rust-native worker pool (Python `ThreadPoolExecutor` fallback when `mangoo_native` is not built) in `src/mangoo/addons/pulse/`; `create_application`, `auth_routes`, `admin_routes`, and `migrations.apply` all accept a `pulse=` argument to emit request, authentication, administration, and migration events. Remaining work is optional: a generated project could wire a default bus in automatically instead of requiring each application to pass one explicitly.
 
 ## Definition of done
 

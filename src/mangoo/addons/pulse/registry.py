@@ -1,47 +1,70 @@
-"""Opt-in delivery for Mangoo Pulse events."""
+"""Always-async delivery for Mangoo Pulse events, Rust-backed when available."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import re
-from threading import RLock, Thread
+from threading import RLock
 
 from .contracts import PulseEvent, PulseSubscriber
+
+try:
+    from mangoo_native import PulseDispatcher as _NativeDispatcher
+except ImportError:
+    _NativeDispatcher = None
 
 
 _EVENT_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 LOGGER = logging.getLogger("mangoo.pulse")
 
 
-@dataclass(frozen=True)
-class PulseDeliveryFailure:
-    """A subscriber error captured without interrupting other handlers."""
+class _FallbackDispatcher:
+    """Persistent Python thread pool used when ``mangoo_native`` is not built.
 
-    event: PulseEvent
-    subscriber: PulseSubscriber
-    error: Exception
+    Behavior-compatible with the native dispatcher: a fixed pool of reused
+    worker threads, not one ``threading.Thread`` per event.
+    """
+
+    def __init__(self, workers: int = 4) -> None:
+        self._executor = ThreadPoolExecutor(max_workers=max(workers, 1), thread_name_prefix="pulse")
+
+    def dispatch(self, subscribers: list[PulseSubscriber], event: PulseEvent) -> None:
+        self._executor.submit(self._deliver, subscribers, event)
+
+    def close(self) -> None:
+        self._executor.shutdown(wait=False)
+
+    @staticmethod
+    def _deliver(subscribers: list[PulseSubscriber], event: PulseEvent) -> None:
+        for subscriber in subscribers:
+            try:
+                subscriber(event)
+            except Exception:
+                LOGGER.exception("Pulse subscriber failed for event=%s", event.name)
 
 
 class PulseBus:
-    """An explicit, in-process event registry with deterministic delivery.
+    """An explicit, in-process event registry with deterministic, always-async delivery.
 
-    Subscribers run in connection order. Exceptions are recorded and logged,
-    then later subscribers continue to receive the event.
+    Subscribers run in connection order on a small persistent worker pool: a
+    Rust-native thread pool (``mangoo_native.PulseDispatcher``) when the
+    optional extension is built, otherwise a behavior-compatible Python
+    ``ThreadPoolExecutor`` fallback. There is no synchronous alternative to
+    opt into, and no thread-vs-process or sync-vs-async choice for callers to
+    make -- ``publish``/``emit`` always hand delivery to a worker and return
+    immediately.
 
-    Delivery semantics: ``emit``/``publish`` run subscribers synchronously on
-    the caller's thread and return each failure, so call them only after any
-    surrounding database transaction has committed -- a subscriber must never
-    observe a change that could still be rolled back. ``emit_async``/
-    ``publish_async`` hand the same ordered subscriber list to a background
-    thread and return immediately without failures; use them only where the
-    caller does not need delivery confirmation, such as per-request lifecycle
-    events, since a slow or failing subscriber can no longer affect the
-    caller's control flow.
+    Call ``publish``/``emit`` only after any surrounding database transaction
+    has committed, since a subscriber must never observe a change that could
+    still be rolled back. Because delivery happens on another thread, a
+    failing subscriber is logged rather than raised or returned to the
+    caller; do not rely on ``publish``/``emit`` to observe delivery failures.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, workers: int = 4) -> None:
         self._subscribers: dict[str, list[PulseSubscriber]] = {}
         self._lock = RLock()
+        self._dispatcher = _NativeDispatcher(workers) if _NativeDispatcher else _FallbackDispatcher(workers)
 
     def connect(self, event_name: str, subscriber: PulseSubscriber) -> None:
         self._validate_event_name(event_name)
@@ -67,41 +90,20 @@ class PulseBus:
 
     unsubscribe = disconnect
 
-    def emit(self, event: PulseEvent) -> tuple[PulseDeliveryFailure, ...]:
+    def emit(self, event: PulseEvent) -> None:
         if not isinstance(event, PulseEvent):
             raise TypeError("Pulse can emit only PulseEvent instances.")
         with self._lock:
-            subscribers = tuple(self._subscribers.get(event.name, ()))
-        failures = []
-        for subscriber in subscribers:
-            try:
-                subscriber(event)
-            except Exception as error:
-                LOGGER.exception("Pulse subscriber failed for event=%s", event.name)
-                failures.append(PulseDeliveryFailure(event, subscriber, error))
-        return tuple(failures)
-
-    def publish(self, name: str, *, actor_id: int | None = None, data: dict | None = None) -> tuple[PulseDeliveryFailure, ...]:
-        return self.emit(PulseEvent(name, actor_id=actor_id, data=data or {}))
-
-    def emit_async(self, event: PulseEvent) -> None:
-        """Hand delivery to a daemon background thread; failures are logged, not returned."""
-        if not isinstance(event, PulseEvent):
-            raise TypeError("Pulse can emit only PulseEvent instances.")
-        with self._lock:
-            subscribers = tuple(self._subscribers.get(event.name, ()))
+            subscribers = list(self._subscribers.get(event.name, ()))
         if subscribers:
-            Thread(target=self._deliver, args=(event, subscribers), name=f"pulse-{event.name}", daemon=True).start()
+            self._dispatcher.dispatch(subscribers, event)
 
-    def publish_async(self, name: str, *, actor_id: int | None = None, data: dict | None = None) -> None:
-        self.emit_async(PulseEvent(name, actor_id=actor_id, data=data or {}))
+    def publish(self, name: str, *, actor_id: int | None = None, data: dict | None = None) -> None:
+        self.emit(PulseEvent(name, actor_id=actor_id, data=data or {}))
 
-    def _deliver(self, event: PulseEvent, subscribers: tuple[PulseSubscriber, ...]) -> None:
-        for subscriber in subscribers:
-            try:
-                subscriber(event)
-            except Exception:
-                LOGGER.exception("Pulse subscriber failed for event=%s", event.name)
+    def close(self) -> None:
+        """Stop the worker pool; idle workers exit once queued jobs drain."""
+        self._dispatcher.close()
 
     @staticmethod
     def _validate_event_name(event_name: str) -> None:

@@ -15,7 +15,7 @@ def auth_routes(database_path: str | Path, *, secure_cookies: bool = False, puls
     """Return REST routes for login, logout, and the authenticated user.
 
     ``pulse``, when given a ``PulseBus``, publishes login and session events
-    synchronously after the database work that produced them has committed.
+    after the database work that produced them has committed.
     """
     def login(request):
         try:

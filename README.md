@@ -135,19 +135,25 @@ Install the development extra and run the suite with `pip install -e ".[dev]"`
 then `pytest`. This enforces an 85% coverage gate by default (see
 `pyproject.toml`); pass `--no-cov` to skip it locally. GitHub Actions
 (`.github/workflows/ci.yml`) runs the suite on Python 3.10, 3.11, and 3.12 for
-every push and pull request, plus a separate job that runs the opt-in
-PostgreSQL integration test against a `postgres:16` service container.
+every push and pull request, plus a separate job that builds the
+`mangoo_native` Rust extension and runs the tests it backs, and a separate job
+that runs the opt-in PostgreSQL integration test against a `postgres:16`
+service container.
 
 ## Mangoo Pulse
 
 The opt-in in-process event bus is available under `mangoo.addons.pulse`.
 Applications explicitly create a `PulseBus`, subscribe to named events, and
-publish events. Delivery is deterministic and isolates subscriber failures.
-Pass the same `PulseBus` as `pulse=` to `create_application`, `auth_routes`,
-`admin_routes`, or `migrations.apply` to receive `request.*`, `auth.*`,
-`admin.action`, and `migration.applied` events from those components; nothing
-changes for applications that do not pass one. See
-`src/mangoo/addons/pulse/README.md` for its full API and delivery semantics.
+publish events. Delivery is always concurrent and off the caller's thread --
+there is no sync/async choice to make -- through a Rust-native worker pool
+(`mangoo_native.PulseDispatcher`) when the optional extension is built, or a
+behavior-compatible Python `ThreadPoolExecutor` otherwise, and isolates
+subscriber failures either way. Pass the same `PulseBus` as `pulse=` to
+`create_application`, `auth_routes`, `admin_routes`, or `migrations.apply` to
+receive `request.*`, `auth.*`, `admin.action`, and `migration.applied` events
+from those components; nothing changes for applications that do not pass one.
+See `src/mangoo/addons/pulse/README.md` for its full API, delivery semantics,
+and how to build the Rust-backed dispatcher.
 
 ## REST and GraphQL
 
@@ -185,7 +191,7 @@ items = mango_list(["first", "second"])
 items.append("third")
 ```
 
-`mango_list` remains usable without a Rust toolchain through a compatible fallback. When the `mangoo_native` PyO3 extension is built, it automatically becomes a Rust-owned collection. The next Rust migration targets are request routing, JSON serialization, authentication operations, and database execution.
+`mango_list` remains usable without a Rust toolchain through a compatible fallback. When the `mangoo_native` PyO3 extension is built, it automatically becomes a Rust-owned collection. Mangoo Pulse's event dispatcher follows the same pattern: see [Mangoo Pulse](#mangoo-pulse) above. The next Rust migration targets are request routing, JSON serialization, authentication operations, and database execution.
 
 ## Declarative data entities
 
@@ -240,6 +246,6 @@ The command prints a secret to add to a TOTP-compatible authenticator app. Keep 
 
 The generated project also exposes JSON authentication endpoints: `POST /api/auth/login`, `GET /api/auth/me`, and `POST /api/auth/logout`. Login accepts `username`, `password`, and optional `totp_code`; it returns a Bearer session token. Use HTTPS before exposing these endpoints outside local development.
 
-The Rust extension is optional for this first scaffold. To build it, install Rust and run `maturin develop` from the repository root.
+The Rust extension is optional for this first scaffold. To build it, install Rust and run `maturin develop --manifest-path crates/mangoo-python/Cargo.toml` -- point it at that crate specifically, not the repository root, since both currently share the project name `mangoo` and a root build installs a wheel that silently replaces the real Python package (see [Mangoo Pulse](#mangoo-pulse) for the recovery step if that happens).
 
 See [ROADMAP.md](ROADMAP.md) for the planned delivery path and boundaries.

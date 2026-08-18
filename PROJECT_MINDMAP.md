@@ -96,11 +96,12 @@ mindmap
     Extensions
       Pulse event bus addon
         connect/disconnect registry
-        sync and async delivery
+        always-async, Rust-backed delivery
         sensitive-key rejection
         request, auth, admin, migration wiring
       Rust native core
         collection support
+        Pulse worker-pool dispatcher
         future runtime and JSON work
     Project resources
       README

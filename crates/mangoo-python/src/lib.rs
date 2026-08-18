@@ -3,6 +3,10 @@ use pyo3::types::{PyDict, PyList, PyTuple};
 
 use mangoo_core::{JsonValue, MangoList as CoreMangoList};
 
+use std::sync::mpsc::{channel, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread;
+
 #[pyfunction]
 fn normalize_path(path: &str) -> String {
     mangoo_core::normalize_path(path)
@@ -71,8 +75,9 @@ impl PyMangoList {
     #[new]
     #[pyo3(signature = (items=None))]
     fn new(py: Python<'_>, items: Option<Bound<'_, PyAny>>) -> PyResult<Self> {
+        let _ = py;
         let values = match items {
-            Some(items) => items.try_iter()?.map(|item| item.map(|value| value.unbind())).collect::<PyResult<Vec<_>>>()?,
+            Some(items) => items.iter()?.map(|item| item.map(|value| value.unbind())).collect::<PyResult<Vec<_>>>()?,
             None => Vec::new(),
         };
         Ok(Self { values: CoreMangoList::new(values) })
@@ -82,18 +87,87 @@ impl PyMangoList {
     fn clear(&mut self) { self.values.clear(); }
     fn __len__(&self) -> usize { self.values.len() }
     fn __bool__(&self) -> bool { !self.values.is_empty() }
-    fn __getitem__(&self, index: isize) -> PyResult<Py<PyAny>> { Ok(self.values.as_slice()[normalized_index(index, self.values.len())?].clone()) }
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Py<PyAny>> { Ok(self.values.as_slice()[normalized_index(index, self.values.len())?].clone_ref(py)) }
     fn __setitem__(&mut self, index: isize, value: Py<PyAny>) -> PyResult<()> {
         let position = normalized_index(index, self.values.len())?;
         self.values.as_mut_slice()[position] = value;
         Ok(())
     }
+    #[pyo3(signature = (index=None))]
     fn pop(&mut self, index: Option<isize>) -> PyResult<Py<PyAny>> {
         let position = match index { Some(value) => normalized_index(value, self.values.len())?, None if self.values.is_empty() => return Err(pyo3::exceptions::PyIndexError::new_err("pop from empty mango_list")), None => self.values.len() - 1 };
         Ok(self.values.remove(position))
     }
-    fn to_list(&self, py: Python<'_>) -> PyResult<Py<PyAny>> { Ok(PyList::new(py, self.values.as_slice())?.into_any().unbind()) }
+    fn to_list(&self, py: Python<'_>) -> PyResult<Py<PyAny>> { Ok(PyList::new_bound(py, self.values.as_slice()).into_any().unbind()) }
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> { Ok(format!("mango_list({})", self.to_list(py)?.bind(py).repr()?)) }
+}
+
+/// One event delivery: a fixed subscriber snapshot plus the event to hand each of them.
+struct PulseJob {
+    subscribers: Vec<Py<PyAny>>,
+    event: Py<PyAny>,
+}
+
+fn run_pulse_job(job: PulseJob) {
+    Python::with_gil(|py| {
+        for subscriber in &job.subscribers {
+            if let Err(error) = subscriber.call1(py, (job.event.clone_ref(py),)) {
+                // A subscriber failure must never stop later subscribers or the
+                // worker thread; log it the same way the Python fallback does.
+                if let Ok(logging) = py.import_bound("logging") {
+                    if let Ok(logger) = logging.call_method1("getLogger", ("mangoo.pulse",)) {
+                        let _ = logger.call_method1("error", (format!("Pulse subscriber failed: {error}"),));
+                    }
+                }
+            }
+        }
+    });
+}
+
+/// A small persistent OS-thread pool that delivers Pulse events off the caller's thread.
+///
+/// Jobs queue on a single channel shared by a fixed number of native worker
+/// threads (not Python's ``threading`` module), so delivery never blocks the
+/// publisher and never spawns a new thread per event.
+#[pyclass(name = "PulseDispatcher")]
+struct PyPulseDispatcher {
+    sender: Option<Sender<PulseJob>>,
+}
+
+#[pymethods]
+impl PyPulseDispatcher {
+    #[new]
+    #[pyo3(signature = (workers=4))]
+    fn new(workers: usize) -> Self {
+        let (sender, receiver) = channel::<PulseJob>();
+        let receiver = Arc::new(Mutex::new(receiver));
+        for _ in 0..workers.max(1) {
+            let receiver = Arc::clone(&receiver);
+            thread::spawn(move || loop {
+                let job = receiver.lock().expect("Pulse dispatcher queue lock was poisoned").recv();
+                match job {
+                    Ok(job) => run_pulse_job(job),
+                    Err(_) => break,
+                }
+            });
+        }
+        Self { sender: Some(sender) }
+    }
+
+    /// Queue ``event`` for delivery to ``subscribers`` and return immediately.
+    fn dispatch(&self, subscribers: Vec<Py<PyAny>>, event: Py<PyAny>) -> PyResult<()> {
+        match &self.sender {
+            Some(sender) => sender
+                .send(PulseJob { subscribers, event })
+                .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Pulse dispatcher workers are no longer running")),
+            None => Err(pyo3::exceptions::PyRuntimeError::new_err("Pulse dispatcher is closed")),
+        }
+    }
+
+    /// Drop the sender so idle workers exit; called explicitly or at garbage collection.
+    fn close(&mut self) {
+        self.sender = None;
+    }
 }
 
 #[pymodule]
@@ -102,5 +176,6 @@ fn mangoo_native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(compile_selection, module)?)?;
     module.add_function(wrap_pyfunction!(serialize_json, module)?)?;
     module.add_class::<PyMangoList>()?;
+    module.add_class::<PyPulseDispatcher>()?;
     Ok(())
 }

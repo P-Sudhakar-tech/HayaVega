@@ -7,3 +7,6 @@ __pycache__/
 .coverage.*
 htmlcov/
 .pytest_cache/
+
+# Rust build output; Cargo.lock is versioned, the compiled artifacts are not.
+/target/

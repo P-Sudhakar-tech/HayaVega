@@ -18,8 +18,13 @@ from mangoo.testing import TestClient
 PASSWORD = "Correct-Horse-7!"
 
 
+def _wait(event: Event, message: str) -> None:
+    if not event.wait(timeout=2):
+        raise AssertionError(message)
+
+
 class RuntimePulseTests(unittest.TestCase):
-    def test_request_lifecycle_events_publish_asynchronously(self):
+    def test_request_lifecycle_events_publish_without_blocking_the_response(self):
         bus, started, finished_event, finished = PulseBus(), Event(), Event(), {}
 
         def on_started(event):
@@ -37,8 +42,8 @@ class RuntimePulseTests(unittest.TestCase):
         response = client.get("/hello")
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(started.wait(timeout=2), "request.started was not published")
-        self.assertTrue(finished_event.wait(timeout=2), "request.finished was not published")
+        _wait(started, "request.started was not published")
+        _wait(finished_event, "request.finished was not published")
         self.assertEqual(finished.get("status"), 200)
         self.assertEqual(finished.get("path"), "/hello")
 
@@ -52,18 +57,23 @@ class AuthApiPulseTests(unittest.TestCase):
     def tearDown(self):
         self.temporary_directory.cleanup()
 
-    def test_login_and_logout_publish_synchronous_events(self):
-        bus, events = PulseBus(), []
-        for name in ("auth.login_succeeded", "auth.login_failed", "auth.session_created", "auth.session_revoked"):
-            bus.connect(name, lambda event, name=name: events.append(name))
+    def test_login_and_logout_publish_events(self):
+        bus = PulseBus()
+        signals = {
+            name: Event()
+            for name in ("auth.login_succeeded", "auth.login_failed", "auth.session_created", "auth.session_revoked")
+        }
+        for name, signal in signals.items():
+            bus.connect(name, lambda event, signal=signal: signal.set())
         client = TestClient(create_application(auth_routes(self.database, pulse=bus)))
 
         client.post("/api/auth/login", json_data={"username": "admin", "password": "wrong-password"})
-        self.assertEqual(events, ["auth.login_failed"])
+        _wait(signals["auth.login_failed"], "auth.login_failed was not published")
 
         response = client.post("/api/auth/login", json_data={"username": "admin", "password": PASSWORD})
         token = response.json()["token"]
-        self.assertEqual(events[1:], ["auth.login_succeeded", "auth.session_created"])
+        _wait(signals["auth.login_succeeded"], "auth.login_succeeded was not published")
+        _wait(signals["auth.session_created"], "auth.session_created was not published")
 
         # Logout with the bearer token only; drop the session cookie the login
         # response set so the CSRF-protection check (which only triggers for
@@ -71,7 +81,7 @@ class AuthApiPulseTests(unittest.TestCase):
         client.cookies.clear()
         logout_response = client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"})
         self.assertEqual(logout_response.status_code, 204)
-        self.assertEqual(events[3:], ["auth.session_revoked"])
+        _wait(signals["auth.session_revoked"], "auth.session_revoked was not published")
 
 
 class AdminPulseTests(unittest.TestCase):
@@ -80,14 +90,21 @@ class AdminPulseTests(unittest.TestCase):
             database = Path(temp) / "users.sqlite3"
             user = create_superuser(database, "admin", "admin@example.com", PASSWORD)
             token = create_session(database, user)
-            bus, actions = PulseBus(), []
-            bus.connect("admin.action", lambda event: actions.append(event.data["action"]))
+            bus, actions, both_seen = PulseBus(), [], Event()
+
+            def on_action(event):
+                actions.append(event.data["action"])
+                if len(actions) == 2:
+                    both_seen.set()
+
+            bus.connect("admin.action", on_action)
             client = TestClient(create_application(admin_routes(database, pulse=bus)))
 
             client.get("/admin", headers={"Authorization": f"Bearer {token}"})
             client.get("/admin/users", headers={"Authorization": f"Bearer {token}"})
 
-            self.assertEqual(actions, ["index_viewed", "users_viewed"])
+            _wait(both_seen, "admin.action was not published twice")
+            self.assertEqual(sorted(actions), ["index_viewed", "users_viewed"])
 
 
 class MigrationPulseTests(unittest.TestCase):
@@ -98,7 +115,7 @@ class MigrationPulseTests(unittest.TestCase):
             (root / "0001_products.py").write_text(
                 "operations = ['CREATE TABLE products (id INTEGER PRIMARY KEY)']", encoding="utf-8"
             )
-            bus, seen_history_rows = PulseBus(), []
+            bus, seen_history_rows, delivered = PulseBus(), [], Event()
 
             def on_applied(event):
                 connection = connect(database)
@@ -107,11 +124,13 @@ class MigrationPulseTests(unittest.TestCase):
                     seen_history_rows.append(row["total"])
                 finally:
                     connection.close()
+                delivered.set()
 
             bus.connect("migration.applied", on_applied)
             applied = apply(database, [root], pulse=bus)
 
             self.assertEqual(applied, ["0001_products"])
+            _wait(delivered, "migration.applied was not published")
             self.assertEqual(seen_history_rows, [1])
 
 
