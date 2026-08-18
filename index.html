@@ -1,100 +1,361 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Mangoo is a modern web framework with a familiar project structure, APIs, authentication, and clear defaults.">
-  <link rel="icon" href="/assets/mangoo-mark.svg" type="image/svg+xml">
-  <title>Mangoo - Web development, made clear</title>
-  <style>
-    :root { --ink:#17221d; --muted:#5d6a62; --line:#dfe7e1; --paper:#fbfdfb; --leaf:#167a4a; --leaf-dark:#0f613a; --mint:#e7f7ed; --code:#10261a; }
-    * { box-sizing:border-box; }
-    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-    a { color:inherit; text-decoration:none; }
-    .wrap { width:min(1120px, calc(100% - 40px)); margin:auto; }
-    nav { height:72px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
-    .brand { display:inline-flex; align-items:center; gap:9px; font-size:1.35rem; font-weight:800; letter-spacing:-.04em; color:var(--leaf-dark); }
-    .brand img { display:block; width:34px; height:34px; }
-    .brand span { color:var(--ink); }
-    .navlinks { display:flex; align-items:center; gap:24px; color:var(--muted); font-size:.94rem; }
-    .button { display:inline-flex; align-items:center; justify-content:center; padding:10px 17px; border-radius:8px; font-weight:700; transition:.18s ease; }
-    .button.primary { background:var(--leaf); color:#fff; box-shadow:0 5px 15px rgba(22,122,74,.16); }
-    .button.primary:hover { background:var(--leaf-dark); transform:translateY(-1px); }
-    .button.secondary { border:1px solid var(--line); background:#fff; }
-    .hero { display:grid; grid-template-columns:1.08fr .92fr; gap:72px; align-items:center; padding:92px 0 84px; }
-    .eyebrow { color:var(--leaf); font-weight:750; font-size:.82rem; letter-spacing:.1em; text-transform:uppercase; }
-    h1 { font-size:clamp(2.7rem, 6vw, 5.1rem); letter-spacing:-.065em; line-height:1; margin:13px 0 24px; max-width:710px; }
-    .lead { font-size:1.17rem; color:var(--muted); max-width:600px; margin:0 0 30px; }
-    .actions { display:flex; flex-wrap:wrap; gap:12px; }
-    .terminal { background:var(--code); border-radius:14px; padding:22px; color:#e8f5eb; box-shadow:0 22px 50px rgba(12,38,24,.18); font:14px/1.75 "Cascadia Code", Consolas, monospace; }
-    .terminal-top { color:#83c89e; font-family:inherit; font-size:.78rem; padding-bottom:14px; border-bottom:1px solid rgba(255,255,255,.12); margin-bottom:15px; }
-    .prompt { color:#80dd9e; }.comment { color:#88a897; }.output { color:#f6fff8; }
-    .trust { border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:27px 0; color:var(--muted); font-size:.94rem; }
-    .trust strong { color:var(--ink); }
-    section { padding:88px 0; }
-    h2 { font-size:clamp(2rem, 4vw, 3rem); letter-spacing:-.05em; line-height:1.08; margin:0 0 15px; }
-    .section-lead { color:var(--muted); max-width:660px; margin:0 0 38px; }
-    .features { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
-    .feature { padding:26px; border:1px solid var(--line); border-radius:12px; background:#fff; }
-    .feature-icon { width:38px; height:38px; display:grid; place-items:center; background:var(--mint); color:var(--leaf-dark); border-radius:9px; font-weight:800; margin-bottom:17px; }
-    h3 { margin:0 0 8px; font-size:1.08rem; letter-spacing:-.02em; }.feature p { margin:0; color:var(--muted); font-size:.94rem; }
-    .showcase { background:#f0f8f2; border-top:1px solid #d9ebdd; border-bottom:1px solid #d9ebdd; }
-    .code-grid { display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start; }
-    .code-card { background:#fff; border:1px solid #d7e6db; border-radius:12px; overflow:hidden; }
-    .code-title { padding:12px 17px; font-size:.83rem; font-weight:750; color:var(--muted); border-bottom:1px solid #e4eee6; }
-    pre { margin:0; padding:20px; overflow:auto; font:13px/1.7 "Cascadia Code", Consolas, monospace; color:#263a2d; } .kw { color:#8b3fb4; }.fn { color:#0e7150; }.str { color:#a4511d; }.key { color:#005fb8; }
-    .cta { text-align:center; padding:92px 0 104px; }.cta p { color:var(--muted); max-width:530px; margin:0 auto 25px; }
-    footer { border-top:1px solid var(--line); padding:24px 0 38px; color:var(--muted); font-size:.88rem; display:flex; justify-content:space-between; gap:20px; }
-    @media (max-width:780px) { .navlinks a:not(.button) { display:none; }.hero,.code-grid { grid-template-columns:1fr; gap:38px; }.hero { padding:64px 0; }.features { grid-template-columns:1fr; } section { padding:64px 0; } footer { flex-direction:column; } }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Mangoo is an early, runnable Python web framework with Django-shaped project ergonomics and a Rust core taking over performance-critical paths as it matures.">
+<title>Mangoo</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Ctext y='104' font-size='104'%3E%F0%9F%A5%AD%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,400..600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ---------- tokens ---------- */
+  :root{
+    --ink:#1B2A1D; --paper:#FBF1DC; --surface:#FFF8E9; --surface-2:#F3E6C4;
+    --mango:#D97423; --mango-strong:#B85A16; --mango-tint:#FBE2BE;
+    --leaf:#0B5D3A; --leaf-strong:#0A4B30; --leaf-tint:#DCEEE0;
+    --rind:#A8432B; --rind-tint:#F1DAC9;
+    --line:#E4D2A2; --muted:#6E6248;
+    --code-bg:#16211A; --code-ink:#EFE9D6; --code-mut:#8FA391; --code-str:#F0B45E; --code-kw:#8FD1A6; --code-fn:#9EC7E8;
+    --focus:#0B5D3A;
+    --radius:3px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#F1E9D3; --paper:#131C15; --surface:#182419; --surface-2:#213024;
+      --mango:#EFA25A; --mango-strong:#F6C08A; --mango-tint:#2E2213;
+      --leaf:#6FCB98; --leaf-strong:#8FDBB0; --leaf-tint:#16281E;
+      --rind:#E0916F; --rind-tint:#2C1D16;
+      --line:#33422F; --muted:#A79E86;
+      --focus:#8FDBB0;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#F1E9D3; --paper:#131C15; --surface:#182419; --surface-2:#213024;
+    --mango:#EFA25A; --mango-strong:#F6C08A; --mango-tint:#2E2213;
+    --leaf:#6FCB98; --leaf-strong:#8FDBB0; --leaf-tint:#16281E;
+    --rind:#E0916F; --rind-tint:#2C1D16;
+    --line:#33422F; --muted:#A79E86;
+    --focus:#8FDBB0;
+  }
+
+  /* ---------- reset & base ---------- */
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size:16px; line-height:1.6;
+  }
+  h1,h2,h3{font-family:"Fraunces", ui-serif, Georgia, serif; text-wrap:balance; margin:0; color:var(--ink);}
+  a{color:var(--leaf); text-decoration-thickness:1px; text-underline-offset:2px;}
+  a:focus-visible, button:focus-visible, summary:focus-visible{outline:2px solid var(--focus); outline-offset:3px; border-radius:2px;}
+  code, pre, .mono{font-family:"IBM Plex Mono", ui-monospace, Consolas, monospace; font-variant-numeric:tabular-nums;}
+  img,svg{display:block; max-width:100%;}
+  .wrap{width:min(1180px, calc(100% - 48px)); margin:0 auto;}
+  .visually-hidden{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap;}
+
+  /* ---------- nav ---------- */
+  header.site{position:sticky; top:0; z-index:40; background:color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter:blur(6px); border-bottom:1px solid var(--line);}
+  nav{display:flex; align-items:center; justify-content:space-between; height:64px; gap:24px;}
+  .brand{display:inline-flex; align-items:center; gap:10px; font-family:"Fraunces"; font-weight:600; font-size:1.28rem; letter-spacing:-.01em;}
+  .brand svg{width:30px; height:30px;}
+  .navlinks{display:flex; align-items:center; gap:28px; font-size:.92rem; color:var(--muted);}
+  .navlinks a{color:var(--muted);}
+  .navlinks a:hover{color:var(--ink);}
+  .btn{display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:var(--radius); font-weight:600; font-size:.92rem; border:1px solid transparent; white-space:nowrap;}
+  .btn-primary{background:var(--leaf); color:var(--paper);}
+  .btn-primary:hover{background:var(--leaf-strong);}
+  .btn-ghost{border-color:var(--line); color:var(--ink);}
+  .btn-ghost:hover{border-color:var(--ink);}
+
+  /* ---------- hero ---------- */
+  .hero{padding:76px 0 44px;}
+  .eyebrow{display:inline-flex; align-items:center; gap:8px; font-family:"IBM Plex Mono"; font-size:.78rem; letter-spacing:.06em; text-transform:uppercase; color:var(--leaf); margin-bottom:18px;}
+  .eyebrow::before{content:""; width:7px; height:7px; border-radius:50%; background:var(--mango); display:inline-block;}
+  h1.headline{font-size:clamp(2.6rem, 5.4vw, 4.4rem); font-weight:600; line-height:1.02; letter-spacing:-.02em; max-width:16ch;}
+  h1.headline em{font-style:italic; font-weight:400; color:var(--leaf);}
+  .lead{font-size:1.15rem; color:var(--muted); max-width:52ch; margin:22px 0 30px;}
+  .hero-actions{display:flex; gap:14px; flex-wrap:wrap;}
+
+  /* ---------- ripeness strip ---------- */
+  .ripeness{margin-top:64px;}
+  .ripeness-head{display:flex; justify-content:space-between; align-items:baseline; gap:16px; margin-bottom:16px; flex-wrap:wrap;}
+  .ripeness-head h2{font-size:1.05rem; font-weight:600;}
+  .ripeness-head p{margin:0; font-size:.86rem; color:var(--muted);}
+  .ripeness-track{display:grid; grid-template-columns:repeat(8, 1fr); gap:3px;}
+  .segment{padding:14px 4px 0; border-top:5px solid var(--seg); display:flex; flex-direction:column; gap:6px;}
+  .segment .name{font-size:.76rem; font-weight:600; line-height:1.25;}
+  .segment .state{font-family:"IBM Plex Mono"; font-size:.68rem; letter-spacing:.02em; color:var(--muted); text-transform:uppercase;}
+  .legend{display:flex; gap:22px; margin-top:22px; flex-wrap:wrap; font-size:.82rem; color:var(--muted);}
+  .legend span{display:inline-flex; align-items:center; gap:7px;}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block;}
+
+  /* ---------- CLI band ---------- */
+  .cli-band{background:var(--code-bg); color:var(--code-ink); padding:56px 0; margin-top:72px;}
+  .cli-band .wrap{display:grid; grid-template-columns:.85fr 1fr; gap:56px; align-items:start;}
+  .cli-band h2{color:var(--code-ink); font-size:1.6rem; margin-bottom:14px;}
+  .cli-band p{color:var(--code-mut); max-width:34ch; margin:0;}
+  .transcript{display:flex; flex-direction:column; gap:0;}
+  .tline{display:grid; grid-template-columns:1fr auto; gap:18px; align-items:baseline; padding:10px 0; border-bottom:1px solid rgba(255,255,255,.08);}
+  .tline:last-child{border-bottom:none;}
+  .tline .cmd{font-size:.92rem;}
+  .tline .cmd .p{color:var(--code-kw); margin-right:.6em;}
+  .tline .note{font-size:.78rem; color:var(--code-mut); text-align:right;}
+  .tline .out{color:var(--code-str); font-size:.86rem; grid-column:1 / -1; padding-top:2px;}
+
+  /* ---------- status board ---------- */
+  .board{padding:72px 0; border-bottom:1px solid var(--line);}
+  .board-head{max-width:60ch; margin-bottom:44px;}
+  .board-head h2{font-size:clamp(1.8rem,3vw,2.4rem); margin-bottom:14px;}
+  .board-head p{color:var(--muted); margin:0; font-size:1.02rem;}
+  .board-cols{display:grid; grid-template-columns:repeat(3,1fr); gap:32px;}
+  .board-col h3{font-family:"IBM Plex Mono"; font-size:.82rem; text-transform:uppercase; letter-spacing:.05em; font-weight:600; display:flex; align-items:center; gap:8px; margin-bottom:16px; padding-bottom:12px; border-bottom:2px solid var(--col-accent);}
+  .board-col ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column;}
+  .board-col li{padding:12px 0; border-bottom:1px solid var(--line); font-size:.94rem;}
+  .board-col li:last-child{border-bottom:none;}
+  .board-col li strong{display:block; font-weight:600; margin-bottom:2px;}
+  .board-col li span{color:var(--muted); font-size:.87rem;}
+
+  /* ---------- docs shell ---------- */
+  .docs{padding:72px 0 100px;}
+  .docs-shell{display:grid; grid-template-columns:230px 1fr; gap:56px; align-items:start;}
+  .docs-rail{position:sticky; top:88px; max-height:calc(100vh - 110px); overflow-y:auto; padding-right:8px;}
+  .docs-rail-group{margin-bottom:22px;}
+  .docs-rail-group h4{font-family:"IBM Plex Mono"; font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 8px;}
+  .docs-rail a{display:block; padding:6px 0; font-size:.88rem; color:var(--muted); border-left:2px solid transparent; padding-left:12px; margin-left:-1px;}
+  .docs-rail a:hover{color:var(--ink);}
+  .docs-rail a.active{color:var(--leaf); border-left-color:var(--leaf); font-weight:600;}
+
+  .doc-section{padding-bottom:60px; margin-bottom:60px; border-bottom:1px solid var(--line); scroll-margin-top:84px;}
+  .doc-section:last-child{border-bottom:none; margin-bottom:0;}
+  .doc-kicker{display:flex; align-items:center; gap:12px; margin-bottom:10px;}
+  .tag{font-family:"IBM Plex Mono"; font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; padding:3px 8px; border-radius:2px; font-weight:600;}
+  .tag-shipped{background:var(--mango-tint); color:var(--mango-strong);}
+  .tag-progress{background:var(--leaf-tint); color:var(--leaf-strong);}
+  .tag-planned{background:var(--rind-tint); color:var(--rind);}
+  .doc-section h3{font-size:1.55rem; margin-bottom:14px;}
+  .doc-section > p{color:var(--muted); max-width:70ch; margin:0 0 18px; font-size:.98rem;}
+  .doc-section p{max-width:70ch;}
+  .doc-grid{display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; margin-top:18px;}
+  @media (max-width: 900px){ .doc-grid{grid-template-columns:1fr;} }
+
+  pre{background:var(--code-bg); color:var(--code-ink); margin:0; padding:16px 18px; border-radius:var(--radius); overflow-x:auto; font-size:.83rem; line-height:1.65;}
+  pre .kw{color:var(--code-kw);} pre .fn{color:var(--code-fn);} pre .str{color:var(--code-str);} pre .mut{color:var(--code-mut);}
+  .snippet-label{font-family:"IBM Plex Mono"; font-size:.72rem; color:var(--muted); margin-bottom:6px;}
+  .callout{background:var(--surface-2); border-left:3px solid var(--leaf); padding:14px 16px; font-size:.9rem; border-radius:0 var(--radius) var(--radius) 0; margin-top:16px;}
+  .callout strong{color:var(--leaf-strong);}
+
+  table{width:100%; border-collapse:collapse; font-size:.87rem;}
+  table caption{text-align:left; font-size:.8rem; color:var(--muted); margin-bottom:8px;}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{font-family:"IBM Plex Mono"; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600;}
+  td code{background:var(--surface-2); padding:1px 5px; border-radius:2px; font-size:.82rem;}
+  .table-wrap{overflow-x:auto;}
+
+  ul.plain{margin:0; padding-left:1.1em;} ul.plain li{margin-bottom:6px; font-size:.95rem;}
+
+  /* ---------- footer ---------- */
+  footer{border-top:1px solid var(--line); padding:36px 0; background:var(--surface);}
+  footer .wrap{display:flex; justify-content:space-between; align-items:center; gap:20px; flex-wrap:wrap; font-size:.86rem; color:var(--muted);}
+  footer a{color:var(--muted);}
+  footer a:hover{color:var(--ink);}
+
+  @media (max-width: 900px){
+    .navlinks a:not(.btn){display:none;}
+    .cli-band .wrap{grid-template-columns:1fr; gap:28px;}
+    .board-cols{grid-template-columns:1fr;}
+    .docs-shell{grid-template-columns:1fr;}
+    .docs-rail{position:static; max-height:none; margin-bottom:12px;}
+    .ripeness-track{grid-template-columns:repeat(4,1fr);}
+  }
+</style>
 </head>
 <body>
-  <header class="wrap"><nav>
-    <a class="brand" href="#top"><img src="assets/mangoo-mark.svg" alt="Mangoo"><span>man<span>goo</span></span></a>
-    <div class="navlinks"><a href="#features">Features</a><a href="#example">Examples</a><a href="BUILD_FROM_SCRATCH.md">Documentation</a><a class="button primary" href="#start">Get started</a></div>
-  </nav></header>
 
-  <main id="top">
-    <div class="wrap hero">
-      <div>
-        <div class="eyebrow">A modern web framework</div>
-        <h1>Build web applications with a clear, familiar flow.</h1>
-        <p class="lead">Mangoo gives projects a clean structure, concise routes, powerful APIs, secure authentication, and development tools that stay out of your way.</p>
-        <div class="actions"><a class="button primary" href="#start">Start building</a><a class="button secondary" href="#example">See an example</a></div>
-      </div>
-      <div class="terminal" aria-label="Mangoo command line example">
-        <div class="terminal-top">your-project / PowerShell</div>
-        <div><span class="prompt">PS&gt;</span> mango startproject bookstore</div>
-        <div class="output">Created project: bookstore</div>
-        <div><span class="prompt">PS&gt;</span> cd bookstore</div>
-        <div><span class="prompt">PS&gt;</span> mango launch 8001</div>
-        <div class="output">Development server: http://127.0.0.1:8001/</div>
-        <div class="comment"># Change a file. The server reloads automatically.</div>
-      </div>
+<header class="site">
+  <div class="wrap"><nav>
+    <a class="brand" href="#top">
+      <svg viewBox="0 0 128 128" role="img" aria-label="Mangoo mark">
+        <defs>
+          <linearGradient id="skin" x1="24" y1="17" x2="105" y2="113" gradientUnits="userSpaceOnUse"><stop stop-color="#4FBE79"/><stop offset="1" stop-color="#0B5D3A"/></linearGradient>
+          <linearGradient id="flesh" x1="53" y1="43" x2="78" y2="91" gradientUnits="userSpaceOnUse"><stop stop-color="#FBD98A"/><stop offset="1" stop-color="#D97423"/></linearGradient>
+        </defs>
+        <path fill="#0A4B30" d="M70 24c6-13 18-18 31-15-4 12-14 20-28 21l-3-6Z"/>
+        <path fill="url(#skin)" d="M104 29C83 14 52 18 34 38 14 60 19 94 42 110c8 5 18 3 24-4l43-53c7-8 5-18-5-24Z"/>
+        <path fill="url(#flesh)" d="M66 44c3 0 6 1 8 4l14 20c2 3 2 7 0 10L71 100c-3 4-9 4-12 0L41 78c-2-3-2-7 0-10l17-20c2-3 5-4 8-4Z"/>
+        <path fill="#0A4B30" d="M61 60a4 4 0 0 1 0 6l-7 7 7 7a4 4 0 1 1-6 6L45 76a4 4 0 0 1 0-6l10-10a4 4 0 0 1 6 0Zm12 0a4 4 0 0 1 6 0l10 10a4 4 0 0 1 0 6L79 86a4 4 0 1 1-6-6l7-7-7-7a4 4 0 0 1 0-6Z"/>
+      </svg>
+      mangoo
+    </a>
+    <div class="navlinks">
+      <a href="#getting-started">Documentation</a>
+      <a href="#board">Status</a>
+      <a href="https://github.com/P-Sudhakar-tech/mangoo" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn btn-primary" href="#getting-started">Quickstart</a>
+    </div>
+  </nav></div>
+</header>
+
+<main id="top">
+
+  <section class="hero wrap">
+    <div class="eyebrow">Python web framework &middot; open source &middot; early and runnable</div>
+    <h1 class="headline">Django-shaped. <em>Ripening</em> toward Rust.</h1>
+    <p class="lead">Mangoo gives Python projects routing, entities, migrations, hardened authentication, REST and GraphQL, and OpenAPI documentation today &mdash; with a native Rust core taking over performance-critical paths as it matures. It's a real, tested checkout, not a finished product: see exactly what's shipped and what isn't below.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#getting-started">Read the quickstart</a>
+      <a class="btn btn-ghost" href="https://github.com/P-Sudhakar-tech/mangoo" target="_blank" rel="noopener">View source on GitHub</a>
     </div>
 
-    <div class="trust"><div class="wrap"><strong>One coherent workflow:</strong> projects, apps, settings, routes, APIs, authentication, tests, and database configuration.</div></div>
-
-    <section id="features" class="wrap">
-      <div class="eyebrow">Everything in its place</div>
-      <h2>Start simple. Grow deliberately.</h2>
-      <p class="section-lead">Use conventions that make a project easy to navigate, without losing the freedom to organize it around your domain.</p>
-      <div class="features">
-        <article class="feature"><div class="feature-icon">/</div><h3>Clear routing</h3><p>Define routes close to the code that handles them, with predictable request and response objects.</p></article>
-        <article class="feature"><div class="feature-icon">{ }</div><h3>APIs included</h3><p>Build JSON REST endpoints and GraphQL queries from the same project structure.</p></article>
-        <article class="feature"><div class="feature-icon">✓</div><h3>Secure by default</h3><p>Use strong passwords, account lockouts, two-factor authentication, and revocable sessions.</p></article>
-        <article class="feature"><div class="feature-icon">⚙</div><h3>One settings file</h3><p>Keep server, application, and database configuration in a readable project settings module.</p></article>
-        <article class="feature"><div class="feature-icon">↻</div><h3>Fast feedback</h3><p>Run locally with automatic reloads whenever your application code changes.</p></article>
-        <article class="feature"><div class="feature-icon">▣</div><h3>Flexible storage</h3><p>Use the database engine that fits your deployment, from local development to managed services.</p></article>
+    <div class="ripeness">
+      <div class="ripeness-head">
+        <h2>Framework maturity, by workstream</h2>
+        <p>Pulled straight from the project's own roadmap &mdash; not a marketing score.</p>
       </div>
-    </section>
+      <div class="ripeness-track">
+        <div class="segment" style="--seg:var(--mango)"><span class="name">Data &amp; migrations</span><span class="state">Delivered</span></div>
+        <div class="segment" style="--seg:var(--leaf)"><span class="name">Production validation</span><span class="state">In progress</span></div>
+        <div class="segment" style="--seg:var(--leaf)"><span class="name">Runtime &amp; static assets</span><span class="state">In progress</span></div>
+        <div class="segment" style="--seg:var(--rind)"><span class="name">Auth lifecycle</span><span class="state">Planned</span></div>
+        <div class="segment" style="--seg:var(--rind)"><span class="name">API documentation</span><span class="state">Planned</span></div>
+        <div class="segment" style="--seg:var(--leaf)"><span class="name">Developer experience</span><span class="state">In progress</span></div>
+        <div class="segment" style="--seg:var(--leaf)"><span class="name">Native runtime</span><span class="state">In progress</span></div>
+        <div class="segment" style="--seg:var(--mango)"><span class="name">Mangoo Pulse</span><span class="state">Delivered</span></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--mango)"></span> Delivered</span>
+        <span><span class="dot" style="background:var(--leaf)"></span> In progress</span>
+        <span><span class="dot" style="background:var(--rind)"></span> Planned, not started</span>
+      </div>
+    </div>
+  </section>
 
-    <section id="example" class="showcase"><div class="wrap">
-      <div class="eyebrow">Readable application code</div>
-      <h2>From route to API in a few lines.</h2>
-      <p class="section-lead">Keep the public surface compact and easy to understand.</p>
-      <div class="code-grid">
-        <div class="code-card"><div class="code-title">project/urls.py</div><pre><span class="kw">from</span> mangoo <span class="kw">import</span> api_route, path
+  <div class="cli-band">
+    <div class="wrap">
+      <div>
+        <h2>From nothing to a running server.</h2>
+        <p>The full path is five commands. No build step, no config wizard &mdash; SQLite works with Python alone.</p>
+      </div>
+      <div class="transcript">
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python -m venv .venv</div><div class="note">Creates an isolated environment</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>pip install -e .</div><div class="note">Installs Mangoo and its CLI entry points</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>mangoo-admin startproject mysite</div><div class="note">Writes settings.py, urls.py, manage.py</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python manage.py startapp blog</div><div class="note">Adds an app package under INSTALLED_APPS</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python manage.py runserver</div><div class="out">Development server: http://127.0.0.1:8000/</div></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="board wrap" id="board">
+    <div class="board-head">
+      <h2>What's actually true today</h2>
+      <p>Mangoo is under active, test-driven development. This is an honest split of what's shipped with tests, what's built but incomplete, and what's still just a plan &mdash; sourced from the project's own roadmap, refreshed August 2026.</p>
+    </div>
+    <div class="board-cols">
+      <div class="board-col" style="--col-accent:var(--mango)">
+        <h3><span class="dot" style="background:var(--mango)"></span>Shipped</h3>
+        <ul>
+          <li><strong>Transactional, checksummed migrations</strong><span>Ordered SQL files, rollback-safe failure, altered-history detection</span></li>
+          <li><strong>Schema-diff detection</strong><span>makemigrations rejects silent type, nullability, or uniqueness drift</span></li>
+          <li><strong>Mangoo Pulse</strong><span>Opt-in event bus, always-async, Rust-native worker pool</span></li>
+          <li><strong>Hardened local auth</strong><span>scrypt, lockouts, TOTP, revocable sessions, CSRF, audit trail</span></li>
+          <li><strong>CI with a coverage gate</strong><span>Python 3.10&ndash;3.12 matrix, native-extension job, opt-in Postgres job</span></li>
+        </ul>
+      </div>
+      <div class="board-col" style="--col-accent:var(--leaf)">
+        <h3><span class="dot" style="background:var(--leaf)"></span>In progress</h3>
+        <ul>
+          <li><strong>Production validation</strong><span>Secret key, host, HTTPS, and cookie checks land before boot; MySQL/MariaDB integration test still to come</span></li>
+          <li><strong>Native runtime</strong><span>mangoo_native now builds and loads via maturin; only Pulse's dispatcher runs on it so far</span></li>
+          <li><strong>Runtime observability</strong><span>Structured logs, request IDs, and audit events exist; metrics do not yet</span></li>
+          <li><strong>Developer experience</strong><span>CI and coverage are done; templates, admin depth, and GraphQL maturity are next</span></li>
+        </ul>
+      </div>
+      <div class="board-col" style="--col-accent:var(--rind)">
+        <h3><span class="dot" style="background:var(--rind)"></span>Not started</h3>
+        <ul>
+          <li><strong>Authentication lifecycle</strong><span>Password reset, email verification, session rotation, revoke-all</span></li>
+          <li><strong>Full API documentation</strong><span>Request/response OpenAPI schemas, error envelopes, API versioning</span></li>
+          <li><strong>Async/Rust HTTP runtime</strong><span>The dev server is still synchronous WSGI &mdash; a deliberate, unstarted rewrite</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="docs wrap" id="docs">
+    <div class="docs-shell">
+      <nav class="docs-rail" aria-label="Documentation sections">
+        <div class="docs-rail-group">
+          <h4>Start here</h4>
+          <a href="#getting-started" data-rail>Getting started</a>
+          <a href="#settings" data-rail>Project &amp; settings</a>
+          <a href="#routing" data-rail>Routing &amp; views</a>
+        </div>
+        <div class="docs-rail-group">
+          <h4>Data</h4>
+          <a href="#entities" data-rail>Entities &amp; queries</a>
+          <a href="#migrations" data-rail>Migrations</a>
+        </div>
+        <div class="docs-rail-group">
+          <h4>Security</h4>
+          <a href="#auth" data-rail>Authentication</a>
+          <a href="#production" data-rail>Production &amp; deployment</a>
+        </div>
+        <div class="docs-rail-group">
+          <h4>Interfaces</h4>
+          <a href="#apis" data-rail>REST, GraphQL &amp; OpenAPI</a>
+          <a href="#pulse" data-rail>Mangoo Pulse</a>
+          <a href="#rust" data-rail>Rust-native core</a>
+        </div>
+        <div class="docs-rail-group">
+          <h4>Quality</h4>
+          <a href="#testing" data-rail>Testing &amp; CI</a>
+        </div>
+      </nav>
+
+      <div class="docs-content">
+
+        <article class="doc-section" id="getting-started">
+          <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
+          <h3>Getting started</h3>
+          <p>A Mangoo project follows a Django-familiar shape: <code>manage.py</code>, a <code>settings.py</code>, and a <code>urls.py</code>. SQLite needs no extra driver, so a first project runs with nothing beyond Python and pip.</p>
+          <div class="snippet-label">powershell</div>
+          <pre>python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+mangoo-admin startproject mysite
+cd mysite
+python manage.py startapp blog
+python manage.py runserver</pre>
+          <p>Open <code>http://127.0.0.1:8000/</code>. During development, <code>./mango.cmd launch 8001</code> runs straight from a source checkout without installing, and watches files to restart the server automatically &mdash; press <code>Ctrl+C</code> once to stop it cleanly.</p>
+        </article>
+
+        <article class="doc-section" id="settings">
+          <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
+          <h3>Project &amp; settings</h3>
+          <p>Every generated project keeps its own explicit runtime sections rather than scattering configuration across the codebase.</p>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Setting</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><code>BASE_DIR</code>, <code>SECRET_KEY</code>, <code>DEBUG</code>, <code>ALLOWED_HOSTS</code></td><td>Project identity and environment behavior</td></tr>
+              <tr><td><code>INSTALLED_APPS</code>, <code>MIDDLEWARE</code>, <code>ROOT_URLCONF</code></td><td>Application composition</td></tr>
+              <tr><td><code>DATABASES['default']</code></td><td>SQLite, PostgreSQL, MySQL, or MariaDB connection</td></tr>
+              <tr><td><code>SERVER</code></td><td>Development host and port</td></tr>
+              <tr><td><code>SECURITY</code></td><td><code>FORCE_HTTPS</code>, <code>SECURE_COOKIES</code>, proxy trust, rate limits</td></tr>
+            </tbody>
+          </table></div>
+          <div class="callout"><strong>Other databases:</strong> add the driver with uv before starting the project &mdash; <code>uv add "psycopg[binary]"</code> for PostgreSQL, <code>uv add pymysql</code> for MySQL/MariaDB.</div>
+        </article>
+
+        <article class="doc-section" id="routing">
+          <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
+          <h3>Routing &amp; views</h3>
+          <p>Routes are plain Python callables. <code>api_route</code> declares a JSON endpoint and is picked up automatically by the built-in OpenAPI document.</p>
+          <div class="doc-grid">
+            <div><div class="snippet-label">project/urls.py</div><pre><span class="kw">from</span> mangoo <span class="kw">import</span> api_route, path
 
 <span class="kw">def</span> <span class="fn">health</span>(request):
     <span class="kw">return</span> {<span class="str">"status"</span>: <span class="str">"ok"</span>}
@@ -102,23 +363,162 @@
 urlpatterns = [
     api_route(<span class="str">"api/health"</span>, health),
 ]</pre></div>
-        <div class="code-card"><div class="code-title">A response clients understand</div><pre>{
-  <span class="key">"status"</span>: <span class="str">"ok"</span>
-}
+            <div><div class="snippet-label">GET /api/health &rarr; 200</div><pre>{
+  <span class="fn">"status"</span>: <span class="str">"ok"</span>
+}</pre></div>
+          </div>
+          <p>Render escaped templates with <code>render_template("page.html", context, directories=(...))</code>, serve development assets with <code>*static_routes(BASE_DIR / "static")</code>, and exercise a view without a socket using the bundled <code>TestClient</code>.</p>
+        </article>
 
-<span class="comment"># GET /api/health</span>
-<span class="comment"># 200 OK</span></pre></div>
+        <article class="doc-section" id="entities">
+          <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
+          <h3>Entities &amp; queries</h3>
+          <p>Mangoo's data layer uses its own declarative entities and query verbs rather than copying Django's ORM API one-for-one.</p>
+          <div class="snippet-label">blog/models.py</div>
+          <pre><span class="kw">from</span> mangoo <span class="kw">import</span> Decimal, Entity, Text
+
+<span class="kw">class</span> <span class="fn">Product</span>(Entity):
+    name = Text(unique=<span class="kw">True</span>)
+    price = Decimal()
+
+products = Product.collection(DATABASES[<span class="str">"default"</span>])
+products.append(name=<span class="str">"Notebook"</span>, price=9.5)
+items = (products.seek(price__above=5)
+                  .arrange(<span class="str">"-price"</span>)
+                  .window(20)
+                  .fetch())</pre>
+          <p><code>collection</code>, <code>seek</code>, <code>arrange</code>, <code>window</code>, <code>fetch</code>, <code>only</code>, <code>revise</code>, and <code>erase</code> cover the query workflow. For output, a schema-driven <code>Serializer</code> validates external payloads and <code>EntitySerializer</code> encodes entities with <code>msgspec</code> for consistent, fast JSON.</p>
+        </article>
+
+        <article class="doc-section" id="migrations">
+          <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
+          <h3>Migrations</h3>
+          <p>Migrations are small, ordered, auditable SQL files &mdash; one statement per operation, so a failed migration rolls back cleanly with the transaction that wraps it.</p>
+          <div class="snippet-label">blog/migrations/0001_products.py</div>
+          <pre>operations = [
+    <span class="str">"CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"</span>,
+]</pre>
+          <p><code>python manage.py migrate</code> applies pending migrations; <code>showmigrations</code> inspects their state. Applied files are checksummed, so an altered or missing migration is rejected rather than silently reapplied.</p>
+          <div class="callout"><strong>Schema-diff detection:</strong> <code>makemigrations blog</code> generates the reviewed initial table, then only additive, nullable columns automatically. A type, nullability, or uniqueness change on an already-migrated column now raises an error naming the column, instead of silently drifting from what's declared.</div>
+        </article>
+
+        <article class="doc-section" id="auth">
+          <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
+          <h3>Authentication &amp; security</h3>
+          <p>Local authentication uses salted, memory-hard scrypt hashes; passwords need 12+ characters across four character classes; five failed attempts lock an account for 15 minutes.</p>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Endpoint</th><th>Behavior</th></tr></thead>
+            <tbody>
+              <tr><td><code>POST /api/auth/login</code></td><td>Username, password, optional TOTP code &rarr; Bearer session token</td></tr>
+              <tr><td><code>GET /api/auth/me</code></td><td>The current session's user</td></tr>
+              <tr><td><code>POST /api/auth/logout</code></td><td>Revokes the session token</td></tr>
+            </tbody>
+          </table></div>
+          <p><code>python manage.py createsuperuser</code> creates the first administrator; <code>enable2fa &lt;username&gt;</code> turns on authenticator-app two-factor authentication. Only hashes of session tokens are ever stored, and audit events for logins, sessions, and admin actions are persisted without credentials.</p>
+        </article>
+
+        <article class="doc-section" id="production">
+          <div class="doc-kicker"><span class="tag tag-progress">In progress</span></div>
+          <h3>Production &amp; deployment</h3>
+          <p>Starting with <code>DEBUG = False</code> requires a non-default <code>SECRET_KEY</code>, explicit <code>ALLOWED_HOSTS</code>, and <code>SECURITY</code> settings for HTTPS and secure cookies &mdash; Mangoo refuses to boot otherwise. Add <code>*health_routes(...)</code> for <code>GET /healthz</code> and <code>GET /readyz</code>.</p>
+          <div class="table-wrap"><table>
+            <caption>Condensed from the project's security review checklist</caption>
+            <thead><tr><th>Control</th><th>Requirement</th></tr></thead>
+            <tbody>
+              <tr><td>Sessions</td><td>HTTPS-only cookies in production; only session hashes are stored</td></tr>
+              <tr><td>CSRF</td><td>Matching token required for cookie-authenticated unsafe methods</td></tr>
+              <tr><td>CORS</td><td>Exact allowed origins configured; never reflects an arbitrary origin</td></tr>
+              <tr><td>Proxy trust</td><td>Forwarded headers honored only from a configured proxy network</td></tr>
+              <tr><td>Rate limits</td><td>Bounded, process-local; use an edge or Redis limiter across instances</td></tr>
+            </tbody>
+          </table></div>
+          <p>Migrations are forward-only: reverting means deploying the prior version and restoring a verified backup, or writing a reviewed compensating migration &mdash; never editing an applied file, since checksum validation will stop the deploy.</p>
+        </article>
+
+        <article class="doc-section" id="apis">
+          <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
+          <h3>REST, GraphQL &amp; OpenAPI</h3>
+          <p>Every application automatically exposes an OpenAPI 3 document at <code>/openapi.json</code> and an interactive Swagger UI at <code>/docs</code>, built from whatever routes were declared with <code>api_route</code>.</p>
+          <div class="doc-grid">
+            <div><div class="snippet-label">REST</div><pre>api_route(
+    <span class="str">'api/items'</span>, view,
+    methods=(<span class="str">'GET'</span>, <span class="str">'POST'</span>)
+)</pre></div>
+            <div><div class="snippet-label">GraphQL</div><pre>schema = Schema(query={
+    <span class="str">'greeting'</span>: resolver,
+})
+path(<span class="str">'graphql'</span>, graphql_view(schema),
+     methods=(<span class="str">'POST'</span>,))</pre></div>
+          </div>
+          <p>GraphQL today supports a single root query field per request &mdash; arguments, mutations, and nesting are on the roadmap, not yet implemented.</p>
+        </article>
+
+        <article class="doc-section" id="pulse">
+          <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
+          <h3>Mangoo Pulse</h3>
+          <p>An opt-in, in-process event bus for application lifecycle hooks. It never wires itself into the runtime &mdash; an application adds no handlers, latency, or failure modes unless it creates and uses a <code>PulseBus</code>.</p>
+          <div class="snippet-label">any view or startup module</div>
+          <pre><span class="kw">from</span> mangoo.addons.pulse <span class="kw">import</span> PulseBus
+
+bus = PulseBus()
+bus.connect(<span class="str">"auth.login_succeeded"</span>, on_login)
+bus.publish(<span class="str">"auth.login_succeeded"</span>, actor_id=user.id)</pre>
+          <p>There is no sync-versus-async choice to make: <code>publish</code>/<code>emit</code> always hand delivery to a small persistent worker pool and return immediately &mdash; a Rust-native thread pool (<code>mangoo_native.PulseDispatcher</code>) when the optional extension is built, or a behavior-compatible Python <code>ThreadPoolExecutor</code> otherwise. Pass the same bus as <code>pulse=</code> to <code>create_application</code>, <code>auth_routes</code>, <code>admin_routes</code>, or <code>migrations.apply</code> to receive request, auth, admin, and migration events.</p>
+        </article>
+
+        <article class="doc-section" id="rust">
+          <div class="doc-kicker"><span class="tag tag-progress">In progress</span></div>
+          <h3>Rust-native core</h3>
+          <p>Performance-sensitive types get a Rust implementation with a behavior-compatible Python fallback, so nothing requires a Rust toolchain to run.</p>
+          <div class="snippet-label">python</div>
+          <pre><span class="kw">from</span> mangoo <span class="kw">import</span> mango_list
+
+items = mango_list([<span class="str">"first"</span>, <span class="str">"second"</span>])
+items.append(<span class="str">"third"</span>)</pre>
+          <p><code>mango_list</code> works with no extra steps. Build the extension with <code>maturin develop --manifest-path crates/mangoo-python/Cargo.toml</code> &mdash; point it at that crate specifically, not the repository root, since both currently share the project name <code>mangoo</code> and a root build silently replaces the real Python package. Request routing, JSON serialization, authentication operations, and database execution are the next migration targets.</p>
+        </article>
+
+        <article class="doc-section" id="testing">
+          <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
+          <h3>Testing &amp; CI</h3>
+          <p>The bundled <code>TestClient</code> exercises a WSGI application without opening a network socket.</p>
+          <div class="snippet-label">powershell</div>
+          <pre>pip install -e ".[dev]"
+pytest</pre>
+          <p><code>pytest</code> runs with an 85% coverage gate by default. GitHub Actions runs the suite on Python 3.10&ndash;3.12 for every push and pull request, plus a job that builds <code>mangoo_native</code> and runs the tests it backs, and a job that runs the opt-in PostgreSQL integration test against a real <code>postgres:16</code> container.</p>
+        </article>
+
       </div>
-    </div></section>
+    </div>
+  </section>
 
-    <section id="start" class="cta wrap">
-      <div class="eyebrow">Build your next project</div>
-      <h2>Make the first feature feel small.</h2>
-      <p>Create a project, add an app, write a route, and keep moving. Mangoo is designed to make the next step obvious.</p>
-      <a class="button primary" href="BUILD_FROM_SCRATCH.md">Read the guide</a>
-    </section>
-  </main>
+</main>
 
-  <footer class="wrap"><span><strong>Mangoo</strong> · A clear path from idea to application.</span><span>Documentation · Examples · Community</span></footer>
+<footer>
+  <div class="wrap">
+    <span>Mangoo &middot; an early, runnable experiment &mdash; not yet a finished framework.</span>
+    <span><a href="https://github.com/P-Sudhakar-tech/mangoo" target="_blank" rel="noopener">Source</a> &middot; <a href="https://github.com/P-Sudhakar-tech/mangoo/blob/main/UPCOMING_IMPROVEMENT_ROADMAP.md" target="_blank" rel="noopener">Roadmap</a> &middot; <a href="https://github.com/P-Sudhakar-tech/mangoo/blob/main/DEPLOYMENT.md" target="_blank" rel="noopener">Deployment guide</a></span>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var links = Array.prototype.slice.call(document.querySelectorAll('.docs-rail a[data-rail]'));
+    var sections = links.map(function(a){ return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
+    if (!('IntersectionObserver' in window) || !sections.length) return;
+    var current = null;
+    var observer = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if (entry.isIntersecting){
+          if (current) current.classList.remove('active');
+          current = links[sections.indexOf(entry.target)];
+          if (current) current.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
+    sections.forEach(function(section){ observer.observe(section); });
+  })();
+</script>
+
 </body>
 </html>
