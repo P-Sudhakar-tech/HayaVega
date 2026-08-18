@@ -10,6 +10,9 @@ requires-python = ">=3.10"
 authors = [{name = "Mangoo contributors"}]
 dependencies = ["msgspec>=0.21,<0.22"]
 
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=5"]
+
 [project.scripts]
 mangoo-admin = "mangoo.cli:main"
 mango = "mangoo.cli:main"
@@ -17,3 +20,16 @@ mangoo = "mangoo.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mangoo"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=mangoo --cov-report=term-missing"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src/mangoo"]
+omit = ["src/mangoo/__main__.py"]
+
+[tool.coverage.report]
+skip_covered = false
+show_missing = true
+fail_under = 85

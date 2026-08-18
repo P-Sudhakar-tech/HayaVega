@@ -126,6 +126,15 @@ for release-review controls. PostgreSQL integration tests are opt-in: set
 `MANGOO_TEST_POSTGRES_NAME` plus optional host, port, user, and password
 variables before running the test suite. MySQL/MariaDB coverage remains planned.
 
+## Testing and CI
+
+Install the development extra and run the suite with `pip install -e ".[dev]"`
+then `pytest`. This enforces an 85% coverage gate by default (see
+`pyproject.toml`); pass `--no-cov` to skip it locally. GitHub Actions
+(`.github/workflows/ci.yml`) runs the suite on Python 3.10, 3.11, and 3.12 for
+every push and pull request, plus a separate job that runs the opt-in
+PostgreSQL integration test against a `postgres:16` service container.
+
 ## Mangoo Pulse
 
 The opt-in in-process event bus is available under `mangoo.addons.pulse`.

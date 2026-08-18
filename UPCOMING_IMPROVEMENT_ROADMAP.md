@@ -9,11 +9,11 @@ This roadmap converts the current prototype into a safer, more deployable framew
 | Priority | Workstream | Outcome |
 |---|---|---|
 | P0 | Data and migrations | **In progress:** transactional, checksummed migrations and initial entity migration generation delivered; schema diffs/dependencies remain |
-| P0 | Production validation | **In progress:** production settings validation and DB readiness/liveness delivered; database integration tests and deployment guide remain |
+| P0 | Production validation | **In progress:** production settings validation, DB readiness/liveness, deployment guide, and CI-run PostgreSQL integration test delivered; MySQL/MariaDB integration test remains |
 | P1 | Runtime and static assets | **In progress:** binary files, MIME types, cache-control, ETags, and conditional requests delivered; observability work remains |
 | P1 | Authentication lifecycle | Reset, verification, session management, and persistent audit events |
 | P1 | API documentation | Complete OpenAPI schemas and authentication documentation |
-| P2 | Developer experience | Richer templates, admin expansion, GraphQL work, and CI/release automation |
+| P2 | Developer experience | **In progress:** CI (GitHub Actions, coverage gate) delivered; richer templates, admin expansion, GraphQL work, and release automation remain |
 | P2 | Native runtime | Rust packaging, benchmarks, then measured migrations from Python |
 | P2 | Mangoo Pulse | **Delivered:** opt-in in-process event bus, optional async delivery, sensitive-key rejection, and framework lifecycle wiring (request, auth, admin, migrations) all shipped; only remaining gap is that no built-in app wires a bus in by default |
 
@@ -39,7 +39,7 @@ each milestone; external security-review or release feedback is excluded.
 - [x] Implement SQLite migration apply, status, and rollback-safe failure behavior.
 - [x] Add explicit transaction helpers with commit, rollback, and nested-operation rules.
 - [x] Add test database fixtures and migration test helpers.
-- Establish coverage reporting and a required test command for CI.
+- [x] Establish coverage reporting and a required test command for CI. `pytest` runs with an 85% coverage gate (`pyproject.toml`); GitHub Actions (`.github/workflows/ci.yml`) runs it on Python 3.10-3.12 for every push and pull request.
 
 ### Acceptance criteria
 
@@ -53,7 +53,7 @@ each milestone; external security-review or release feedback is excluded.
 
 ### Deliverables
 
-- [~] Add PostgreSQL integration tests and document the MySQL/MariaDB test plan. (Opt-in PostgreSQL harness added; MySQL/MariaDB plan remains.)
+- [~] Add PostgreSQL integration tests and document the MySQL/MariaDB test plan. (Opt-in PostgreSQL harness added and now runs in CI against a `postgres:16` service container; MySQL/MariaDB plan remains.)
 - [x] Add environment validation for production: secret key, debug state, allowed hosts, HTTPS, and secure cookies.
 - [x] Add health and readiness endpoints with database connectivity checks.
 - [x] Publish a reverse-proxy, HTTPS, backup, restore, and rollback deployment guide. See `DEPLOYMENT.md`.
@@ -108,7 +108,7 @@ each milestone; external security-review or release feedback is excluded.
 - Model-admin registration, pagination, validation, permissions, and change history.
 - GraphQL arguments, mutations, nesting, validation, limits, and introspection policy.
 - Maturin packaging for `mangoo_native`, benchmark automation, and measured Rust migrations.
-- CI matrix, linting, formatting, type checks, dependency scanning, release notes, and package publishing.
+- CI matrix across supported Python versions is delivered (`.github/workflows/ci.yml`); linting, formatting, type checks, dependency scanning, release notes, and package publishing remain.
 - Replace the temporary WSGI server with a production-ready async/Rust runtime behind the stable Python API.
 - Mangoo Pulse: delivered. The opt-in registry provides connect/disconnect, deterministic ordering, error isolation, optional asynchronous delivery, and sensitive-key rejection in `src/mangoo/addons/pulse/`; `create_application`, `auth_routes`, `admin_routes`, and `migrations.apply` all accept a `pulse=` argument to emit request, authentication, administration, and migration events. Remaining work is optional: a generated project could wire a default bus in automatically instead of requiring each application to pass one explicitly.
 

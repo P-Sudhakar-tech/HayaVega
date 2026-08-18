@@ -1,3 +1,9 @@
 # Python bytecode caches are generated locally and must not be versioned.
 __pycache__/
 *.py[cod]
+
+# Test/coverage artifacts are generated locally and must not be versioned.
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
