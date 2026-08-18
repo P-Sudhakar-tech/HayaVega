@@ -15,7 +15,7 @@ This roadmap converts the current prototype into a safer, more deployable framew
 | P1 | API documentation | Complete OpenAPI schemas and authentication documentation |
 | P2 | Developer experience | Richer templates, admin expansion, GraphQL work, and CI/release automation |
 | P2 | Native runtime | Rust packaging, benchmarks, then measured migrations from Python |
-| P2 | Mangoo Pulse | **Planned:** opt-in lifecycle events after delivery, transaction, and privacy guarantees are implemented |
+| P2 | Mangoo Pulse | **Delivered:** opt-in in-process event bus, optional async delivery, sensitive-key rejection, and framework lifecycle wiring (request, auth, admin, migrations) all shipped; only remaining gap is that no built-in app wires a bus in by default |
 
 ## Future-readiness estimate (planning baseline)
 
@@ -110,7 +110,7 @@ each milestone; external security-review or release feedback is excluded.
 - Maturin packaging for `mangoo_native`, benchmark automation, and measured Rust migrations.
 - CI matrix, linting, formatting, type checks, dependency scanning, release notes, and package publishing.
 - Replace the temporary WSGI server with a production-ready async/Rust runtime behind the stable Python API.
-- Mangoo Pulse: connect/disconnect registry, deterministic ordering, error isolation, optional async delivery, and lifecycle integration for request, authentication, administration, and migrations. The deferred contract lives in `src/mangoo/addons/pulse/`.
+- Mangoo Pulse: delivered. The opt-in registry provides connect/disconnect, deterministic ordering, error isolation, optional asynchronous delivery, and sensitive-key rejection in `src/mangoo/addons/pulse/`; `create_application`, `auth_routes`, `admin_routes`, and `migrations.apply` all accept a `pulse=` argument to emit request, authentication, administration, and migration events. Remaining work is optional: a generated project could wire a default bus in automatically instead of requiring each application to pass one explicitly.
 
 ## Definition of done
 

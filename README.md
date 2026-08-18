@@ -126,12 +126,16 @@ for release-review controls. PostgreSQL integration tests are opt-in: set
 `MANGOO_TEST_POSTGRES_NAME` plus optional host, port, user, and password
 variables before running the test suite. MySQL/MariaDB coverage remains planned.
 
-## Planned Mangoo Pulse
+## Mangoo Pulse
 
-The deferred opt-in event contract is available under
-`mangoo.addons.pulse`. It reserves built-in lifecycle event names without
-registering handlers or changing runtime behavior. See
-`src/mangoo/addons/pulse/README.md` for the activation gates and API plan.
+The opt-in in-process event bus is available under `mangoo.addons.pulse`.
+Applications explicitly create a `PulseBus`, subscribe to named events, and
+publish events. Delivery is deterministic and isolates subscriber failures.
+Pass the same `PulseBus` as `pulse=` to `create_application`, `auth_routes`,
+`admin_routes`, or `migrations.apply` to receive `request.*`, `auth.*`,
+`admin.action`, and `migration.applied` events from those components; nothing
+changes for applications that do not pass one. See
+`src/mangoo/addons/pulse/README.md` for its full API and delivery semantics.
 
 ## REST and GraphQL
 

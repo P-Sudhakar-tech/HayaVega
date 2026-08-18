@@ -1,9 +1,6 @@
-"""Mangoo Pulse: deferred opt-in application event hooks.
-
-This package intentionally defines contracts only. Lifecycle emission will be
-enabled in a later release after delivery ordering and error policy are tested.
-"""
+"""Mangoo Pulse: opt-in, in-process application event hooks."""
 
 from .contracts import BUILTIN_EVENTS, PulseEvent, PulseSubscriber
+from .registry import PulseBus, PulseDeliveryFailure
 
-__all__ = ["BUILTIN_EVENTS", "PulseEvent", "PulseSubscriber"]
+__all__ = ["BUILTIN_EVENTS", "PulseBus", "PulseDeliveryFailure", "PulseEvent", "PulseSubscriber"]

@@ -8,17 +8,23 @@ from .hardening import Hardening, HardeningOptions
 import logging
 from time import perf_counter
 import re
+from typing import TYPE_CHECKING
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from .addons.pulse import PulseBus
 
 LOGGER = logging.getLogger("mangoo.runtime")
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
-def create_application(urlpatterns, *, hardening: HardeningOptions | None = None, debug: bool = False):
+def create_application(urlpatterns, *, hardening: HardeningOptions | None = None, debug: bool = False, pulse: "PulseBus | None" = None):
     """Build the WSGI application for a route list.
 
     This is separated from ``serve`` so application behavior can be tested
-    without opening a network socket.
+    without opening a network socket. ``pulse``, when given a ``PulseBus``,
+    publishes ``request.started``/``request.finished`` asynchronously so a
+    slow subscriber cannot add latency to the response.
     """
     route_list = [*urlpatterns]
     route_list.extend(documentation_routes(route_list))
@@ -40,6 +46,8 @@ def create_application(urlpatterns, *, hardening: HardeningOptions | None = None
         request = Request.from_wsgi(environ, read_body=size_rejection is None)
         incoming_id = request.headers.get("X-Request-Id", "")
         request_id = incoming_id if _REQUEST_ID.fullmatch(incoming_id) else uuid4().hex
+        if pulse is not None:
+            pulse.publish_async("request.started", data={"method": request.method, "path": request.path})
         rejection = size_rejection or (hardening_layer.reject(request) if hardening_layer else None)
         preflight = hardening_layer.preflight(request) if hardening_layer else None
         if rejection is not None:
@@ -58,6 +66,8 @@ def create_application(urlpatterns, *, hardening: HardeningOptions | None = None
                 LOGGER.exception("Unhandled request error path=%s", request.path)
                 response = Response("<h1>500 Internal Server Error</h1>" if not debug else "<h1>500 Internal Server Error</h1><pre>See server log for traceback.</pre>", status=500)
         duration_ms = (perf_counter() - started_at) * 1000
+        if pulse is not None:
+            pulse.publish_async("request.finished", data={"method": request.method, "path": request.path, "status": response.status, "duration_ms": round(duration_ms, 2)})
         if hardening_layer:
             response = hardening_layer.finalize(request, response, request_id=request_id, duration_ms=duration_ms)
         elif not any(name.lower() == "x-request-id" for name, _ in response.headers):

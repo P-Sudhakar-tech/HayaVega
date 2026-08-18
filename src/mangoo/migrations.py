@@ -12,10 +12,13 @@ import importlib.util
 import inspect
 from pathlib import Path
 import re
-from typing import Iterable
+from typing import Iterable, TYPE_CHECKING
 
 from .db import connect
 from .models import Entity
+
+if TYPE_CHECKING:
+    from .addons.pulse import PulseBus
 
 
 class MigrationError(RuntimeError):
@@ -215,8 +218,12 @@ def status(database, directories: Iterable[str | Path]) -> list[MigrationStatus]
         connection.close()
 
 
-def apply(database, directories: Iterable[str | Path]) -> list[str]:
-    """Apply unapplied migrations.  Each migration is one all-or-nothing unit."""
+def apply(database, directories: Iterable[str | Path], *, pulse: "PulseBus | None" = None) -> list[str]:
+    """Apply unapplied migrations.  Each migration is one all-or-nothing unit.
+
+    ``pulse``, when given a ``PulseBus``, publishes ``migration.applied`` for
+    each migration after its transaction has committed.
+    """
     migrations = discover(directories)
     connection = connect(database)
     try:
@@ -239,6 +246,8 @@ def apply(database, directories: Iterable[str | Path]) -> list[str]:
                     connection.execute("INSERT INTO mangoo_migrations (name, checksum) VALUES (?, ?)", (migration.name, migration.checksum))
             except Exception as error:
                 raise MigrationError(f"Migration {migration.name} failed: {error}") from error
+            if pulse is not None:
+                pulse.publish("migration.applied", data={"name": migration.name})
             completed.append(migration.name)
         return completed
     finally:
