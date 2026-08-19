@@ -165,9 +165,38 @@ Mangoo includes a small dependency-free API layer. The bundled example exposes:
 
 Use `api_route('api/items', view, methods=('GET', 'POST'))` for REST endpoints. Define GraphQL fields with `Schema(query={'field': resolver})` and mount them with `path('graphql', graphql_view(schema), methods=('POST',))`.
 
+Every JSON error response uses the same envelope: `{"detail": "<message>"}`.
+Return it with `json_response({"detail": "..."}, status)` so clients only ever
+parse one error shape; `mangoo.swagger.ERROR_SCHEMA` is that shape as a JSON
+Schema, reused automatically for the errors Mangoo documents for you (see
+below) and importable for your own routes' `responses`.
+
+There's no framework-enforced versioning scheme; the common convention is a
+version segment in the path, such as `api_route('api/v1/items', view)`. Give
+each version's application its own `api_version` (see below) so `/openapi.json`
+reports the version actually being served.
+
 ## Built-in Swagger documentation
 
-Every Mangoo application automatically exposes an OpenAPI 3 document at `/openapi.json` and an interactive Swagger UI at `/docs`. REST endpoints declared with `api_route` are added to the document automatically. The documentation routes are reserved only when an application has not defined routes with those paths itself.
+Every Mangoo application automatically exposes an OpenAPI 3 document at `/openapi.json` and an interactive Swagger UI at `/docs`. REST endpoints declared with `api_route` are added to the document automatically, along with a `bearerAuth` security scheme and a shared `Error` schema (`{"detail": string}`) that any endpoint's error responses can reference. The documentation routes are reserved only when an application has not defined routes with those paths itself.
+
+Describe an endpoint precisely instead of relying on the generic fallback:
+
+```python
+from mangoo import ERROR_SCHEMA, api_route
+
+api_route(
+    'api/items', view, methods=('POST',),
+    secured=True,                                    # requires a Bearer token; adds `security` + a 401 response
+    request_schema={'type': 'object', 'properties': {'name': {'type': 'string'}}, 'required': ['name']},
+    responses={
+        201: {'description': 'Created.', 'schema': {'type': 'object', 'properties': {'id': {'type': 'integer'}}}},
+        400: {'description': 'Invalid input.', 'schema': ERROR_SCHEMA},
+    },
+)
+```
+
+`create_application(urlpatterns, api_title='Bookstore API', api_version='2.1.0')` names and versions the generated document. All of the built-in `auth_routes` endpoints (login, password reset, email verification, sessions) already describe themselves this way.
 
 ## Development autoreload
 

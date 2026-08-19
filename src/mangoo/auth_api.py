@@ -23,12 +23,32 @@ from .auth import (
 from .response import json_response
 from .rest import api_route
 from .security import SESSION_COOKIE_NAME, cookie, csrf_protect, csrf_token_response, request_session_token, request_user
+from .swagger import ERROR_SCHEMA
 
 if TYPE_CHECKING:
     from .addons.pulse import PulseBus
 
 
 MAIL_LOGGER = logging.getLogger("mangoo.auth.mail")
+
+_USER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "id": {"type": "integer"},
+        "username": {"type": "string"},
+        "email": {"type": "string"},
+        "is_superuser": {"type": "boolean"},
+        "email_verified": {"type": "boolean"},
+    },
+}
+_SESSION_TOKEN_SCHEMA = {
+    "type": "object",
+    "properties": {"token": {"type": "string"}, "token_type": {"type": "string", "enum": ["Bearer"]}, "expires_in": {"type": "integer"}},
+}
+_SESSION_SUMMARY_SCHEMA = {
+    "type": "object",
+    "properties": {"id": {"type": "integer"}, "created_at": {"type": "string"}, "expires_at": {"type": "integer"}},
+}
 
 
 def log_mail_notifier(kind: str, user: User, token: str) -> None:
@@ -154,14 +174,48 @@ def auth_routes(
         return json_response({"revoked": revoked})
 
     return [
-        api_route("api/auth/login", login, methods=("POST",)),
-        api_route("api/auth/csrf", lambda request: csrf_token_response(request, secure=secure_cookies), methods=("GET",)),
-        api_route("api/auth/me", current_user, methods=("GET",)),
-        api_route("api/auth/logout", logout, methods=("POST",)),
-        api_route("api/auth/password-reset/request", request_password_reset, methods=("POST",)),
-        api_route("api/auth/password-reset/confirm", confirm_password_reset, methods=("POST",)),
-        api_route("api/auth/email/verify/request", request_email_verification, methods=("POST",)),
-        api_route("api/auth/email/verify/confirm", confirm_email_verification, methods=("POST",)),
-        api_route("api/auth/sessions", sessions_view, methods=("GET",)),
-        api_route("api/auth/sessions/revoke-others", revoke_other_sessions, methods=("POST",)),
+        api_route(
+            "api/auth/login", login, methods=("POST",),
+            request_schema={"type": "object", "properties": {"username": {"type": "string"}, "password": {"type": "string"}, "totp_code": {"type": "string"}}, "required": ["username", "password"]},
+            responses={200: {"description": "Session created.", "schema": _SESSION_TOKEN_SCHEMA}, 401: {"description": "Invalid credentials.", "schema": ERROR_SCHEMA}},
+        ),
+        api_route(
+            "api/auth/csrf", lambda request: csrf_token_response(request, secure=secure_cookies), methods=("GET",),
+            responses={200: {"description": "A CSRF token for the current session.", "schema": {"type": "object", "properties": {"csrf_token": {"type": "string"}}}}},
+        ),
+        api_route(
+            "api/auth/me", current_user, methods=("GET",), secured=True,
+            responses={200: {"description": "The authenticated user.", "schema": _USER_SCHEMA}},
+        ),
+        api_route(
+            "api/auth/logout", logout, methods=("POST",), secured=True,
+            responses={204: {"description": "Session revoked."}},
+        ),
+        api_route(
+            "api/auth/password-reset/request", request_password_reset, methods=("POST",),
+            request_schema={"type": "object", "properties": {"username": {"type": "string"}}, "required": ["username"]},
+            responses={202: {"description": "Accepted regardless of whether the username exists, to avoid revealing valid accounts."}},
+        ),
+        api_route(
+            "api/auth/password-reset/confirm", confirm_password_reset, methods=("POST",),
+            request_schema={"type": "object", "properties": {"token": {"type": "string"}, "password": {"type": "string"}}, "required": ["token", "password"]},
+            responses={204: {"description": "Password changed; every existing session was revoked."}, 400: {"description": "The token was invalid or expired, or the password did not meet policy.", "schema": ERROR_SCHEMA}},
+        ),
+        api_route(
+            "api/auth/email/verify/request", request_email_verification, methods=("POST",), secured=True,
+            responses={202: {"description": "A verification token was issued and passed to the configured notifier."}},
+        ),
+        api_route(
+            "api/auth/email/verify/confirm", confirm_email_verification, methods=("POST",),
+            request_schema={"type": "object", "properties": {"token": {"type": "string"}}, "required": ["token"]},
+            responses={204: {"description": "Email verified."}, 400: {"description": "The token was invalid or expired.", "schema": ERROR_SCHEMA}},
+        ),
+        api_route(
+            "api/auth/sessions", sessions_view, methods=("GET",), secured=True,
+            responses={200: {"description": "The current user's active sessions.", "schema": {"type": "array", "items": _SESSION_SUMMARY_SCHEMA}}},
+        ),
+        api_route(
+            "api/auth/sessions/revoke-others", revoke_other_sessions, methods=("POST",), secured=True,
+            responses={200: {"description": "Every other session for this user was revoked.", "schema": {"type": "object", "properties": {"revoked": {"type": "integer"}}}}},
+        ),
     ]

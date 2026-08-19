@@ -18,16 +18,26 @@ LOGGER = logging.getLogger("mangoo.runtime")
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
-def create_application(urlpatterns, *, hardening: HardeningOptions | None = None, debug: bool = False, pulse: "PulseBus | None" = None):
+def create_application(
+    urlpatterns,
+    *,
+    hardening: HardeningOptions | None = None,
+    debug: bool = False,
+    pulse: "PulseBus | None" = None,
+    api_title: str = "Mangoo API",
+    api_version: str = "0.1.0",
+):
     """Build the WSGI application for a route list.
 
     This is separated from ``serve`` so application behavior can be tested
     without opening a network socket. ``pulse``, when given a ``PulseBus``,
     publishes ``request.started``/``request.finished`` asynchronously so a
-    slow subscriber cannot add latency to the response.
+    slow subscriber cannot add latency to the response. ``api_title`` and
+    ``api_version`` name the generated OpenAPI document at ``/openapi.json``;
+    set ``api_version`` to version your API independently of the package.
     """
     route_list = [*urlpatterns]
-    route_list.extend(documentation_routes(route_list))
+    route_list.extend(documentation_routes(route_list, title=api_title, version=api_version))
     routes = {route.pattern: route for route in route_list}
     wildcard_routes = [route for route in route_list if route.pattern.endswith("/<path>")]
     hardening_layer = Hardening(hardening) if hardening else None
