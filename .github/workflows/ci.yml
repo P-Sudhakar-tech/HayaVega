@@ -70,3 +70,35 @@ jobs:
           MANGOO_TEST_POSTGRES_USER: mangoo
           MANGOO_TEST_POSTGRES_PASSWORD: mangoo
         run: pytest tests/test_postgresql_integration.py --no-cov -v
+
+  mysql-integration:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: mangoo_test
+          MYSQL_USER: mangoo
+          MYSQL_PASSWORD: mangoo
+          MYSQL_ROOT_PASSWORD: mangoo
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u root -pmangoo"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Mangoo with test and MySQL dependencies
+        run: pip install -e ".[dev]" pymysql
+      - name: Run the opt-in MySQL/MariaDB integration test
+        env:
+          MANGOO_TEST_MYSQL_NAME: mangoo_test
+          MANGOO_TEST_MYSQL_HOST: localhost
+          MANGOO_TEST_MYSQL_PORT: "3306"
+          MANGOO_TEST_MYSQL_USER: mangoo
+          MANGOO_TEST_MYSQL_PASSWORD: mangoo
+        run: pytest tests/test_mysql_integration.py --no-cov -v

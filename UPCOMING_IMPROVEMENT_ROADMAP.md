@@ -9,7 +9,7 @@ This roadmap converts the current prototype into a safer, more deployable framew
 | Priority | Workstream | Outcome |
 |---|---|---|
 | P0 | Data and migrations | **Delivered:** transactional, checksummed migrations, initial entity migration generation, and schema-diff detection (type/nullability/uniqueness alterations on existing columns are rejected with an explicit-migration error instead of silently ignored) all shipped |
-| P0 | Production validation | **In progress:** production settings validation, DB readiness/liveness, deployment guide, and CI-run PostgreSQL integration test delivered; MySQL/MariaDB integration test remains |
+| P0 | Production validation | **Delivered:** production settings validation, DB readiness/liveness, deployment guide, and CI-run PostgreSQL and MySQL/MariaDB integration tests all shipped |
 | P1 | Runtime and static assets | **In progress:** binary files, MIME types, cache-control, ETags, and conditional requests delivered; observability work remains |
 | P1 | Authentication lifecycle | Reset, verification, session management, and persistent audit events |
 | P1 | API documentation | Complete OpenAPI schemas and authentication documentation |
@@ -27,7 +27,7 @@ are done first); a team working several in parallel would finish sooner.
 
 | Order | Workstream | Estimated effort | Target completion |
 |---|---|---:|---|
-| 1 | MySQL/MariaDB integration test (closes out Production validation) | 1–2 working days | Aug 19–20, 2026 |
+| 1 | ~~MySQL/MariaDB integration test (closes out Production validation)~~ | Delivered Aug 19, 2026 | -- |
 | 2 | Authentication lifecycle: password reset, email verification, session rotation/revoke-all | 8–12 working days | Aug 21–Sep 3, 2026 |
 | 3 | API documentation: full OpenAPI schemas, error envelope, Bearer auth, versioning | 5–7 working days | Sep 4–14, 2026 |
 | 4 | Runtime observability remainder: request metrics beyond logging/audit | 2–3 working days | Sep 15–17, 2026 |
@@ -65,7 +65,7 @@ work continues at that pace.
 
 ### Deliverables
 
-- [~] Add PostgreSQL integration tests and document the MySQL/MariaDB test plan. (Opt-in PostgreSQL harness added and now runs in CI against a `postgres:16` service container; MySQL/MariaDB plan remains.)
+- [x] Add PostgreSQL and MySQL/MariaDB integration tests. Both are opt-in and run in CI against `postgres:16` and `mysql:8` service containers. Adding real MySQL coverage also surfaced and fixed a latent bug: `Connection.atomic()` called `.execute()` directly on the raw driver connection, which pymysql's `Connection` does not implement (only sqlite3's and psycopg3's do) -- every transactional migration would have failed against MySQL/MariaDB. Fixed by routing through the class's own `execute()` wrapper, which works across all three drivers.
 - [x] Add environment validation for production: secret key, debug state, allowed hosts, HTTPS, and secure cookies.
 - [x] Add health and readiness endpoints with database connectivity checks.
 - [x] Publish a reverse-proxy, HTTPS, backup, restore, and rollback deployment guide. See `DEPLOYMENT.md`.
@@ -120,13 +120,13 @@ work continues at that pace.
 
 - Resolve the `mangoo` (root `pyproject.toml`) vs. `mangoo-python` (`crates/mangoo-python/Cargo.toml`) project-name collision so `mangoo_native` can be built as part of a normal packaged install instead of a manual, documented dev-only step (`maturin develop --manifest-path crates/mangoo-python/Cargo.toml`).
 - Add request-level metrics (counts, latency distribution, error rate) as an opt-in hook alongside the existing structured logs and audit events, following the same "no behavior change unless an application opts in" pattern Mangoo Pulse uses.
-- Add a MySQL/MariaDB opt-in integration test mirroring the existing PostgreSQL one, plus a CI job with a `mysql:8` service container.
+- [x] Add a MySQL/MariaDB opt-in integration test mirroring the existing PostgreSQL one, plus a CI job with a `mysql:8` service container. Delivered Aug 19, 2026 -- see `tests/test_mysql_integration.py`.
 
 ### Acceptance criteria
 
 - A packaged install (not just a source checkout) can build or ship `mangoo_native` without breaking the `mangoo` package it accompanies.
 - Metrics are opt-in, add no overhead when unused, and are documented with a supported scrape or export path.
-- CI runs SQLite, opt-in PostgreSQL, and opt-in MySQL/MariaDB integration tests.
+- [x] CI runs SQLite, opt-in PostgreSQL, and opt-in MySQL/MariaDB integration tests.
 
 ## Later improvements
 

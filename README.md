@@ -125,9 +125,10 @@ passwords, session tokens, and request headers are never stored.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for reverse-proxy, HTTPS, backup, restore,
 and rollback procedures, and [SECURITY_REVIEW_CHECKLIST.md](SECURITY_REVIEW_CHECKLIST.md)
-for release-review controls. PostgreSQL integration tests are opt-in: set
-`MANGOO_TEST_POSTGRES_NAME` plus optional host, port, user, and password
-variables before running the test suite. MySQL/MariaDB coverage remains planned.
+for release-review controls. PostgreSQL and MySQL/MariaDB integration tests
+are opt-in: set `MANGOO_TEST_POSTGRES_NAME` or `MANGOO_TEST_MYSQL_NAME` plus
+optional host, port, user, and password variables before running the test
+suite.
 
 ## Testing and CI
 

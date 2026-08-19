@@ -46,9 +46,9 @@ class Connection:
         depth = self._transaction_depth
         savepoint = f"mangoo_savepoint_{depth}"
         if depth == 0:
-            self.raw.execute("BEGIN")
+            self.execute("BEGIN")
         else:
-            self.raw.execute(f"SAVEPOINT {savepoint}")
+            self.execute(f"SAVEPOINT {savepoint}")
         self._transaction_depth += 1
         try:
             yield self
@@ -56,14 +56,14 @@ class Connection:
             if depth == 0:
                 self.raw.rollback()
             else:
-                self.raw.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-                self.raw.execute(f"RELEASE SAVEPOINT {savepoint}")
+                self.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                self.execute(f"RELEASE SAVEPOINT {savepoint}")
             raise
         else:
             if depth == 0:
                 self.raw.commit()
             else:
-                self.raw.execute(f"RELEASE SAVEPOINT {savepoint}")
+                self.execute(f"RELEASE SAVEPOINT {savepoint}")
         finally:
             self._transaction_depth -= 1
 
