@@ -11,7 +11,7 @@ This roadmap converts the current prototype into a safer, more deployable framew
 | P0 | Data and migrations | **Delivered:** transactional, checksummed migrations, initial entity migration generation, and schema-diff detection (type/nullability/uniqueness alterations on existing columns are rejected with an explicit-migration error instead of silently ignored) all shipped |
 | P0 | Production validation | **Delivered:** production settings validation, DB readiness/liveness, deployment guide, and CI-run PostgreSQL and MySQL/MariaDB integration tests all shipped |
 | P1 | Runtime and static assets | **In progress:** binary files, MIME types, cache-control, ETags, and conditional requests delivered; observability work remains |
-| P1 | Authentication lifecycle | Reset, verification, session management, and persistent audit events |
+| P1 | Authentication lifecycle | **Delivered:** password reset, email verification, session listing/rotation/revoke-all, and audit events for every step all shipped; extending the OpenAPI document to describe these new endpoints is tracked under API documentation |
 | P1 | API documentation | Complete OpenAPI schemas and authentication documentation |
 | P2 | Developer experience | **In progress:** CI (GitHub Actions, coverage gate) delivered; richer templates, admin expansion, GraphQL work, and release automation remain |
 | P2 | Native runtime | **In progress:** pre-existing pyo3 API mismatches that blocked every native build fixed; `mangoo_native` now builds and loads via `maturin develop` in this environment; Pulse's dispatcher is the first concurrency primitive on it. Request routing, JSON serialization, authentication operations, and database execution remain Python-only |
@@ -28,11 +28,11 @@ are done first); a team working several in parallel would finish sooner.
 | Order | Workstream | Estimated effort | Target completion |
 |---|---|---:|---|
 | 1 | ~~MySQL/MariaDB integration test (closes out Production validation)~~ | Delivered Aug 19, 2026 | -- |
-| 2 | Authentication lifecycle: password reset, email verification, session rotation/revoke-all | 8–12 working days | Aug 21–Sep 3, 2026 |
-| 3 | API documentation: full OpenAPI schemas, error envelope, Bearer auth, versioning | 5–7 working days | Sep 4–14, 2026 |
-| 4 | Runtime observability remainder: request metrics beyond logging/audit | 2–3 working days | Sep 15–17, 2026 |
-| 5 | Native runtime packaging: resolve the `mangoo`/`mangoo-python` project-name collision so `mangoo_native` ships as part of normal installs, not a manual dev step | 2–4 working days | Sep 18–23, 2026 |
-| 6 | Developer experience: template inheritance/loops/conditionals, admin pagination/permissions/history, GraphQL arguments/mutations, CI linting/type-checks/dependency scanning/release automation | 10–15 working days | Sep 24–Oct 12, 2026 |
+| 2 | ~~Authentication lifecycle: password reset, email verification, session rotation/revoke-all~~ | Delivered Aug 19, 2026 | -- |
+| 3 | API documentation: full OpenAPI schemas, error envelope, Bearer auth, versioning (now also covering the new auth-lifecycle endpoints) | 5–7 working days | Aug 20–28, 2026 |
+| 4 | Runtime observability remainder: request metrics beyond logging/audit | 2–3 working days | Aug 29–Sep 2, 2026 |
+| 5 | Native runtime packaging: resolve the `mangoo`/`mangoo-python` project-name collision so `mangoo_native` ships as part of normal installs, not a manual dev step | 2–4 working days | Sep 3–8, 2026 |
+| 6 | Developer experience: template inheritance/loops/conditionals, admin pagination/permissions/history, GraphQL arguments/mutations, CI linting/type-checks/dependency scanning/release automation | 10–15 working days | Sep 9–26, 2026 |
 | -- | Further Rust migrations (routing, JSON, auth, DB execution) | Not yet scoped | Benchmark each candidate first; schedule only once a measured win justifies it |
 | -- | Replace the WSGI dev server with an async/Rust runtime | Not yet scoped | Multi-week foundational rewrite; needs its own dedicated planning and explicit sign-off before starting, not a date on this table |
 
@@ -100,19 +100,19 @@ work continues at that pace.
 
 ### Deliverables
 
-- Add password-reset tokens with expiry, single use, secure storage, and pluggable mail delivery.
-- Add email-verification tokens and verified-account policy hooks.
-- Add session rotation, active-session listing, and revoke-all-sessions support.
-- Extend OpenAPI output with request/response schemas, error responses, and Bearer authentication.
-- Add API versioning and error-envelope conventions.
+- [x] Add password-reset tokens with expiry, single use, secure storage, and pluggable mail delivery. Delivered Aug 19, 2026: `create_password_reset_token`/`reset_password` in `auth.py`, `POST /api/auth/password-reset/{request,confirm}` in `auth_api.py`. Tokens expire after 1 hour, are single-use, are stored only as a sha256 hash, and completing a reset revokes every existing session. Mail delivery is pluggable via a `notify(kind, user, token)` callable passed to `auth_routes`; the default only logs the token so the flow works without a mail provider configured.
+- [x] Add email-verification tokens and verified-account policy hooks. Delivered Aug 19, 2026: `create_email_verification_token`/`verify_email` (24-hour, single-use tokens), `User.email_verified`, and the `email_verified_required(database_path)` permission helper for gating a view on verification.
+- [x] Add session rotation, active-session listing, and revoke-all-sessions support. Delivered Aug 19, 2026: `list_sessions` (id/timestamps only, never a token), `revoke_all_sessions(..., except_token=...)`, and `rotate_session`; `GET /api/auth/sessions` and `POST /api/auth/sessions/revoke-others` expose the latter two over the API.
+- Extend OpenAPI output with request/response schemas, error responses, and Bearer authentication. (Tracked as roadmap item 3, API documentation -- now also covers the new auth-lifecycle endpoints above.)
+- Add API versioning and error-envelope conventions. (Tracked as roadmap item 3.)
 
 ### Acceptance criteria
 
-- Reset and verification tokens cannot be reused or used after expiry.
-- Session creation rotates identifiers at authentication boundaries.
-- Authentication lifecycle events produce audit records.
-- Swagger documents authentication and all built-in error responses.
-- All new flows have unit, integration, and negative-path tests.
+- [x] Reset and verification tokens cannot be reused or used after expiry. See `tests/test_auth_lifecycle.py`.
+- [x] Session creation rotates identifiers at authentication boundaries -- `create_session` already issued a fresh token per login; `rotate_session` now also lets an existing session get a fresh identifier without a full re-login.
+- [x] Authentication lifecycle events produce audit records. `auth.password_reset_requested`/`completed`, `auth.email_verification_requested`, `auth.email_verified`, `auth.session_rotated`, and `auth.sessions_revoked_all`.
+- Swagger documents authentication and all built-in error responses. (Tracked as roadmap item 3.)
+- [x] All new flows have unit, integration, and negative-path tests. See `tests/test_auth_lifecycle.py` and `tests/test_auth_lifecycle_api.py` (23 tests: expiry, single-use, invalid tokens, weak-password rejection, session listing/revocation, and the `email_verified_required` permission hook).
 
 ## Week 5: native packaging and observability
 

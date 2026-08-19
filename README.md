@@ -247,6 +247,29 @@ The command prints a secret to add to a TOTP-compatible authenticator app. Keep 
 
 The generated project also exposes JSON authentication endpoints: `POST /api/auth/login`, `GET /api/auth/me`, and `POST /api/auth/logout`. Login accepts `username`, `password`, and optional `totp_code`; it returns a Bearer session token. Use HTTPS before exposing these endpoints outside local development.
 
+## Authentication lifecycle
+
+`auth_routes` also exposes password reset, email verification, and session
+management. Reset and verification tokens are single-use, expire (1 hour and
+24 hours respectively), and are never stored or logged in plain text:
+
+- `POST /api/auth/password-reset/request` and `POST /api/auth/password-reset/confirm` -
+  requesting a reset always returns `202`, whether or not the username exists,
+  to avoid revealing valid accounts. Confirming one revokes every existing
+  session for that user.
+- `POST /api/auth/email/verify/request` (authenticated) and
+  `POST /api/auth/email/verify/confirm` - `GET /api/auth/me` reports
+  `email_verified`; gate a view on it with `email_verified_required(database_path)`.
+- `GET /api/auth/sessions` lists the current user's active sessions (id,
+  timestamps only, never tokens); `POST /api/auth/sessions/revoke-others`
+  revokes every session except the caller's.
+
+By default, reset and verification tokens are logged rather than emailed, so
+the flow works without a mail provider configured. Pass your own
+`notify(kind, user, token)` callable as `auth_routes(..., notify=...)` to send
+real email. Every step -- request, completion, rotation, and bulk revocation
+-- is recorded through the audit log without ever storing the token itself.
+
 The Rust extension is optional for this first scaffold. To build it, install Rust and run `maturin develop --manifest-path crates/mangoo-python/Cargo.toml` -- point it at that crate specifically, not the repository root, since both currently share the project name `mangoo` and a root build installs a wheel that silently replaces the real Python package (see [Mangoo Pulse](#mangoo-pulse) for the recovery step if that happens).
 
 See [ROADMAP.md](ROADMAP.md) for the planned delivery path and boundaries.

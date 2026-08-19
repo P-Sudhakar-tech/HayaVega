@@ -82,3 +82,7 @@ def login_required(database_path):
 
 def superuser_required(database_path):
     return permission_required(database_path, lambda user: user.is_superuser, message="Administrator permission required.")
+
+
+def email_verified_required(database_path):
+    return permission_required(database_path, lambda user: user.email_verified, message="Email verification required.")

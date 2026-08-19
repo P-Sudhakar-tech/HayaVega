@@ -40,6 +40,9 @@ mindmap
         current user
         logout
         CSRF endpoint
+        password reset request and confirm
+        email verification request and confirm
+        session listing and revoke-others
     Data layer
       Entities
         declarative columns
