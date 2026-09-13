@@ -647,6 +647,82 @@ would.
   `mangoo.db.connect()`, not only this benchmark's views -- still real,
   still deliberately not attempted without its own dedicated scoping.
 
+### Connection pooling, attempted: a real win for ASGI, a real regression for WSGI
+
+The item above got its scoping and sign-off. Delivered as designed, and
+the result is not the clean win the roadmap item implied it might be --
+disclosed here exactly as measured, both the win and the loss.
+
+- [x] **`mangoo.db.enable_connection_pooling()`** (new, off by default):
+      reuses one connection per (thread, database config) instead of
+      opening a new one on every `connect()` call. Deliberately scoped to
+      match this framework's existing concurrency model -- one connection
+      per worker thread, not a general bounded pool with checkout/checkin
+      queuing across threads -- so it needed no change to any existing
+      caller of `connect()` (`models.py`, `auth.py`, `admin.py`,
+      `migrations.py`, `production.py`'s readiness check all benefit
+      automatically): only what `connect()` and `Connection.close()` do
+      internally changed, not their contracts. A pooled connection's
+      `close()` calls `rollback()` instead of actually closing -- not a
+      no-op -- so a connection that outlives a single call never carries
+      an exception's half-finished transaction into whichever request
+      reuses it next, regardless of whether the prior caller committed,
+      only read, or failed mid-write. `pool_connections=True` on
+      `create_application`/`create_asgi_application` is a convenience that
+      calls the same function (documented as process-global, not scoped to
+      one application instance, since that's what it actually is). 9 new
+      tests in `tests/test_db.py`, including one that specifically proves
+      the rollback-on-close correctness property (an uncommitted write
+      through a pooled connection is verified gone after `close()`, not
+      silently persisted) and one proving pooling is thread-local (a
+      second thread gets its own separate connection, never the first
+      thread's). All 389 tests, `ruff`, and `mypy` stay clean.
+- [x] **Verified the mechanism actually engages under a real server, not
+      just `TestClient`:** instrumented `connect()` under a real `waitress`
+      instance (4 threads, 10 requests) -- confirmed exactly 4 distinct
+      connections, one per thread, each thread consistently reusing its
+      own connection across every request it handled.
+- **Measured effect on `mangoo.asgi` + uvicorn: a real, substantial win.**
+  `db_list`: 727-864 -> 905-937 req/s. `template_render`: 760-808 ->
+  840-855 req/s -- widening Mangoo (ASGI)'s lead over FastAPI on both
+  scenarios it was already ahead on.
+- **Measured effect on the WSGI path (`waitress`): a real, consistent
+  ~10-15% *regression*, not a null result.** `db_list` dropped from the
+  637-727 req/s range to 589-710 req/s across repeated alternating on/off
+  runs at the same settings. This surprised the implementation, so it was
+  chased down rather than shipped anyway:
+  - First ruled out the correctness fix as the cause: a variant with a
+    truly-inert no-op `close()` (no `rollback()` call at all) showed the
+    same regression, isolating it to holding a connection open at all, not
+    to anything this pool's own bookkeeping does.
+  - Reproduced with zero framework code: a standalone script with 16
+    Python threads hitting the same SQLite file directly (no Mangoo, no
+    WSGI, no HTTP) showed the identical pattern -- 16 threads each holding
+    one persistent connection open throughout was measurably slower than
+    16 threads each opening a fresh connection per call and closing it
+    immediately. **This is a property of many threads holding a
+    persistent SQLite connection open simultaneously under contention on
+    this environment, not a bug in the pool's bookkeeping** -- consistent
+    with, and a further data point for, this document's standing
+    "environment ceiling" finding: SQLite's own concurrent-access behavior,
+    not application code, is what's actually being measured at this layer.
+  - **Decision: wired into `benchmarks/mangoo_asgi_app/app.py` only.**
+    `benchmarks/mangoo_app/app.py` (WSGI) leaves `pool_connections`
+    unset, with an inline comment stating why, rather than silently
+    omitting a feature that measurably regresses the exact scenario the
+    roadmap item set out to improve.
+  - `enable_connection_pooling()`'s own docstring now states this
+    asymmetry plainly and tells a caller to benchmark their own
+    deployment rather than assume the ASGI result transfers -- the same
+    standard this document holds every other performance claim to.
+- **`template_render` on WSGI is unchanged by this work** (still ~11%
+  behind FastAPI) -- the one thing this item was chartered to close. Not
+  a wasted effort: it produced a real, shippable win for ASGI, ruled out
+  a specific, plausible-sounding fix for WSGI with actual evidence rather
+  than leaving it an open guess, and surfaced a genuinely new, useful data
+  point (many-threads-holding-SQLite-connections-open is itself a cost,
+  not just neutral) for whoever picks up the WSGI gap next.
+
 ### Line-by-line memory profiling: tooling now in place for the above
 
 Before starting the two items above, the project needed a working way to
@@ -815,14 +891,20 @@ and benchmarked against FastAPI on the same server before being called done
 bar (routing 404s, settings validation, migration errors), and the
 error-disclosure security fix found along the way~~ -- delivered, see
 Pillar C above.
+~~Connection pooling (`mangoo.db.enable_connection_pooling()`) for the last
+`template_render` gap on WSGI~~ -- attempted, delivered as a real, tested,
+opt-in capability; result was a genuine win for ASGI and a genuine
+regression for WSGI specifically, so the WSGI `template_render` gap itself
+remains open (see "Connection pooling, attempted" above for the full,
+disclosed result).
 Remaining, deliberately unscheduled: a custom async/Rust HTTP runtime --
 ASGI support's benchmark data did not surface a bottleneck that would
-justify planning it; connection pooling for the last `template_render`
-gap on WSGI -- a real architecture change touching every caller of
-`mangoo.db.connect()`, not something to fold into a quick fix; a Tortoise
-ORM benchmark comparison -- new scope (an async-driver comparison app),
-requested but not started; dependency scanning and release automation
-(`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8c).
+justify planning it; the WSGI `template_render` gap itself -- connection
+pooling was the one concrete idea this document had for it, and it made
+things worse rather than better, so this is back to genuinely unscoped; a
+Tortoise ORM benchmark comparison -- new scope (an async-driver comparison
+app), requested but not started; dependency scanning and release
+automation (`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8c).
 
 ## Definition of done
 

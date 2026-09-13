@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 from wsgiref.simple_server import make_server
 
+from . import db
 from .hardening import Hardening, HardeningOptions
 from .request import Request
 from .response import Response, json_response
@@ -88,8 +89,17 @@ def create_application(
     metrics: "MetricsRegistry | None" = None,
     api_title: str = "Mangoo API",
     api_version: str = "0.1.0",
+    pool_connections: bool = False,
 ):
     """Build the WSGI application for a route list.
+
+    ``pool_connections=True`` calls ``mangoo.db.enable_connection_pooling()``
+    -- a convenience, not a scoped setting: pooling is process-global (one
+    connection reused per worker thread per database config), so it affects
+    every ``mangoo.db.connect()`` call in the process, not only requests
+    served by this particular application object. See
+    ``enable_connection_pooling``'s docstring for what this does and does
+    not solve before enabling it against MySQL/PostgreSQL specifically.
 
     This is separated from ``serve`` so application behavior can be tested
     without opening a network socket. ``signals``, when given a ``SignalBus``,
@@ -106,6 +116,8 @@ def create_application(
     if pulse is not None:
         warnings.warn("`pulse=` is deprecated; use `signals=` instead.", DeprecationWarning, stacklevel=2)
         signals = pulse if signals is None else signals
+    if pool_connections:
+        db.enable_connection_pooling()
     route_list = [*urlpatterns]
     route_list.extend(documentation_routes(route_list, title=api_title, version=api_version))
     routes = {route.pattern: route for route in route_list}

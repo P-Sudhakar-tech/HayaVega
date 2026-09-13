@@ -113,6 +113,12 @@ urlpatterns = [
 
 def build_application():
     seed()
+    # pool_connections is deliberately NOT enabled here: measured to be a
+    # real ~10-15% throughput *regression* for this WSGI/waitress/SQLite
+    # combination specifically (see INDUSTRY_LEADERSHIP_ROADMAP.md), unlike
+    # the real win it is for the ASGI target below. Benchmark before
+    # enabling it for your own deployment; don't assume the ASGI result
+    # transfers.
     return create_application(urlpatterns, api_title="Benchmark", api_version="1.0.0")
 
 

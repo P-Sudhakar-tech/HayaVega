@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import parse_qs
 from uuid import uuid4
 
+from . import db
 from .hardening import Hardening, HardeningOptions
 from .request import Request
 from .response import Response, json_response
@@ -144,18 +145,25 @@ def create_asgi_application(
     metrics: MetricsRegistry | None = None,
     api_title: str = "Mangoo API",
     api_version: str = "0.1.0",
+    pool_connections: bool = False,
 ):
     """Build the ASGI application for a route list.
 
     Accepts the same ``hardening``/``debug``/``signals``/``metrics``/
-    ``api_title``/``api_version`` arguments as ``runtime.create_application``,
-    with identical behavior (request hardening, Signals events, metrics
-    recording, OpenAPI/Swagger routes) -- only the transport differs. ``pulse``
+    ``api_title``/``api_version``/``pool_connections`` arguments as
+    ``runtime.create_application``, with identical behavior (request
+    hardening, Signals events, metrics recording, OpenAPI/Swagger routes)
+    -- only the transport differs. Pooling is thread-local and sync views
+    run via ``asyncio.to_thread``'s own worker threads, so each of those
+    threads gets its own reused connection across the requests it handles,
+    the same benefit WSGI's thread-per-request model gets. ``pulse``
     is a deprecated alias for ``signals``, kept for parity with the WSGI path.
     """
     if pulse is not None:
         warnings.warn("`pulse=` is deprecated; use `signals=` instead.", DeprecationWarning, stacklevel=2)
         signals = pulse if signals is None else signals
+    if pool_connections:
+        db.enable_connection_pooling()
     route_list = [*urlpatterns]
     route_list.extend(documentation_routes(route_list, title=api_title, version=api_version))
     routes = {route.pattern: route for route in route_list}
