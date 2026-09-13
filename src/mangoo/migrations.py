@@ -226,7 +226,12 @@ def discover(directories: Iterable[str | Path]) -> list[Migration]:
 
 
 def _prepare_history(connection) -> None:
-    connection.execute("CREATE TABLE IF NOT EXISTS mangoo_migrations (name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+    # VARCHAR (not TEXT) for the primary key: MySQL cannot index a TEXT/BLOB
+    # column without an explicit prefix length. TIMESTAMP (not TEXT) for
+    # applied_at: MySQL rejects CURRENT_TIMESTAMP as a default on a non-
+    # temporal column type ("Invalid default value"). Both are accepted by
+    # SQLite (type affinity, not enforcement) and PostgreSQL unchanged.
+    connection.execute("CREATE TABLE IF NOT EXISTS mangoo_migrations (name VARCHAR(255) PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
 
 def _history(connection) -> dict[str, str]:
