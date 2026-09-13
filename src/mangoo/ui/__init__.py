@@ -1,0 +1,96 @@
+"""Server-rendered HTML components plus a first-party htmx-style hypermedia
+runtime (``mangoo-ui.js``) -- no client-side JavaScript framework, no build
+step, no bundler. A component is a plain Python function returning
+``Markup``; interactivity is declared via ``hx_get``/``hx_post``/``hx_put``/
+``hx_delete``, ``hx_target``, ``hx_swap`` attributes (rendered as
+``hx-get``, etc. by ``mangoo.ui.elements``'s attribute-name conversion) and
+``mgo_boost``/``mgo_boost_target`` for client-side link routing.
+"""
+
+from __future__ import annotations
+
+from .components import Alert, Button, Card, Form, FormField, NavBar, Page
+from .elements import (
+    Markup,
+    a,
+    body,
+    button,
+    div,
+    footer,
+    form,
+    fragment,
+    h1,
+    h2,
+    h3,
+    head,
+    header,
+    html,
+    input_,
+    label,
+    li,
+    link,
+    main,
+    nav,
+    option,
+    p,
+    script,
+    select,
+    span,
+    table,
+    tag,
+    tbody,
+    td,
+    textarea,
+    th,
+    thead,
+    title,
+    tr,
+    ul,
+)
+from .routes import ui_routes
+
+__all__ = [
+    "Alert",
+    "Button",
+    "Card",
+    "Form",
+    "FormField",
+    "Markup",
+    "NavBar",
+    "Page",
+    "a",
+    "body",
+    "button",
+    "div",
+    "footer",
+    "form",
+    "fragment",
+    "h1",
+    "h2",
+    "h3",
+    "head",
+    "header",
+    "html",
+    "input_",
+    "label",
+    "li",
+    "link",
+    "main",
+    "nav",
+    "option",
+    "p",
+    "script",
+    "select",
+    "span",
+    "table",
+    "tag",
+    "tbody",
+    "td",
+    "textarea",
+    "th",
+    "thead",
+    "title",
+    "tr",
+    "ui_routes",
+    "ul",
+]

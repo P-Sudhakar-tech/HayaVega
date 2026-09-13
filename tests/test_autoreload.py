@@ -32,6 +32,6 @@ class AutoreloadTests(unittest.TestCase):
         process.poll.return_value = None
         popen.return_value = process
         with tempfile.TemporaryDirectory() as directory:
-            run_with_reloader(["python", "manage.py", "runserver"], Path(directory))
+            run_with_reloader(["python", "manage.py", "launch"], Path(directory))
         process.terminate.assert_called_once()
         process.wait.assert_called_once()

@@ -1,13 +1,13 @@
 """Modern declarative entities and chainable data selections for Mangoo."""
+
 from __future__ import annotations
 
+import re
 from collections import OrderedDict
 from datetime import datetime
-import re
-from typing import Any
+from typing import Any, ClassVar
 
-from .db import connect
-
+from .db import connect, normalize_config
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -107,6 +107,9 @@ class EntityMeta(type):
 
 
 class Entity(metaclass=EntityMeta):
+    __table__: ClassVar[str]
+    _columns: ClassVar[OrderedDict[str, Column]]
+
     id = Key()
 
     def __init__(self, **values):
@@ -125,7 +128,7 @@ class Entity(metaclass=EntityMeta):
         return dict(self._values)
 
     @classmethod
-    def collection(cls, database) -> "Collection":
+    def collection(cls, database) -> Collection:
         return Collection(cls, database)
 
 
@@ -135,12 +138,32 @@ def _identifier(value: str) -> str:
     return value
 
 
+_PREPARED_TABLES: set[tuple] = set()
+
+
 class Collection:
     def __init__(self, entity: type[Entity], database):
         self.entity, self.database = entity, database
         _identifier(entity.__table__)
 
+    def _prepared_key(self) -> tuple:
+        config = normalize_config(self.database)
+        return (self.entity.__table__, tuple(sorted((key, str(value)) for key, value in config.items())))
+
     def prepare(self) -> None:
+        """Ensure the entity's table exists.
+
+        Every ``fetch``/``total``/``revise``/``erase``/``append`` call goes
+        through here, so the "already prepared" case -- true for nearly
+        every call after the first -- must not pay for a second connection
+        and a ``CREATE TABLE IF NOT EXISTS`` round trip. Cached per
+        (table, database) for the life of the process instead: a table's
+        schema doesn't change without a migration, which is a separate,
+        deliberate operation this cache has no effect on.
+        """
+        key = self._prepared_key()
+        if key in _PREPARED_TABLES:
+            return
         connection = connect(self.database)
         try:
             definitions = []
@@ -156,6 +179,7 @@ class Collection:
             connection.commit()
         finally:
             connection.close()
+        _PREPARED_TABLES.add(key)
 
     def append(self, **values) -> Entity:
         self.prepare()
@@ -174,10 +198,10 @@ class Collection:
         finally:
             connection.close()
 
-    def seek(self, **criteria) -> "Selection":
+    def seek(self, **criteria) -> Selection:
         return Selection(self).match(**criteria)
 
-    def browse(self) -> "Selection":
+    def browse(self) -> Selection:
         return Selection(self)
 
     def total(self) -> int:
@@ -188,10 +212,10 @@ class Selection:
     def __init__(self, collection: Collection, clauses=(), ordering=(), limit: int | None = None, offset: int = 0):
         self.collection, self.clauses, self.ordering, self.limit, self.offset = collection, tuple(clauses), tuple(ordering), limit, offset
 
-    def _copy(self, **changes) -> "Selection":
+    def _copy(self, **changes) -> Selection:
         return Selection(self.collection, changes.get("clauses", self.clauses), changes.get("ordering", self.ordering), changes.get("limit", self.limit), changes.get("offset", self.offset))
 
-    def match(self, **criteria) -> "Selection":
+    def match(self, **criteria) -> Selection:
         clauses = list(self.clauses)
         operators = {"exact": "=", "not": "!=", "above": ">", "at_least": ">=", "below": "<", "at_most": "<=", "contains": "LIKE"}
         for expression, value in criteria.items():
@@ -205,7 +229,7 @@ class Selection:
             clauses.append((name, operator, f"%{value}%" if modifier == "contains" else value))
         return self._copy(clauses=clauses)
 
-    def arrange(self, *fields: str) -> "Selection":
+    def arrange(self, *fields: str) -> Selection:
         ordering = []
         for field in fields:
             direction, name = ("DESC", field[1:]) if field.startswith("-") else ("ASC", field)
@@ -215,14 +239,14 @@ class Selection:
             ordering.append((name, direction))
         return self._copy(ordering=ordering)
 
-    def window(self, count: int, skip: int = 0) -> "Selection":
+    def window(self, count: int, skip: int = 0) -> Selection:
         if count < 1 or skip < 0:
             raise EntityError("window count must be positive and skip cannot be negative")
         return self._copy(limit=count, offset=skip)
 
     def _sql(self, fields: str = "*") -> tuple[str, tuple]:
         table = _identifier(self.collection.entity.__table__)
-        query, values = f"SELECT {fields} FROM {table}", []
+        query, values = f"SELECT {fields} FROM {table}", list[Any]()
         if self.clauses:
             query += " WHERE " + " AND ".join(f"{_identifier(name)} {operator} ?" for name, operator, _ in self.clauses)
             values.extend(value for _, _, value in self.clauses)
@@ -239,6 +263,31 @@ class Selection:
         try:
             rows = connection.execute(*self._sql()).fetchall()
             return [self.collection.entity(**dict(row)) for row in rows]
+        finally:
+            connection.close()
+
+    def values(self, *fields: str) -> list[dict]:
+        """Fetch rows as plain ``dict``s instead of ``Entity`` instances.
+
+        `fetch()` runs every column through its `Column.coerce()` and
+        builds a real `Entity` object per row -- the right default when the
+        caller wants entity behavior (further selection, `.revise()`, type
+        coercion). Read-only rendering (a list page, a JSON API response)
+        often immediately discards that object for a plain dict of a few
+        fields, paying for hydration it never uses. `values()` skips it:
+        pass specific column names to select only those, or none for every
+        column.
+        """
+        for field in fields:
+            _identifier(field)
+            if field not in self.collection.entity._columns:
+                raise EntityError(f"Unknown column: {field}")
+        self.collection.prepare()
+        connection = connect(self.collection.database)
+        try:
+            columns = ", ".join(_identifier(field) for field in fields) if fields else "*"
+            rows = connection.execute(*self._sql(columns)).fetchall()
+            return [dict(row) for row in rows]
         finally:
             connection.close()
 
@@ -276,7 +325,7 @@ class Selection:
             if where:
                 where = where.split(" ORDER BY ")[0].split(" LIMIT ")[0]
                 query += " WHERE " + where
-            cursor = connection.execute(query, tuple(values.values()) + tuple(criteria[:len(self.clauses)]))
+            cursor = connection.execute(query, tuple(values.values()) + tuple(criteria[: len(self.clauses)]))
             connection.commit()
             return cursor.rowcount
         finally:

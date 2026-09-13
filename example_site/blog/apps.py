@@ -1,2 +1,2 @@
 class BlogConfig:
-    name = 'blog'
+    name = "blog"

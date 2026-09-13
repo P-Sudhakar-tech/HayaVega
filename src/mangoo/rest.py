@@ -1,4 +1,6 @@
 """Small REST API layer built on Mangoo routes and JSON responses."""
+
+import inspect
 from collections.abc import Callable, Iterable
 
 from .response import Response, json_response
@@ -23,10 +25,22 @@ def api_route(
     code to ``{"description": str, "schema": dict}`` (``schema`` is optional).
     None of these change runtime behavior -- omit them and Mangoo documents
     the endpoint with its previous generic fallback schema.
+
+    ``view`` may be ``async def`` when deployed under ``mangoo.asgi`` (see
+    ``DEPLOYMENT.md``): the wrapper stays a coroutine function itself so the
+    ASGI runtime awaits it directly rather than running it in a thread.
     """
-    def endpoint(request):
-        result = view(request)
-        return result if isinstance(result, Response) else json_response(result)
+
+    if inspect.iscoroutinefunction(view):
+
+        async def endpoint(request):
+            result = await view(request)
+            return result if isinstance(result, Response) else json_response(result)
+    else:
+
+        def endpoint(request):  # type: ignore[misc]
+            result = view(request)
+            return result if isinstance(result, Response) else json_response(result)
 
     route = path(pattern, endpoint, tuple(methods))
     return Route(route.pattern, route.view, route.methods, is_api=True, secured=secured, request_schema=request_schema, responses=responses)

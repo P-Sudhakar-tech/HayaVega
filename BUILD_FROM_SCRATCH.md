@@ -8,14 +8,15 @@ This guide describes the project as it exists today, how to run it from a clean 
 
 | Area | Current state |
 |---|---|
-| Project and app scaffolding | Implemented: `startproject`, `startapp`, `manage.py` layout |
+| Project and app scaffolding | Implemented: `newproject`, `newapp`, `manage.py` layout (`startproject`/`startapp` still work as deprecated aliases) |
 | Development server | Implemented: WSGI server, route dispatch, autoreload, `Ctrl+C` shutdown |
 | Settings | Implemented: Django-like `settings.py`, typed loader, structured database/server settings |
 | REST | Implemented: JSON routes, method checks, example health endpoint |
-| GraphQL | Implemented starter: single root query field per request |
+| GraphQL | Implemented: arguments, variables, nested selections, mutations, depth/field limits, off-by-default introspection |
+| UI framework | Implemented: `mangoo.ui` server-rendered components and a first-party `mangoo-ui.js` hypermedia runtime (`hx-*` swaps, `mgo-boost` routing), no build step; no client-side reactive/signals layer in this version; a Node.js/npm-based SPA framework (JSX, virtual DOM, bundler) is not yet scoped |
 | Production features | Implemented baseline: scrypt passwords, lockouts, Bearer and cookie sessions, CSRF, permissions, TOTP, and admin base |
 | Databases | SQLite works now; PostgreSQL/MySQL/MariaDB adapters activate when drivers are installed |
-| Rust native layer | Rust core and PyO3 `MangoList` source are present; it still needs to be compiled and packaged |
+| Rust native layer | Implemented: `mangoo_native` builds and bundles automatically as part of a normal `pip install` when a Rust toolchain is present (see "Compile the Rust workspace" below); a pure-Python fallback is used otherwise |
 
 ## 2. Repository layout
 
@@ -31,11 +32,12 @@ mangoo/
 |  |- collections.py              # mango_list native/fallback selector
 |  |- conf.py                     # Typed project settings loader
 |  |- db.py                       # SQLite/PostgreSQL/MySQL DB-API adapter
-|  |- graphql.py                  # Starter GraphQL executor
+|  |- graphql.py                  # Dependency-free GraphQL executor
 |  |- rest.py                     # JSON REST routes
 |  |- runtime.py                  # WSGI dispatcher
 |  |- scaffold.py                 # Project/app generator
-|  `- management/commands.py      # runserver and auth commands
+|  |- ui/                         # Components + hypermedia runtime (mangoo-ui.js/.css)
+|  `- management/commands.py      # launch and auth commands
 |- crates/
 |  |- mangoo-core/                # Framework-neutral Rust primitives
 |  `- mangoo-python/              # PyO3 module named mangoo_native
@@ -102,9 +104,9 @@ The development server watches Python files and reloads when code changes. Press
 With the environment active:
 
 ```powershell
-mango startproject mysite
+mango newproject mysite
 cd mysite
-python manage.py startapp blog
+python manage.py newapp blog
 mango launch 8000
 ```
 
@@ -159,8 +161,10 @@ Use `api_route` for JSON endpoints.
 ```python
 from mangoo import api_route
 
+
 def health(request):
     return {"status": "ok"}
+
 
 urlpatterns = [api_route("api/health", health, methods=("GET",))]
 ```
@@ -169,25 +173,114 @@ The example endpoint is available at `GET /api/health`.
 
 ## 9. GraphQL
 
-The current GraphQL module deliberately supports a small, predictable subset: one root query field.
+The GraphQL module is a small, dependency-free executor -- not a full
+spec-compliant engine -- supporting arguments, variables, nested selections,
+mutations, depth/field limits, and an off-by-default introspection policy.
+It deliberately does not support fragments or directives (rejected with a
+clear error) since there is no declared type system to validate a selection
+against; nested values are projected dynamically from whatever a resolver
+returns.
 
 ```python
 from mangoo import path
 from mangoo.graphql import Schema, graphql_view
 
-schema = Schema(query={"greeting": lambda request: "Hello"})
+
+def users(request, active=None):
+    all_users = [{"id": 1, "name": "Ada", "team": {"name": "Core"}}]
+    return [u for u in all_users if active is None or u.get("active") == active]
+
+
+def create_user(request, name):
+    return {"id": 99, "name": name}
+
+
+schema = Schema(query={"users": users}, mutation={"createUser": create_user})
 urlpatterns = [path("graphql", graphql_view(schema), methods=("POST",))]
 ```
 
-Send:
+Send a nested query with a variable:
 
 ```json
-{"query":"{ greeting }"}
+{"query": "query($active: Boolean) { users(active: $active) { id name team { name } } }", "variables": {"active": true}}
 ```
 
-The next GraphQL milestone is arguments, nested selections, mutations, and a spec-compliant executor.
+Or a mutation:
 
-## 10. Authentication and authorization
+```json
+{"query": "mutation { createUser(name: \"Linus\") { id name } }"}
+```
+
+See [README.md](README.md#rest-and-graphql) for the full list of what is and
+isn't supported, including the introspection policy and query limits.
+
+## 10. UI framework
+
+`mangoo.ui` is a server-rendered component system plus a first-party
+htmx-style hypermedia runtime, both living inside this package -- no npm,
+no Node.js, no bundler, no separate frontend project. A component is a
+plain Python function returning `Markup`:
+
+```python
+from mangoo import path
+from mangoo.response import Response
+from mangoo.ui import Alert, Button, Page, ui_routes
+
+
+def home(request):
+    body = Page(
+        "Home",
+        Alert("Welcome back!", variant="success"),
+        Button("Refresh", hx_get="/fragment", hx_target="#content"),
+        stylesheets=["/mangoo-ui/mangoo-ui.css"],
+        scripts=["/mangoo-ui/mangoo-ui.js"],
+    )
+    return Response(body)
+
+
+def fragment(request):
+    return Response("<div id='content'>Refreshed.</div>")
+
+
+urlpatterns = [
+    path("", home),
+    path("fragment", fragment),
+    *ui_routes(),  # mounts /mangoo-ui/mangoo-ui.js and /mangoo-ui/mangoo-ui.css
+]
+```
+
+`hx-get`/`hx-post`/`hx-put`/`hx-delete` fetch a URL (on click for
+buttons/links, on submit for forms) and swap the returned HTML fragment
+into `hx-target` using `hx-swap` -- the HTMX pattern, implemented in one
+small dependency-free JS file. It reads the `mangoo_csrf` cookie and sends
+it as `X-Csrf-Token` automatically, so an `hx-post` to a
+`@csrf_protect`-guarded view is protected without extra client-side
+wiring. Run the example site (`./mango.cmd launch 8001` from
+`example_site/`) and visit `/ui-demo` for a runnable version of this
+pattern, or see `tests/test_ui_hypermedia.py` for the full round trip
+proven against the real WSGI stack. `mgo-boost` adds client-side routing
+on top of the same runtime (`tests/test_ui_boost.py`).
+
+A prior version of this package also had a client-side signals/reactivity
+runtime (`mangoo-reactive.js`, `mgo-data`/`mgo-text`/`mgo-on-*`
+directives); it was removed along with the rest of `mangoo.ui` at one
+point and, on rebuilding, was deliberately not brought back, keeping this
+version to one simpler hypermedia model rather than two rendering
+approaches. A genuine Node.js/npm-based SPA framework (JSX, a virtual DOM,
+a bundler) remains a distinct, separate, unscoped possibility; see
+`UPCOMING_IMPROVEMENT_ROADMAP.md`.
+
+Rust acceleration was benchmarked specifically for fragment rendering (the
+small, fixed-shape markup an `hx-get` swap renders) and found to be a real
+win there (4x-8x faster in isolation) -- unlike full-page template
+rendering, where every general-purpose Rust candidate this project tried
+lost to Python. It isn't wired into `mangoo.ui`'s shipped API, since a
+hardcoded native renderer only ever covers one exact fragment shape;
+see `benchmarks/native_htmx_fragment.py` and
+`benchmarks/mangoo_app/app.py`'s `posts_fragment_native` for the
+measurement and a worked example.
+
+## 11. Authentication and authorization
 
 ### Security controls
 
@@ -200,7 +293,7 @@ The next GraphQL milestone is arguments, nested selections, mutations, and a spe
 ### Create a superuser
 
 ```powershell
-python manage.py createsuperuser
+python manage.py createadmin
 python manage.py enable2fa admin
 ```
 
@@ -222,19 +315,45 @@ Successful login also sets a host-only, `HttpOnly`, `SameSite=Lax` `mangoo_sessi
 
 ### Permissions and admin base
 
-Use `login_required`, `superuser_required`, or `permission_required` to protect a view. The built-in admin base can be enabled with `*admin_routes(DATABASES['default'])`; it provides administrator-only `/admin` and `/admin/users` pages. Authenticate the browser session first by calling the login endpoint.
+Use `login_required`, `superuser_required`, or `permission_required` to protect a view. The built-in admin base can be enabled with `*admin_routes(DATABASES['default'])`; it always provides administrator-only `/admin` and `/admin/users` pages, and can additionally manage your own entities. Authenticate the browser session first by calling the login endpoint.
 
 ```python
 from mangoo import admin_routes, login_required, path
+from mangoo.admin import ModelAdmin
+from mangoo.models import Entity, Integer, Text
+
+
+class Product(Entity):
+    name = Text()
+    price = Integer()
+
 
 @login_required(DATABASES["default"])
 def account(request):
     return {"detail": "private"}
 
-urlpatterns = [path("account", account), *admin_routes(DATABASES["default"])]
+
+urlpatterns = [
+    path("account", account),
+    *admin_routes(DATABASES["default"], models=[ModelAdmin(Product)]),
+]
 ```
 
-## 11. Databases
+This adds paginated list/add/edit/delete pages at `/admin/product`. Each
+registered model gets:
+
+- **Pagination**: `?page=N` on the list view; `ModelAdmin(Product, page_size=25)` to change the page size.
+- **Validation**: a required-but-blank or malformed field (e.g. text in an `Integer` column) is a form error, not a 500.
+- **Permissions**: `ModelAdmin(Product, can_access=lambda user: user.is_staff)` to gate a model on something other than `is_superuser`.
+- **Change history**: the edit page lists every create/update (with the changed field names, not values)/delete recorded against that record, built on the existing audit log.
+
+CSRF protection applies to every add/edit/delete submission the same way it
+does for `auth_routes`: a hidden `csrf_token` form field (plain HTML forms
+can't set a custom header) is checked against the `mangoo_csrf` cookie set
+when the form was rendered. Bearer-token requests skip the check, same as
+elsewhere.
+
+## 12. Databases
 
 ### SQLite
 
@@ -284,7 +403,7 @@ DATABASES = {
 
 SQLite is fully exercised by the existing test suite. PostgreSQL and MySQL/MariaDB use the adapter and require integration testing against real servers before production use.
 
-## 12. Rust-native features
+## 13. Rust-native features
 
 ### Mangoo-specific collection syntax
 
@@ -312,9 +431,15 @@ $env:Path += ";$env:USERPROFILE\.cargo\bin"
 cargo test
 ```
 
-The current Python package uses Hatchling, so native-wheel packaging is the next build-system step. Add Maturin only when switching the package build backend or producing platform wheels.
+The Python package still uses Hatchling, not Maturin: a custom build hook
+(`hatch_build.py` at the repository root) invokes `cargo build --release`
+against `crates/mangoo-python/Cargo.toml` during a normal `pip install .` or
+`pip install -e .`, and bundles the resulting `mangoo_native` extension into
+that same install when `cargo` is on PATH. There is no separate manual build
+step, and no risk of a second, independently-invokable build overwriting the
+`mangoo` package, since only one build definition produces it.
 
-## 13. Test the project
+## 14. Test the project
 
 ```powershell
 cd D:\separate_code\mangoo
@@ -324,9 +449,9 @@ $env:PYTHONPATH = "$PWD\src"
 
 The test suite covers routing, REST, GraphQL starter behavior, authentication, TOTP, sessions, lockouts, database configuration, settings, scaffolding, CLI behavior, and autoreload helpers.
 
-## 14. Recommended Rust migration order
+## 15. Recommended Rust migration order
 
-1. Build and package `mangoo_native` with Maturin.
+1. ~~Build and package `mangoo_native` as part of a normal packaged install.~~ Done: see "Compile the Rust workspace" above.
 2. Move URL matching and path normalization into Rust.
 3. Move JSON serialization and response construction into Rust.
 4. Move password/session primitives into audited Rust implementations while keeping the Python API stable.
@@ -334,7 +459,7 @@ The test suite covers routing, REST, GraphQL starter behavior, authentication, T
 6. Add a Rust async HTTP server behind the existing Python-facing API.
 7. Benchmark each change against the Python fallback before making it the default.
 
-## 15. Production checklist
+## 16. Production checklist
 
 - Configure a `SECURITY` section in `settings.py`. Mangoo applies trusted-host validation, security headers, structured audit logs, an explicit CORS allow-list, and an in-memory per-client/per-path rate limit through this configuration.
 - Keep `ALLOWED_ORIGINS` empty unless a browser application must call the API from another origin. Never use a wildcard for authenticated browser APIs.
@@ -363,6 +488,6 @@ SECURITY = {
 
 The runtime rejects requests whose `Host` is not in `ALLOWED_HOSTS`, rejects oversized request bodies before reading them, responds to trusted CORS preflight requests, and adds CSP, frame, MIME-sniffing, referrer-policy, permissions-policy, and cross-origin isolation headers. `FORCE_HTTPS` redirects plain HTTP and enables HSTS on secure requests. Set `TRUST_PROXY_HEADERS` only when a trusted reverse proxy removes client-supplied forwarding headers. Audit records are emitted to the `mangoo.audit` logger without request bodies, credentials, or query strings.
 
-## 16. Current limitations
+## 17. Current limitations
 
-Mangoo is an early framework prototype, not a production replacement for Django yet. Its GraphQL executor is intentionally minimal, the ORM/migrations/admin are not yet implemented, and the Rust extension source is not yet packaged as a native wheel. Keep the public Python API stable while incrementally replacing internals with benchmarked Rust implementations.
+Mangoo is an early framework prototype, not a production replacement for Django yet. Templates support inheritance, loops, and conditionals but no fragments, filters, or macros; the admin's registered-model CRUD has no bulk actions, list filtering, or search; GraphQL has no fragments or directives and only a minimal, off-by-default introspection; `mangoo.ui` has no client-side reactive/signals layer in this version (see section 10) and there is still no Node.js/npm-based SPA option; and most of the runtime (routing, JSON serialization, authentication, database execution) is still Python, with Rust migrations for those pending a measured benchmark -- fragment rendering is the one exception with a proven, benchmarked win (section 10), not yet wired into the shipped API since it only covers one exact fragment shape per hardcoded renderer. Keep the public Python API stable while incrementally replacing internals with benchmarked Rust implementations.

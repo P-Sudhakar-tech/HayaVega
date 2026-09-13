@@ -1,9 +1,11 @@
 """Built-in OpenAPI documents and Swagger UI for Mangoo applications."""
+
 from __future__ import annotations
+
+from typing import Any
 
 from .response import Response, json_response
 from .routing import Route
-
 
 ERROR_SCHEMA = {"type": "object", "properties": {"detail": {"type": "string"}}, "required": ["detail"]}
 
@@ -48,7 +50,7 @@ def openapi_document(routes: list[Route], *, title: str = "Mangoo API", version:
                 responses["400"] = _error_response(400)
             if route.secured:
                 responses.setdefault("401", _error_response(401))
-            operation = {
+            operation: dict[str, Any] = {
                 "summary": route.pattern.replace("/", " ").replace("-", " ").title(),
                 "responses": responses,
             }

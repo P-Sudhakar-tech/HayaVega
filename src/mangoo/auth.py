@@ -1,10 +1,7 @@
 """Security-focused local authentication primitives for Mangoo."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
-from hashlib import pbkdf2_hmac, scrypt, sha256
-from hmac import compare_digest, new
-from pathlib import Path
 import base64
 import os
 import re
@@ -12,10 +9,13 @@ import secrets
 import sqlite3
 import struct
 import time
+from dataclasses import dataclass
+from hashlib import pbkdf2_hmac, scrypt, sha256
+from hmac import compare_digest, new
+from pathlib import Path
 
-from .db import connect, user_id_definition
 from .audit import record_audit_event
-
+from .db import connect, user_id_definition
 
 SCRYPT_N = 2**14
 SCRYPT_R = 8
@@ -48,9 +48,12 @@ class User:
 @dataclass(frozen=True)
 class SessionSummary:
     """Non-sensitive metadata about one active session; never includes the token."""
+
     id: int
     created_at: str
     expires_at: int
+    ip_address: str | None = None
+    user_agent: str | None = None
 
 
 def _connect(database_path: str | Path | dict):
@@ -92,10 +95,17 @@ def initialize_auth_db(database_path: str | Path | dict) -> None:
                 user_id INTEGER NOT NULL REFERENCES mangoo_users(id) ON DELETE CASCADE,
                 token_hash TEXT NOT NULL UNIQUE,
                 expires_at INTEGER NOT NULL,
+                ip_address TEXT,
+                user_agent TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
+        if connection.engine == "sqlite3":
+            existing_session_columns = {row["name"] for row in connection.execute("PRAGMA table_info(mangoo_sessions)")}
+            for name, definition in {"ip_address": "TEXT", "user_agent": "TEXT"}.items():
+                if name not in existing_session_columns:
+                    connection.execute(f"ALTER TABLE mangoo_sessions ADD COLUMN {name} {definition}")
         connection.execute(
             f"""
             CREATE TABLE IF NOT EXISTS mangoo_auth_tokens (
@@ -126,9 +136,7 @@ def hash_password(password: str) -> str:
     validate_password(password)
     salt = os.urandom(16)
     derived_key = scrypt(password.encode("utf-8"), salt=salt, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=32)
-    return "scrypt${}${}${}${}${}".format(
-        SCRYPT_N, SCRYPT_R, SCRYPT_P, base64.b64encode(salt).decode("ascii"), base64.b64encode(derived_key).decode("ascii")
-    )
+    return "scrypt${}${}${}${}${}".format(SCRYPT_N, SCRYPT_R, SCRYPT_P, base64.b64encode(salt).decode("ascii"), base64.b64encode(derived_key).decode("ascii"))
 
 
 def verify_password(password: str, encoded_password: str) -> bool:
@@ -200,7 +208,7 @@ def _totp_code(secret: str, timestamp: int) -> str:
     counter = timestamp // 30
     digest = new(base64.b32decode(normalized), struct.pack(">Q", counter), "sha1").digest()
     offset = digest[-1] & 0x0F
-    value = (struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF) % 1_000_000
+    value = (struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF) % 1_000_000
     return f"{value:06d}"
 
 
@@ -230,45 +238,60 @@ def _record_failure(connection, row, now: int) -> None:
     connection.commit()
 
 
-def authenticate(database_path: str | Path | dict, username: str, password: str, totp_code: str | None = None) -> User | None:
+def _login_context(ip_address: str | None, user_agent: str | None) -> dict:
+    """Non-sensitive login telemetry: an IP address and a user-agent string, never a header dump."""
+    context = {}
+    if ip_address:
+        context["ip_address"] = ip_address
+    if user_agent:
+        context["user_agent"] = user_agent
+    return context
+
+
+def authenticate(database_path: str | Path | dict, username: str, password: str, totp_code: str | None = None, *, ip_address: str | None = None, user_agent: str | None = None) -> User | None:
+    """Verify credentials and record the attempt, including the caller-supplied IP address and user agent, if given."""
     initialize_auth_db(database_path)
     now = int(time.time())
+    context = _login_context(ip_address, user_agent)
     connection = _connect(database_path)
     try:
         row = connection.execute("SELECT * FROM mangoo_users WHERE username = ?", (username,)).fetchone()
         if row is None or not row["is_active"]:
-            record_audit_event(database_path, "auth.login_failed", metadata={"reason": "invalid_credentials"})
+            record_audit_event(database_path, "auth.login_failed", metadata={"reason": "invalid_credentials", **context})
             return None
         if row["locked_until"] and row["locked_until"] > now:
-            record_audit_event(database_path, "auth.login_failed", actor_id=row["id"], metadata={"reason": "locked"})
+            record_audit_event(database_path, "auth.login_failed", actor_id=row["id"], metadata={"reason": "locked", **context})
             return None
         password_valid = verify_password(password, row["password_hash"])
         totp_valid = not row["totp_enabled"] or (totp_code is not None and verify_totp(row["totp_secret"], totp_code, now))
         if not password_valid or not totp_valid:
             _record_failure(connection, row, now)
-            record_audit_event(database_path, "auth.login_failed", actor_id=row["id"], metadata={"reason": "invalid_credentials"})
+            record_audit_event(database_path, "auth.login_failed", actor_id=row["id"], metadata={"reason": "invalid_credentials", **context})
             return None
         connection.execute("UPDATE mangoo_users SET failed_attempts = 0, locked_until = NULL WHERE id = ?", (row["id"],))
         if row["password_hash"].startswith("pbkdf2_sha256$"):
             connection.execute("UPDATE mangoo_users SET password_hash = ? WHERE id = ?", (hash_password(password), row["id"]))
         connection.commit()
         user = _user_from_row(row)
-        record_audit_event(database_path, "auth.login_succeeded", actor_id=user.id)
+        record_audit_event(database_path, "auth.login_succeeded", actor_id=user.id, metadata=context)
         return user
     finally:
         connection.close()
 
 
-def create_session(database_path: str | Path | dict, user: User, duration_seconds: int = DEFAULT_SESSION_SECONDS) -> str:
+def create_session(database_path: str | Path | dict, user: User, duration_seconds: int = DEFAULT_SESSION_SECONDS, *, ip_address: str | None = None, user_agent: str | None = None) -> str:
     if not user.is_active:
         raise ValueError("Cannot create a session for an inactive user.")
     initialize_auth_db(database_path)
     token = secrets.token_urlsafe(48)
     connection = _connect(database_path)
     try:
-        connection.execute("INSERT INTO mangoo_sessions (user_id, token_hash, expires_at) VALUES (?, ?, ?)", (user.id, sha256(token.encode()).hexdigest(), int(time.time()) + duration_seconds))
+        connection.execute(
+            "INSERT INTO mangoo_sessions (user_id, token_hash, expires_at, ip_address, user_agent) VALUES (?, ?, ?, ?, ?)",
+            (user.id, sha256(token.encode()).hexdigest(), int(time.time()) + duration_seconds, ip_address, user_agent),
+        )
         connection.commit()
-        record_audit_event(database_path, "auth.session_created", actor_id=user.id)
+        record_audit_event(database_path, "auth.session_created", actor_id=user.id, metadata=_login_context(ip_address, user_agent))
         return token
     finally:
         connection.close()
@@ -311,10 +334,8 @@ def list_sessions(database_path: str | Path | dict, user: User) -> list[SessionS
         now = int(time.time())
         connection.execute("DELETE FROM mangoo_sessions WHERE expires_at <= ?", (now,))
         connection.commit()
-        rows = connection.execute(
-            "SELECT id, expires_at, created_at FROM mangoo_sessions WHERE user_id = ? ORDER BY created_at DESC", (user.id,)
-        ).fetchall()
-        return [SessionSummary(row["id"], row["created_at"], row["expires_at"]) for row in rows]
+        rows = connection.execute("SELECT id, expires_at, created_at, ip_address, user_agent FROM mangoo_sessions WHERE user_id = ? ORDER BY created_at DESC", (user.id,)).fetchall()
+        return [SessionSummary(row["id"], row["created_at"], row["expires_at"], row["ip_address"], row["user_agent"]) for row in rows]
     finally:
         connection.close()
 
@@ -384,8 +405,7 @@ def _consume_auth_token(database_path: str | Path | dict, token: str, purpose: s
     try:
         now = int(time.time())
         row = connection.execute(
-            "SELECT t.id AS token_id, u.* FROM mangoo_auth_tokens t JOIN mangoo_users u ON u.id = t.user_id "
-            "WHERE t.token_hash = ? AND t.purpose = ? AND t.consumed_at IS NULL AND t.expires_at > ?",
+            "SELECT t.id AS token_id, u.* FROM mangoo_auth_tokens t JOIN mangoo_users u ON u.id = t.user_id WHERE t.token_hash = ? AND t.purpose = ? AND t.consumed_at IS NULL AND t.expires_at > ?",
             (sha256(token.encode()).hexdigest(), purpose, now),
         ).fetchone()
         if row is None:

@@ -1,4 +1,5 @@
 """Persistent, privacy-safe audit events for security-relevant actions."""
+
 from __future__ import annotations
 
 import msgspec
@@ -16,7 +17,9 @@ def initialize_audit_db(database) -> None:
 
 
 def record_audit_event(database, event_type: str, *, actor_id: int | None = None, metadata: dict | None = None) -> None:
-    """Record a small event. Never put credentials, tokens, or headers in metadata."""
+    """Record a small event. Never put credentials, tokens, cookies, or authorization header
+    values in metadata. A non-sensitive request-context field such as an IP address or a
+    User-Agent string (as ``auth.login_succeeded`` and ``auth.session_created`` already do) is fine."""
     initialize_audit_db(database)
     connection = connect(database)
     try:

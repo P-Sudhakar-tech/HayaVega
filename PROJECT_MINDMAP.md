@@ -83,11 +83,11 @@ mindmap
         admin routes
     Developer tools
       CLI
-        startproject
-        startapp
-        runserver
-        makemigrations
-        createsuperuser
+        newproject (startproject alias, deprecated)
+        newapp (startapp alias, deprecated)
+        launch (runserver alias, deprecated)
+        newmigration (makemigrations alias, deprecated)
+        createadmin (createsuperuser alias, deprecated)
       Testing
         TestClient
         pytest suite
@@ -97,14 +97,14 @@ mindmap
         routes
         landing page
     Extensions
-      Pulse event bus addon
+      Signals event bus addon (formerly Pulse)
         connect/disconnect registry
         always-async, Rust-backed delivery
         sensitive-key rejection
         request, auth, admin, migration wiring
       Rust native core
         collection support
-        Pulse worker-pool dispatcher
+        Signals worker-pool dispatcher
         future runtime and JSON work
     Project resources
       README

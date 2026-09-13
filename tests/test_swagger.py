@@ -30,11 +30,17 @@ class OpenApiDocumentTests(unittest.TestCase):
     def test_declared_request_and_response_schemas_are_used_verbatim(self):
         request_schema = {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}
         response_schema = {"type": "object", "properties": {"id": {"type": "integer"}}}
-        document = openapi_document([api_route(
-            "api/items", lambda request: {}, methods=("POST",),
-            request_schema=request_schema,
-            responses={201: {"description": "Created.", "schema": response_schema}, 400: {"description": "Bad input.", "schema": ERROR_SCHEMA}},
-        )])
+        document = openapi_document(
+            [
+                api_route(
+                    "api/items",
+                    lambda request: {},
+                    methods=("POST",),
+                    request_schema=request_schema,
+                    responses={201: {"description": "Created.", "schema": response_schema}, 400: {"description": "Bad input.", "schema": ERROR_SCHEMA}},
+                )
+            ]
+        )
         operation = document["paths"]["/api/items"]["post"]
         self.assertEqual(operation["requestBody"]["content"]["application/json"]["schema"], request_schema)
         self.assertTrue(operation["requestBody"]["required"])

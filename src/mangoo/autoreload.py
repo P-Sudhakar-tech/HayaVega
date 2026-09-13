@@ -1,20 +1,16 @@
 """Polling-based development autoreloader with no external dependencies."""
+
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import subprocess
-import sys
 import time
+from pathlib import Path
 
 
 def snapshot_python_files(root: Path) -> dict[Path, int]:
     """Return modification timestamps for project Python files."""
-    return {
-        path: path.stat().st_mtime_ns
-        for path in root.rglob("*.py")
-        if "__pycache__" not in path.parts
-    }
+    return {path: path.stat().st_mtime_ns for path in root.rglob("*.py") if "__pycache__" not in path.parts}
 
 
 def has_changes(previous: dict[Path, int], current: dict[Path, int]) -> bool:

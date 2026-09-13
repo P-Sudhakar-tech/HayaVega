@@ -1,4 +1,5 @@
 """Production configuration checks and database liveness routes."""
+
 from __future__ import annotations
 
 from .db import connect
@@ -30,6 +31,7 @@ def validate_production(settings) -> None:
 
 def health_routes(database):
     """Return unauthenticated liveness and database-readiness endpoints."""
+
     def health(_request):
         return json_response({"status": "ok"})
 

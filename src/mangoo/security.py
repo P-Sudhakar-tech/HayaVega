@@ -1,13 +1,14 @@
 """Cookie sessions, CSRF checks, and reusable authorization decorators."""
+
 from __future__ import annotations
 
+import inspect
+import secrets
 from functools import wraps
 from hmac import compare_digest
-import secrets
 
 from .auth import User, authenticate_session
 from .response import json_response
-
 
 SESSION_COOKIE_NAME = "mangoo_session"
 CSRF_COOKIE_NAME = "mangoo_csrf"
@@ -35,16 +36,46 @@ def csrf_token_response(request, *, secure: bool = False):
     return json_response({"csrf_token": token}, headers=(cookie(CSRF_COOKIE_NAME, token, max_age=8 * 60 * 60, same_site="Strict", secure=secure),))
 
 
+def _form_csrf_token(request) -> str:
+    """Best-effort ``csrf_token`` form field, for plain HTML form submissions that can't set a header."""
+    try:
+        return request.form().get("csrf_token", "")
+    except (UnicodeDecodeError, ValueError):
+        return ""
+
+
+def _csrf_rejection(request):
+    if request.method not in SAFE_METHODS and request.cookies.get(SESSION_COOKIE_NAME):
+        expected = request.cookies.get(CSRF_COOKIE_NAME, "")
+        supplied = request.headers.get("X-Csrf-Token", "") or _form_csrf_token(request)
+        if not expected or not supplied or not compare_digest(expected, supplied):
+            return json_response({"detail": "CSRF token missing or incorrect."}, 403)
+    return None
+
+
 def csrf_protect(view):
-    """Reject unsafe cookie-authenticated requests without a matching CSRF token."""
+    """Reject unsafe cookie-authenticated requests without a matching CSRF token.
+
+    The token may arrive as an ``X-Csrf-Token`` header (JSON/API clients) or a
+    ``csrf_token`` form field (plain HTML `<form>` submissions, which cannot
+    set a custom header); either is accepted. ``view`` may be ``async def``
+    when deployed under ``mangoo.asgi``: the wrapper stays a coroutine
+    function itself so the ASGI runtime awaits it directly.
+    """
+    if inspect.iscoroutinefunction(view):
+
+        @wraps(view)
+        async def protected(request):
+            rejection = _csrf_rejection(request)
+            return rejection if rejection is not None else await view(request)
+
+        return protected
+
     @wraps(view)
     def protected(request):
-        if request.method not in SAFE_METHODS and request.cookies.get(SESSION_COOKIE_NAME):
-            expected = request.cookies.get(CSRF_COOKIE_NAME, "")
-            supplied = request.headers.get("X-Csrf-Token", "")
-            if not expected or not supplied or not compare_digest(expected, supplied):
-                return json_response({"detail": "CSRF token missing or incorrect."}, 403)
-        return view(request)
+        rejection = _csrf_rejection(request)
+        return rejection if rejection is not None else view(request)
+
     return protected
 
 
@@ -62,17 +93,38 @@ def request_user(request, database_path) -> User | None:
 
 
 def permission_required(database_path, predicate, *, message: str = "Permission denied."):
-    """Require an authenticated user satisfying ``predicate(user)`` for a view."""
+    """Require an authenticated user satisfying ``predicate(user)`` for a view.
+
+    ``view`` may be ``async def`` when deployed under ``mangoo.asgi``: the
+    wrapper stays a coroutine function itself so the ASGI runtime awaits it
+    directly rather than running it in a thread.
+    """
+
+    def _authorize(request):
+        user = request_user(request, database_path)
+        if user is None:
+            return json_response({"detail": "Authentication required."}, 401)
+        if not predicate(user):
+            return json_response({"detail": message}, 403)
+        return None
+
     def decorate(view):
+        if inspect.iscoroutinefunction(view):
+
+            @wraps(view)
+            async def protected(request):
+                rejection = _authorize(request)
+                return rejection if rejection is not None else await view(request)
+
+            return protected
+
         @wraps(view)
         def protected(request):
-            user = request_user(request, database_path)
-            if user is None:
-                return json_response({"detail": "Authentication required."}, 401)
-            if not predicate(user):
-                return json_response({"detail": message}, 403)
-            return view(request)
+            rejection = _authorize(request)
+            return rejection if rejection is not None else view(request)
+
         return protected
+
     return decorate
 
 

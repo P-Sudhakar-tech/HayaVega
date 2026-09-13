@@ -1,5 +1,8 @@
 """Mangoo collection syntax with a Rust-native implementation when available."""
+
 from __future__ import annotations
+
+from typing import Any
 
 try:
     from mangoo_native import MangoList as _NativeMangoList
@@ -9,6 +12,7 @@ except ImportError:
 
 class _FallbackMangoList(list):
     """Compatibility implementation used until the optional Rust extension is built."""
+
     def __repr__(self) -> str:
         return f"mango_list({list(self)!r})"
 
@@ -19,6 +23,6 @@ class _FallbackMangoList(list):
 MangoList = _NativeMangoList or _FallbackMangoList
 
 
-def mango_list(items=()) -> MangoList:
+def mango_list(items=()) -> Any:
     """Create a Rust-backed sequence, or a behavior-compatible fallback."""
     return MangoList(items)

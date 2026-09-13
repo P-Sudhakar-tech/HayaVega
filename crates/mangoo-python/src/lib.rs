@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
 
-use mangoo_core::{JsonValue, MangoList as CoreMangoList};
+use mangoo_core::{JsonValue, MangoList as CoreMangoList, TemplateExpr, TemplateNode};
 
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
@@ -57,6 +57,129 @@ fn serialize_json(value: Bound<'_, PyAny>) -> PyResult<String> {
     Ok(to_json_value(&value)?.encode())
 }
 
+/// Benchmark-only: renders `benchmarks/mangoo_app/templates/page.html`'s exact
+/// output for a list of (title, views) rows, as a best-case stand-in for a
+/// native Rust template engine. Not used by the framework's real template
+/// path (`mangoo.templates`) -- see `benchmarks/native_functions.py`.
+#[pyfunction]
+fn render_post_list_page(posts: Vec<(String, i64)>) -> String {
+    mangoo_core::render_post_list_page(&posts)
+}
+
+/// Benchmark-only: renders the exact compact `<ul><li>...</li>...</ul>`
+/// output `mangoo.ui`'s `ul(*(li(...) for ...))` component builders produce
+/// for a list of (title, views) rows -- a hand-compiled, best-case stand-in
+/// for a native Rust renderer of one specific htmx-swapped fragment shape.
+/// See `benchmarks/native_htmx_fragment.py`.
+#[pyfunction]
+fn render_fragment_items(items: Vec<(String, i64)>) -> String {
+    mangoo_core::render_fragment_items(&items)
+}
+
+/// Benchmark-only: mirrors `mangoo.asgi`'s request-header decoding
+/// (lowercase ASGI byte-pairs -> Title-Case string pairs).
+#[pyfunction]
+fn decode_request_headers(headers: Vec<(Vec<u8>, Vec<u8>)>) -> Vec<(String, String)> {
+    mangoo_core::decode_request_headers(&headers)
+}
+
+/// Benchmark-only: mirrors `mangoo.asgi`'s response-header encoding
+/// (string pairs -> lowercase ASGI byte-pairs). Returns real `bytes` objects
+/// (not lists of ints) so the output is usable as an actual ASGI header list.
+#[pyfunction]
+fn encode_response_headers<'py>(py: Python<'py>, headers: Vec<(String, String)>) -> Vec<(Bound<'py, PyBytes>, Bound<'py, PyBytes>)> {
+    mangoo_core::encode_response_headers(&headers).into_iter().map(|(name, value)| (PyBytes::new_bound(py, &name), PyBytes::new_bound(py, &value))).collect()
+}
+
+fn wire_error(message: &str) -> PyErr {
+    pyo3::exceptions::PyValueError::new_err(format!("malformed template wire format: {message}"))
+}
+
+fn wire_tag<'py>(tuple: &Bound<'py, PyTuple>) -> PyResult<String> {
+    tuple.get_item(0)?.extract()
+}
+
+fn wire_to_expr(value: &Bound<'_, PyAny>) -> PyResult<TemplateExpr> {
+    let tuple = value.downcast::<PyTuple>().map_err(|_| wire_error("expected an expression tuple"))?;
+    match wire_tag(tuple)?.as_str() {
+        "lit" => Ok(TemplateExpr::Literal(to_json_value(&tuple.get_item(1)?)?)),
+        "path" => Ok(TemplateExpr::Path(tuple.get_item(1)?.extract()?)),
+        "not" => Ok(TemplateExpr::Not(Box::new(wire_to_expr(&tuple.get_item(1)?)?))),
+        "cmp" => Ok(TemplateExpr::Compare(Box::new(wire_to_expr(&tuple.get_item(1)?)?), tuple.get_item(2)?.extract()?, Box::new(wire_to_expr(&tuple.get_item(3)?)?))),
+        "bool" => {
+            let op: String = tuple.get_item(1)?.extract()?;
+            let operands = tuple.get_item(2)?;
+            let operands = operands.downcast::<PyTuple>().map_err(|_| wire_error("expected a tuple of boolean operands"))?;
+            Ok(TemplateExpr::BoolOp(op, operands.iter().map(|item| wire_to_expr(&item)).collect::<PyResult<Vec<_>>>()?))
+        }
+        other => Err(wire_error(&format!("unknown expression tag {other:?}"))),
+    }
+}
+
+fn wire_to_node(value: &Bound<'_, PyAny>) -> PyResult<TemplateNode> {
+    let tuple = value.downcast::<PyTuple>().map_err(|_| wire_error("expected a node tuple"))?;
+    match wire_tag(tuple)?.as_str() {
+        "text" => Ok(TemplateNode::Text(tuple.get_item(1)?.extract()?)),
+        "var" => Ok(TemplateNode::Variable(wire_to_expr(&tuple.get_item(1)?)?)),
+        "if" => {
+            let branches = tuple.get_item(1)?;
+            let branches = branches.downcast::<PyTuple>().map_err(|_| wire_error("expected a tuple of if-branches"))?;
+            let branches = branches
+                .iter()
+                .map(|branch| {
+                    let branch = branch.downcast::<PyTuple>().map_err(|_| wire_error("expected an (condition, body) branch tuple"))?;
+                    let condition_item = branch.get_item(0)?;
+                    let condition = if condition_item.is_none() { None } else { Some(wire_to_expr(&condition_item)?) };
+                    Ok((condition, wire_to_nodes(&branch.get_item(1)?)?))
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            Ok(TemplateNode::If(branches))
+        }
+        "for" => Ok(TemplateNode::For { var_name: tuple.get_item(1)?.extract()?, iterable: wire_to_expr(&tuple.get_item(2)?)?, body: wire_to_nodes(&tuple.get_item(3)?)? }),
+        other => Err(wire_error(&format!("unknown node tag {other:?}"))),
+    }
+}
+
+fn wire_to_nodes(value: &Bound<'_, PyAny>) -> PyResult<Vec<TemplateNode>> {
+    let tuple = value.downcast::<PyTuple>().map_err(|_| wire_error("expected a tuple of nodes"))?;
+    tuple.iter().map(|item| wire_to_node(&item)).collect()
+}
+
+/// Render a template compiled to `mangoo.templates`'s wire tuple format (see
+/// `benchmarks/native_template_engine.py`) against a JSON-safe context.
+/// Decodes the wire tuples fresh on every call -- see `CompiledNativeTemplate`
+/// for the cached-decode alternative used to isolate that cost in the
+/// benchmark. Benchmark-only; not called from `mangoo.templates` today.
+#[pyfunction]
+fn render_compiled_template(nodes: Bound<'_, PyAny>, context: Bound<'_, PyAny>) -> PyResult<String> {
+    let template_nodes = wire_to_nodes(&nodes)?;
+    let context_value = to_json_value(&context)?;
+    Ok(mangoo_core::render_template_nodes(&template_nodes, &context_value))
+}
+
+/// Benchmark-only: a template whose wire tuples are decoded into Rust
+/// `TemplateNode`s exactly once (at construction, mirroring how
+/// `mangoo.templates` already caches a compiled template per file), so
+/// `render` only pays for context conversion and the actual interpretation
+/// -- isolating that cost from wire-decoding cost.
+#[pyclass(name = "CompiledNativeTemplate")]
+struct PyCompiledNativeTemplate {
+    nodes: Vec<TemplateNode>,
+}
+
+#[pymethods]
+impl PyCompiledNativeTemplate {
+    #[new]
+    fn new(nodes: Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Self { nodes: wire_to_nodes(&nodes)? })
+    }
+
+    fn render(&self, context: Bound<'_, PyAny>) -> PyResult<String> {
+        let context_value = to_json_value(&context)?;
+        Ok(mangoo_core::render_template_nodes(&self.nodes, &context_value))
+    }
+}
+
 #[pyclass(name = "MangoList")]
 struct PyMangoList {
     values: CoreMangoList<Py<PyAny>>,
@@ -103,20 +226,20 @@ impl PyMangoList {
 }
 
 /// One event delivery: a fixed subscriber snapshot plus the event to hand each of them.
-struct PulseJob {
+struct SignalJob {
     subscribers: Vec<Py<PyAny>>,
     event: Py<PyAny>,
 }
 
-fn run_pulse_job(job: PulseJob) {
+fn run_signal_job(job: SignalJob) {
     Python::with_gil(|py| {
         for subscriber in &job.subscribers {
             if let Err(error) = subscriber.call1(py, (job.event.clone_ref(py),)) {
                 // A subscriber failure must never stop later subscribers or the
                 // worker thread; log it the same way the Python fallback does.
                 if let Ok(logging) = py.import_bound("logging") {
-                    if let Ok(logger) = logging.call_method1("getLogger", ("mangoo.pulse",)) {
-                        let _ = logger.call_method1("error", (format!("Pulse subscriber failed: {error}"),));
+                    if let Ok(logger) = logging.call_method1("getLogger", ("mangoo.signals",)) {
+                        let _ = logger.call_method1("error", (format!("Signal subscriber failed: {error}"),));
                     }
                 }
             }
@@ -124,29 +247,29 @@ fn run_pulse_job(job: PulseJob) {
     });
 }
 
-/// A small persistent OS-thread pool that delivers Pulse events off the caller's thread.
+/// A small persistent OS-thread pool that delivers Signals events off the caller's thread.
 ///
 /// Jobs queue on a single channel shared by a fixed number of native worker
 /// threads (not Python's ``threading`` module), so delivery never blocks the
 /// publisher and never spawns a new thread per event.
-#[pyclass(name = "PulseDispatcher")]
-struct PyPulseDispatcher {
-    sender: Option<Sender<PulseJob>>,
+#[pyclass(name = "SignalDispatcher")]
+struct PySignalDispatcher {
+    sender: Option<Sender<SignalJob>>,
 }
 
 #[pymethods]
-impl PyPulseDispatcher {
+impl PySignalDispatcher {
     #[new]
     #[pyo3(signature = (workers=4))]
     fn new(workers: usize) -> Self {
-        let (sender, receiver) = channel::<PulseJob>();
+        let (sender, receiver) = channel::<SignalJob>();
         let receiver = Arc::new(Mutex::new(receiver));
         for _ in 0..workers.max(1) {
             let receiver = Arc::clone(&receiver);
             thread::spawn(move || loop {
-                let job = receiver.lock().expect("Pulse dispatcher queue lock was poisoned").recv();
+                let job = receiver.lock().expect("Signal dispatcher queue lock was poisoned").recv();
                 match job {
-                    Ok(job) => run_pulse_job(job),
+                    Ok(job) => run_signal_job(job),
                     Err(_) => break,
                 }
             });
@@ -158,9 +281,9 @@ impl PyPulseDispatcher {
     fn dispatch(&self, subscribers: Vec<Py<PyAny>>, event: Py<PyAny>) -> PyResult<()> {
         match &self.sender {
             Some(sender) => sender
-                .send(PulseJob { subscribers, event })
-                .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Pulse dispatcher workers are no longer running")),
-            None => Err(pyo3::exceptions::PyRuntimeError::new_err("Pulse dispatcher is closed")),
+                .send(SignalJob { subscribers, event })
+                .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Signal dispatcher workers are no longer running")),
+            None => Err(pyo3::exceptions::PyRuntimeError::new_err("Signal dispatcher is closed")),
         }
     }
 
@@ -175,7 +298,13 @@ fn mangoo_native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(normalize_path, module)?)?;
     module.add_function(wrap_pyfunction!(compile_selection, module)?)?;
     module.add_function(wrap_pyfunction!(serialize_json, module)?)?;
+    module.add_function(wrap_pyfunction!(render_post_list_page, module)?)?;
+    module.add_function(wrap_pyfunction!(render_fragment_items, module)?)?;
+    module.add_function(wrap_pyfunction!(decode_request_headers, module)?)?;
+    module.add_function(wrap_pyfunction!(encode_response_headers, module)?)?;
+    module.add_function(wrap_pyfunction!(render_compiled_template, module)?)?;
+    module.add_class::<PyCompiledNativeTemplate>()?;
     module.add_class::<PyMangoList>()?;
-    module.add_class::<PyPulseDispatcher>()?;
+    module.add_class::<PySignalDispatcher>()?;
     Ok(())
 }

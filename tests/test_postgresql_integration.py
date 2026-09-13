@@ -1,4 +1,5 @@
 """Opt-in integration coverage; set MANGOO_TEST_POSTGRES_* to run it."""
+
 import os
 import unittest
 

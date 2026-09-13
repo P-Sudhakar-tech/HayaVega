@@ -1,7 +1,7 @@
 import unittest
 from threading import Event
 
-from mangoo.addons.pulse import BUILTIN_EVENTS, PulseBus, PulseEvent
+from mangoo.addons.signals import BUILTIN_EVENTS, SignalBus, SignalEvent
 
 
 def _wait(event: Event, message: str) -> None:
@@ -9,23 +9,23 @@ def _wait(event: Event, message: str) -> None:
         raise AssertionError(message)
 
 
-class PulseAddonTests(unittest.TestCase):
+class SignalsAddonTests(unittest.TestCase):
     def test_addon_exposes_immutable_event_contract_and_reserved_names(self):
-        event = PulseEvent("auth.login_succeeded", actor_id=7, data={"method": "password"})
+        event = SignalEvent("auth.login_succeeded", actor_id=7, data={"method": "password"})
         self.assertIn(event.name, BUILTIN_EVENTS)
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017 -- frozen-dataclass mutation; exact type is a dataclasses implementation detail.
             event.name = "changed"
         with self.assertRaises(TypeError):
             event.data["method"] = "token"
 
     def test_event_rejects_sensitive_payload_keys(self):
         with self.assertRaises(ValueError):
-            PulseEvent("auth.login_succeeded", data={"password": "hunter2"})
+            SignalEvent("auth.login_succeeded", data={"password": "hunter2"})
         with self.assertRaises(ValueError):
-            PulseEvent("auth.session_created", data={"Token": "abc"})
+            SignalEvent("auth.session_created", data={"Token": "abc"})
 
     def test_bus_delivers_in_connection_order_without_blocking_the_caller(self):
-        bus, delivered, received = PulseBus(), Event(), []
+        bus, delivered, received = SignalBus(), Event(), []
 
         def first(event):
             received.append(("first", event.actor_id))
@@ -43,7 +43,7 @@ class PulseAddonTests(unittest.TestCase):
         self.assertFalse(bus.unsubscribe("auth.login_succeeded", first))
 
     def test_bus_isolates_subscriber_errors(self):
-        bus, delivered, received = PulseBus(), Event(), []
+        bus, delivered, received = SignalBus(), Event(), []
 
         def broken(event):
             raise RuntimeError("unavailable")
@@ -60,10 +60,10 @@ class PulseAddonTests(unittest.TestCase):
 
     def test_bus_rejects_invalid_event_names(self):
         with self.assertRaises(ValueError):
-            PulseBus().connect("not valid", lambda event: None)
+            SignalBus().connect("not valid", lambda event: None)
 
     def test_bus_delivers_to_many_subscribers_concurrently(self):
-        bus, workers, delivered = PulseBus(workers=3), 3, Event()
+        bus, workers, delivered = SignalBus(workers=3), 3, Event()
         seen = []
 
         def make_subscriber(index):
@@ -71,6 +71,7 @@ class PulseAddonTests(unittest.TestCase):
                 seen.append(index)
                 if len(seen) == workers:
                     delivered.set()
+
             return subscriber
 
         for index in range(workers):

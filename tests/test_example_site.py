@@ -34,3 +34,22 @@ class ExampleSiteTests(unittest.TestCase):
             sys.modules.pop("project.urls", None)
             sys.modules.pop("project.settings", None)
             sys.modules.pop("project", None)
+
+    def test_ui_demo_page_renders_components_and_the_add_item_fragment_endpoint_works(self):
+        example_root = Path(__file__).resolve().parents[1] / "example_site"
+        sys.path.insert(0, str(example_root))
+        try:
+            urls = importlib.import_module("project.urls")
+            page_route = next(route for route in urls.urlpatterns if route.pattern == "ui-demo")
+            page = page_route.view(None)
+            self.assertIn("mgo-btn", page.body)
+            self.assertIn('hx-post="/ui-demo/items"', page.body)
+
+            add_route = next(route for route in urls.urlpatterns if route.pattern == "ui-demo/items")
+            fragment = add_route.view(None)
+            self.assertIn("Item 3", fragment.body)
+        finally:
+            sys.path.remove(str(example_root))
+            sys.modules.pop("project.urls", None)
+            sys.modules.pop("project.settings", None)
+            sys.modules.pop("project", None)

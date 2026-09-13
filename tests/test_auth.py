@@ -4,6 +4,7 @@ import time
 import unittest
 from pathlib import Path
 
+from mangoo.audit import audit_events
 from mangoo.auth import (
     UserAlreadyExistsError,
     _totp_code,
@@ -16,8 +17,6 @@ from mangoo.auth import (
     revoke_session,
     verify_password,
 )
-from mangoo.audit import audit_events
-
 
 PASSWORD = "Correct-Horse-7!"
 

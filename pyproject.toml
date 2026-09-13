@@ -11,7 +11,7 @@ authors = [{name = "Mangoo contributors"}]
 dependencies = ["msgspec>=0.21,<0.22"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-cov>=5"]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.16", "mypy>=1.13"]
 
 [project.scripts]
 mangoo-admin = "mangoo.cli:main"
@@ -20,6 +20,9 @@ mangoo = "mangoo.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mangoo"]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
 
 [tool.pytest.ini_options]
 addopts = "--cov=mangoo --cov-report=term-missing"
@@ -33,3 +36,29 @@ omit = ["src/mangoo/__main__.py"]
 skip_covered = false
 show_missing = true
 fail_under = 85
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/mangoo"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+# mangoo_native is an optional, self-built Rust extension (see hatch_build.py)
+# with no type stubs of its own; psycopg/pymysql are optional PostgreSQL/MySQL
+# drivers (see db.py) not installed in the default dev/type-check environment.
+module = ["mangoo_native", "psycopg", "psycopg.*", "pymysql", "pymysql.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 320
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+    "E501", # Line length is a formatter concern here; a few deliberately long lines
+            # (an __all__ list, embedded HTML/JS template strings, a status-text dict)
+            # would only get worse if force-wrapped. `ruff format` still applies to
+            # everything else at the generous line-length above.
+]

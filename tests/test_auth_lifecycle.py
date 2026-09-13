@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from mangoo.audit import audit_events
 from mangoo.auth import (
     authenticate,
     authenticate_session,
@@ -17,8 +18,6 @@ from mangoo.auth import (
     rotate_session,
     verify_email,
 )
-from mangoo.audit import audit_events
-
 
 PASSWORD = "Correct-Horse-7!"
 NEW_PASSWORD = "Even-Better-9?"

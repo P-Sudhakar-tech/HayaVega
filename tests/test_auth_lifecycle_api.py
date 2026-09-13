@@ -10,7 +10,6 @@ from mangoo.runtime import create_application
 from mangoo.security import email_verified_required
 from mangoo.testing import TestClient
 
-
 PASSWORD = "Correct-Horse-7!"
 NEW_PASSWORD = "Even-Better-9?"
 

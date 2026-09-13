@@ -1,21 +1,63 @@
 """Temporary Python development runtime; replace the dispatcher with Rust incrementally."""
-from wsgiref.simple_server import make_server
 
-from .request import Request
-from .response import Response
-from .swagger import documentation_routes
-from .hardening import Hardening, HardeningOptions
 import logging
-from time import perf_counter
 import re
+import warnings
+from time import perf_counter
 from typing import TYPE_CHECKING
 from uuid import uuid4
+from wsgiref.simple_server import make_server
+
+from .hardening import Hardening, HardeningOptions
+from .request import Request
+from .response import Response, json_response
+from .swagger import documentation_routes
 
 if TYPE_CHECKING:
-    from .addons.pulse import PulseBus
+    from .addons.signals import SignalBus
+    from .metrics import MetricsRegistry
 
 LOGGER = logging.getLogger("mangoo.runtime")
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_STATUS_TEXT = {
+    200: "OK",
+    204: "No Content",
+    301: "Moved Permanently",
+    304: "Not Modified",
+    308: "Permanent Redirect",
+    400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "Not Found",
+    405: "Method Not Allowed",
+    413: "Payload Too Large",
+    415: "Unsupported Media Type",
+    429: "Too Many Requests",
+    500: "Internal Server Error",
+}
+
+
+def _error_response(route, exc: Exception, *, debug: bool) -> Response:
+    """Build a safe 500 response for an unhandled view exception.
+
+    Never includes the exception's message or any traceback detail --
+    only the exception's *type name* (e.g. ``"ValueError"``), which
+    carries no confidential content by itself. A connection error's
+    message routinely embeds the database host, port, and username it
+    tried; a settings-validation error can embed a secret's name; neither
+    should ever reach a client regardless of ``debug``. The full
+    exception, with traceback, is always logged server-side by the caller.
+    API routes (``api_route``) get the documented ``{"detail": string}``
+    JSON envelope with an added ``error_type``; ordinary page routes get
+    a small HTML page. ``debug`` only controls whether a developer hint to
+    check the server log is added -- it never changes what's exposed.
+    """
+    error_type = type(exc).__name__
+    if route is not None and route.is_api:
+        detail = {"detail": "Internal Server Error", "error_type": error_type}
+        return json_response(detail, 500)
+    hint = "<p>See the server log for details.</p>" if debug else ""
+    return Response(f"<h1>500 Internal Server Error</h1><p>Error type: {error_type}</p>{hint}", status=500)
 
 
 def create_application(
@@ -23,19 +65,29 @@ def create_application(
     *,
     hardening: HardeningOptions | None = None,
     debug: bool = False,
-    pulse: "PulseBus | None" = None,
+    signals: "SignalBus | None" = None,
+    pulse: "SignalBus | None" = None,
+    metrics: "MetricsRegistry | None" = None,
     api_title: str = "Mangoo API",
     api_version: str = "0.1.0",
 ):
     """Build the WSGI application for a route list.
 
     This is separated from ``serve`` so application behavior can be tested
-    without opening a network socket. ``pulse``, when given a ``PulseBus``,
+    without opening a network socket. ``signals``, when given a ``SignalBus``,
     publishes ``request.started``/``request.finished`` asynchronously so a
-    slow subscriber cannot add latency to the response. ``api_title`` and
-    ``api_version`` name the generated OpenAPI document at ``/openapi.json``;
-    set ``api_version`` to version your API independently of the package.
+    slow subscriber cannot add latency to the response. ``pulse`` is a
+    deprecated alias for ``signals``. ``metrics``, when
+    given a ``MetricsRegistry``, records one request-count and duration
+    observation per completed request, labeled by the matched route pattern;
+    pair it with ``mangoo.metrics.metrics_routes`` to expose ``/metrics``.
+    ``api_title`` and ``api_version`` name the generated OpenAPI document at
+    ``/openapi.json``; set ``api_version`` to version your API independently
+    of the package.
     """
+    if pulse is not None:
+        warnings.warn("`pulse=` is deprecated; use `signals=` instead.", DeprecationWarning, stacklevel=2)
+        signals = pulse if signals is None else signals
     route_list = [*urlpatterns]
     route_list.extend(documentation_routes(route_list, title=api_title, version=api_version))
     routes = {route.pattern: route for route in route_list}
@@ -56,8 +108,8 @@ def create_application(
         request = Request.from_wsgi(environ, read_body=size_rejection is None)
         incoming_id = request.headers.get("X-Request-Id", "")
         request_id = incoming_id if _REQUEST_ID.fullmatch(incoming_id) else uuid4().hex
-        if pulse is not None:
-            pulse.publish("request.started", data={"method": request.method, "path": request.path})
+        if signals is not None:
+            signals.publish("request.started", data={"method": request.method, "path": request.path})
         rejection = size_rejection or (hardening_layer.reject(request) if hardening_layer else None)
         preflight = hardening_layer.preflight(request) if hardening_layer else None
         if rejection is not None:
@@ -72,21 +124,23 @@ def create_application(
             try:
                 result = route.view(request)
                 response = result if isinstance(result, Response) else Response(str(result))
-            except Exception:
+            except Exception as exc:
                 LOGGER.exception("Unhandled request error path=%s", request.path)
-                response = Response("<h1>500 Internal Server Error</h1>" if not debug else "<h1>500 Internal Server Error</h1><pre>See server log for traceback.</pre>", status=500)
+                response = _error_response(route, exc, debug=debug)
         duration_ms = (perf_counter() - started_at) * 1000
-        if pulse is not None:
-            pulse.publish("request.finished", data={"method": request.method, "path": request.path, "status": response.status, "duration_ms": round(duration_ms, 2)})
+        if signals is not None:
+            signals.publish("request.finished", data={"method": request.method, "path": request.path, "status": response.status, "duration_ms": round(duration_ms, 2)})
+        extra_headers: tuple[tuple[str, str], ...] = ()
         if hardening_layer:
             response = hardening_layer.finalize(request, response, request_id=request_id, duration_ms=duration_ms)
         elif not any(name.lower() == "x-request-id" for name, _ in response.headers):
-            response = Response(response.body, status=response.status, content_type=response.content_type, headers=(*response.headers, ("X-Request-ID", request_id)))
-        status_text = {200: "OK", 204: "No Content", 301: "Moved Permanently", 304: "Not Modified", 308: "Permanent Redirect", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 413: "Payload Too Large", 415: "Unsupported Media Type", 429: "Too Many Requests", 500: "Internal Server Error"}.get(response.status, "OK")
+            extra_headers = (("X-Request-ID", request_id),)
+        if metrics is not None:
+            metrics.record(method=request.method, path=route.pattern if route is not None else "unmatched", status=response.status, duration_ms=duration_ms)
         payload = response.body if isinstance(response.body, bytes) else response.body.encode("utf-8")
         start_response(
-            f"{response.status} {status_text}",
-            [("Content-Type", response.content_type), ("Content-Length", str(len(payload))), *response.headers],
+            f"{response.status} {_STATUS_TEXT.get(response.status, 'OK')}",
+            [("Content-Type", response.content_type), ("Content-Length", str(len(payload))), *response.headers, *extra_headers],
         )
         return [payload]
 

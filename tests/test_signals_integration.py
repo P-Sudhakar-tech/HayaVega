@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from threading import Event
 
-from mangoo.addons.pulse import PulseBus
+from mangoo.addons.signals import SignalBus
 from mangoo.admin import admin_routes
 from mangoo.auth import create_session, create_superuser
 from mangoo.auth_api import auth_routes
@@ -14,7 +14,6 @@ from mangoo.routing import path
 from mangoo.runtime import create_application
 from mangoo.testing import TestClient
 
-
 PASSWORD = "Correct-Horse-7!"
 
 
@@ -23,9 +22,9 @@ def _wait(event: Event, message: str) -> None:
         raise AssertionError(message)
 
 
-class RuntimePulseTests(unittest.TestCase):
+class RuntimeSignalsTests(unittest.TestCase):
     def test_request_lifecycle_events_publish_without_blocking_the_response(self):
-        bus, started, finished_event, finished = PulseBus(), Event(), Event(), {}
+        bus, started, finished_event, finished = SignalBus(), Event(), Event(), {}
 
         def on_started(event):
             started.set()
@@ -36,7 +35,7 @@ class RuntimePulseTests(unittest.TestCase):
 
         bus.connect("request.started", on_started)
         bus.connect("request.finished", on_finished)
-        application = create_application([path("hello", lambda request: Response("hi"))], pulse=bus)
+        application = create_application([path("hello", lambda request: Response("hi"))], signals=bus)
         client = TestClient(application)
 
         response = client.get("/hello")
@@ -48,7 +47,7 @@ class RuntimePulseTests(unittest.TestCase):
         self.assertEqual(finished.get("path"), "/hello")
 
 
-class AuthApiPulseTests(unittest.TestCase):
+class AuthApiSignalsTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.database = Path(self.temporary_directory.name) / "users.sqlite3"
@@ -58,14 +57,11 @@ class AuthApiPulseTests(unittest.TestCase):
         self.temporary_directory.cleanup()
 
     def test_login_and_logout_publish_events(self):
-        bus = PulseBus()
-        signals = {
-            name: Event()
-            for name in ("auth.login_succeeded", "auth.login_failed", "auth.session_created", "auth.session_revoked")
-        }
+        bus = SignalBus()
+        signals = {name: Event() for name in ("auth.login_succeeded", "auth.login_failed", "auth.session_created", "auth.session_revoked")}
         for name, signal in signals.items():
             bus.connect(name, lambda event, signal=signal: signal.set())
-        client = TestClient(create_application(auth_routes(self.database, pulse=bus)))
+        client = TestClient(create_application(auth_routes(self.database, signals=bus)))
 
         client.post("/api/auth/login", json_data={"username": "admin", "password": "wrong-password"})
         _wait(signals["auth.login_failed"], "auth.login_failed was not published")
@@ -84,13 +80,13 @@ class AuthApiPulseTests(unittest.TestCase):
         _wait(signals["auth.session_revoked"], "auth.session_revoked was not published")
 
 
-class AdminPulseTests(unittest.TestCase):
+class AdminSignalsTests(unittest.TestCase):
     def test_admin_views_publish_admin_action(self):
         with tempfile.TemporaryDirectory() as temp:
             database = Path(temp) / "users.sqlite3"
             user = create_superuser(database, "admin", "admin@example.com", PASSWORD)
             token = create_session(database, user)
-            bus, actions, both_seen = PulseBus(), [], Event()
+            bus, actions, both_seen = SignalBus(), [], Event()
 
             def on_action(event):
                 actions.append(event.data["action"])
@@ -98,7 +94,7 @@ class AdminPulseTests(unittest.TestCase):
                     both_seen.set()
 
             bus.connect("admin.action", on_action)
-            client = TestClient(create_application(admin_routes(database, pulse=bus)))
+            client = TestClient(create_application(admin_routes(database, signals=bus)))
 
             client.get("/admin", headers={"Authorization": f"Bearer {token}"})
             client.get("/admin/users", headers={"Authorization": f"Bearer {token}"})
@@ -107,15 +103,13 @@ class AdminPulseTests(unittest.TestCase):
             self.assertEqual(sorted(actions), ["index_viewed", "users_viewed"])
 
 
-class MigrationPulseTests(unittest.TestCase):
+class MigrationSignalsTests(unittest.TestCase):
     def test_migration_applied_publishes_after_commit(self):
         with tempfile.TemporaryDirectory() as temp:
             root, database = Path(temp) / "migrations", Path(temp) / "data.sqlite3"
             root.mkdir()
-            (root / "0001_products.py").write_text(
-                "operations = ['CREATE TABLE products (id INTEGER PRIMARY KEY)']", encoding="utf-8"
-            )
-            bus, seen_history_rows, delivered = PulseBus(), [], Event()
+            (root / "0001_products.py").write_text("operations = ['CREATE TABLE products (id INTEGER PRIMARY KEY)']", encoding="utf-8")
+            bus, seen_history_rows, delivered = SignalBus(), [], Event()
 
             def on_applied(event):
                 connection = connect(database)
@@ -127,7 +121,7 @@ class MigrationPulseTests(unittest.TestCase):
                 delivered.set()
 
             bus.connect("migration.applied", on_applied)
-            applied = apply(database, [root], pulse=bus)
+            applied = apply(database, [root], signals=bus)
 
             self.assertEqual(applied, ["0001_products"])
             _wait(delivered, "migration.applied was not published")

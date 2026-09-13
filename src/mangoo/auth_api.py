@@ -1,8 +1,10 @@
 """Built-in JSON authentication endpoints backed by Mangoo's local auth store."""
+
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
+import warnings
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,13 +22,15 @@ from .auth import (
     revoke_session,
     verify_email,
 )
+from .hardening import parse_trusted_proxy_networks, resolve_client_ip
 from .response import json_response
 from .rest import api_route
 from .security import SESSION_COOKIE_NAME, cookie, csrf_protect, csrf_token_response, request_session_token, request_user
 from .swagger import ERROR_SCHEMA
 
 if TYPE_CHECKING:
-    from .addons.pulse import PulseBus
+    from .addons.signals import SignalBus
+    from .hardening import HardeningOptions
 
 
 MAIL_LOGGER = logging.getLogger("mangoo.auth.mail")
@@ -47,7 +51,13 @@ _SESSION_TOKEN_SCHEMA = {
 }
 _SESSION_SUMMARY_SCHEMA = {
     "type": "object",
-    "properties": {"id": {"type": "integer"}, "created_at": {"type": "string"}, "expires_at": {"type": "integer"}},
+    "properties": {
+        "id": {"type": "integer"},
+        "created_at": {"type": "string"},
+        "expires_at": {"type": "integer"},
+        "ip_address": {"type": ["string", "null"]},
+        "user_agent": {"type": ["string", "null"]},
+    },
 }
 
 
@@ -65,33 +75,48 @@ def auth_routes(
     database_path: str | Path,
     *,
     secure_cookies: bool = False,
-    pulse: "PulseBus | None" = None,
+    signals: SignalBus | None = None,
+    pulse: SignalBus | None = None,
     notify: Callable[[str, User, str], None] | None = None,
+    hardening: HardeningOptions | None = None,
 ):
     """Return REST routes for login, logout, password reset, email verification, and session management.
 
-    ``pulse``, when given a ``PulseBus``, publishes login and session events
-    after the database work that produced them has committed. ``notify``,
+    ``signals``, when given a ``SignalBus``, publishes login and session
+    events after the database work that produced them has committed.
+    ``pulse`` is a deprecated alias for ``signals``. ``notify``,
     when given a callable, is called as ``notify(kind, user, token)`` for
     ``"password_reset"`` and ``"email_verification"`` instead of the default,
-    which only logs the token -- pass your own to send real email.
+    which only logs the token -- pass your own to send real email. ``hardening``,
+    when given the same ``HardeningOptions`` passed to ``create_application``,
+    lets login recover the real client IP behind a trusted proxy instead of
+    the proxy's own address; without it, the immediate connection's address
+    is used. Every login and session records its IP address and user agent
+    (when known) in the audit log and on the session itself.
     """
+    if pulse is not None:
+        warnings.warn("`pulse=` is deprecated; use `signals=` instead.", DeprecationWarning, stacklevel=2)
+        signals = pulse if signals is None else signals
     notify = notify or log_mail_notifier
+    trust_proxy_headers = bool(hardening and hardening.trust_proxy_headers)
+    trusted_proxy_networks = parse_trusted_proxy_networks(hardening.trusted_proxy_ips) if hardening else ()
 
     def login(request):
         try:
             payload = request.json()
-            user = authenticate(database_path, payload["username"], payload["password"], payload.get("totp_code"))
+            client_ip = resolve_client_ip(request, trust_proxy_headers=trust_proxy_headers, trusted_proxy_networks=trusted_proxy_networks)
+            user_agent = request.headers.get("User-Agent") or None
+            user = authenticate(database_path, payload["username"], payload["password"], payload.get("totp_code"), ip_address=client_ip, user_agent=user_agent)
         except (KeyError, TypeError, ValueError):
             return json_response({"detail": "Invalid authentication request."}, 400)
         if user is None:
-            if pulse is not None:
-                pulse.publish("auth.login_failed")
+            if signals is not None:
+                signals.publish("auth.login_failed")
             return json_response({"detail": "Invalid credentials."}, 401)
-        token = create_session(database_path, user)
-        if pulse is not None:
-            pulse.publish("auth.login_succeeded", actor_id=user.id, data={"method": "totp" if payload.get("totp_code") else "password"})
-            pulse.publish("auth.session_created", actor_id=user.id)
+        token = create_session(database_path, user, ip_address=client_ip, user_agent=user_agent)
+        if signals is not None:
+            signals.publish("auth.login_succeeded", actor_id=user.id, data={"method": "totp" if payload.get("totp_code") else "password"})
+            signals.publish("auth.session_created", actor_id=user.id)
         return json_response(
             {"token": token, "token_type": "Bearer", "expires_in": DEFAULT_SESSION_SECONDS},
             headers=(cookie(SESSION_COOKIE_NAME, token, max_age=DEFAULT_SESSION_SECONDS, http_only=True, secure=secure_cookies),),
@@ -111,8 +136,8 @@ def auth_routes(
         token = request_session_token(request)
         if token:
             revoke_session(database_path, token)
-            if pulse is not None:
-                pulse.publish("auth.session_revoked", actor_id=user.id)
+            if signals is not None:
+                signals.publish("auth.session_revoked", actor_id=user.id)
         return json_response("", 204, headers=(cookie(SESSION_COOKIE_NAME, "", max_age=0, http_only=True, secure=secure_cookies),))
 
     def request_password_reset(request):
@@ -163,7 +188,7 @@ def auth_routes(
         user = request_user(request, database_path)
         if user is None:
             return json_response({"detail": "Authentication required."}, 401)
-        return json_response([{"id": s.id, "created_at": s.created_at, "expires_at": s.expires_at} for s in list_sessions(database_path, user)])
+        return json_response([{"id": s.id, "created_at": s.created_at, "expires_at": s.expires_at, "ip_address": s.ip_address, "user_agent": s.user_agent} for s in list_sessions(database_path, user)])
 
     @csrf_protect
     def revoke_other_sessions(request):
@@ -175,47 +200,72 @@ def auth_routes(
 
     return [
         api_route(
-            "api/auth/login", login, methods=("POST",),
+            "api/auth/login",
+            login,
+            methods=("POST",),
             request_schema={"type": "object", "properties": {"username": {"type": "string"}, "password": {"type": "string"}, "totp_code": {"type": "string"}}, "required": ["username", "password"]},
             responses={200: {"description": "Session created.", "schema": _SESSION_TOKEN_SCHEMA}, 401: {"description": "Invalid credentials.", "schema": ERROR_SCHEMA}},
         ),
         api_route(
-            "api/auth/csrf", lambda request: csrf_token_response(request, secure=secure_cookies), methods=("GET",),
+            "api/auth/csrf",
+            lambda request: csrf_token_response(request, secure=secure_cookies),
+            methods=("GET",),
             responses={200: {"description": "A CSRF token for the current session.", "schema": {"type": "object", "properties": {"csrf_token": {"type": "string"}}}}},
         ),
         api_route(
-            "api/auth/me", current_user, methods=("GET",), secured=True,
+            "api/auth/me",
+            current_user,
+            methods=("GET",),
+            secured=True,
             responses={200: {"description": "The authenticated user.", "schema": _USER_SCHEMA}},
         ),
         api_route(
-            "api/auth/logout", logout, methods=("POST",), secured=True,
+            "api/auth/logout",
+            logout,
+            methods=("POST",),
+            secured=True,
             responses={204: {"description": "Session revoked."}},
         ),
         api_route(
-            "api/auth/password-reset/request", request_password_reset, methods=("POST",),
+            "api/auth/password-reset/request",
+            request_password_reset,
+            methods=("POST",),
             request_schema={"type": "object", "properties": {"username": {"type": "string"}}, "required": ["username"]},
             responses={202: {"description": "Accepted regardless of whether the username exists, to avoid revealing valid accounts."}},
         ),
         api_route(
-            "api/auth/password-reset/confirm", confirm_password_reset, methods=("POST",),
+            "api/auth/password-reset/confirm",
+            confirm_password_reset,
+            methods=("POST",),
             request_schema={"type": "object", "properties": {"token": {"type": "string"}, "password": {"type": "string"}}, "required": ["token", "password"]},
             responses={204: {"description": "Password changed; every existing session was revoked."}, 400: {"description": "The token was invalid or expired, or the password did not meet policy.", "schema": ERROR_SCHEMA}},
         ),
         api_route(
-            "api/auth/email/verify/request", request_email_verification, methods=("POST",), secured=True,
+            "api/auth/email/verify/request",
+            request_email_verification,
+            methods=("POST",),
+            secured=True,
             responses={202: {"description": "A verification token was issued and passed to the configured notifier."}},
         ),
         api_route(
-            "api/auth/email/verify/confirm", confirm_email_verification, methods=("POST",),
+            "api/auth/email/verify/confirm",
+            confirm_email_verification,
+            methods=("POST",),
             request_schema={"type": "object", "properties": {"token": {"type": "string"}}, "required": ["token"]},
             responses={204: {"description": "Email verified."}, 400: {"description": "The token was invalid or expired.", "schema": ERROR_SCHEMA}},
         ),
         api_route(
-            "api/auth/sessions", sessions_view, methods=("GET",), secured=True,
+            "api/auth/sessions",
+            sessions_view,
+            methods=("GET",),
+            secured=True,
             responses={200: {"description": "The current user's active sessions.", "schema": {"type": "array", "items": _SESSION_SUMMARY_SCHEMA}}},
         ),
         api_route(
-            "api/auth/sessions/revoke-others", revoke_other_sessions, methods=("POST",), secured=True,
+            "api/auth/sessions/revoke-others",
+            revoke_other_sessions,
+            methods=("POST",),
+            secured=True,
             responses={200: {"description": "Every other session for this user was revoked.", "schema": {"type": "object", "properties": {"revoked": {"type": "integer"}}}}},
         ),
     ]

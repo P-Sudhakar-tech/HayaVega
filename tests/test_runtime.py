@@ -1,5 +1,5 @@
-import unittest
 import json
+import unittest
 
 from mangoo import Response, api_route, path
 from mangoo.runtime import create_application

@@ -11,7 +11,8 @@ class MvpPolishTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "hello.html").write_text("<h1>Hello {{ name }}</h1>", encoding="utf-8")
             self.assertEqual(render_template("hello.html", {"name": "<script>"}, directories=(directory,)), "<h1>Hello &lt;script&gt;</h1>")
-            with self.assertRaises(ValueError): render_template("../secret.html", directories=(directory,))
+            with self.assertRaises(ValueError):
+                render_template("../secret.html", directories=(directory,))
 
     def test_static_routes_serve_svg_and_block_traversal(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -39,9 +40,39 @@ class MvpPolishTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"ok": True})
 
-    def test_runtime_hides_traceback_and_logs_server_error(self):
-        app = create_application([path("broken", lambda request: 1 / 0)])
+    def test_runtime_shows_error_type_but_hides_message_and_traceback(self):
+        """The error type name alone (e.g. "ZeroDivisionError") carries no
+        confidential content and is shown to help a caller triage; the
+        exception's message and any traceback/file/line detail never
+        reach the client regardless of debug -- a connection error's
+        message routinely embeds a database host, port, and username, and
+        a settings error can embed a secret's name. The full exception,
+        with traceback, is always logged server-side instead."""
+
+        def broken(request):
+            raise ValueError("db password is hunter2 at host 10.0.0.5")
+
+        app = create_application([path("broken", broken)])
         with self.assertLogs("mangoo.runtime", "ERROR"):
             response = TestClient(app).get("/broken")
         self.assertEqual(response.status_code, 500)
-        self.assertNotIn("ZeroDivisionError", response.text)
+        self.assertIn("ValueError", response.text)
+        self.assertNotIn("hunter2", response.text)
+        self.assertNotIn("10.0.0.5", response.text)
+        self.assertNotIn("Traceback", response.text)
+        self.assertNotIn(__file__, response.text)
+
+    def test_api_route_error_returns_a_json_envelope_not_html(self):
+        from mangoo import api_route
+
+        def broken(request):
+            raise ValueError("db password is hunter2 at host 10.0.0.5")
+
+        app = create_application([api_route("broken", broken)])
+        with self.assertLogs("mangoo.runtime", "ERROR"):
+            response = TestClient(app).get("/broken")
+        self.assertEqual(response.status_code, 500)
+        body = response.json()
+        self.assertEqual(body["error_type"], "ValueError")
+        self.assertNotIn("hunter2", body["detail"])
+        self.assertNotIn("10.0.0.5", body["detail"])

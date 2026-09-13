@@ -1,17 +1,48 @@
 """Opt-in production HTTP hardening for Mangoo's WSGI runtime."""
+
 from __future__ import annotations
 
+import logging
+import time
 from collections import OrderedDict, deque
 from dataclasses import dataclass, replace
-import logging
 from ipaddress import ip_address, ip_network
 from threading import Lock
-import time
 
 from .response import Response
 
-
 LOGGER = logging.getLogger("mangoo.audit")
+
+
+def parse_trusted_proxy_networks(trusted_proxy_ips):
+    """Parse ``TRUSTED_PROXY_IPS``-style values into ``ip_network`` objects."""
+    try:
+        return tuple(ip_network(value, strict=False) for value in trusted_proxy_ips)
+    except ValueError as error:
+        raise ValueError("Trusted proxy IPs must be IP addresses or CIDR networks.") from error
+
+
+def is_trusted_proxy_source(remote_addr: str, trusted_proxy_networks) -> bool:
+    if not trusted_proxy_networks:
+        return False
+    try:
+        source = ip_address(remote_addr)
+    except ValueError:
+        return False
+    return any(source in network for network in trusted_proxy_networks)
+
+
+def resolve_client_ip(request, *, trust_proxy_headers: bool, trusted_proxy_networks) -> str:
+    """Return the request's client IP, honoring ``X-Forwarded-For`` only from a configured trusted proxy.
+
+    Shared by request hardening and login/session tracking so both trust the
+    same boundary: an untrusted or unconfigured proxy can never spoof a
+    client IP via a forwarded header.
+    """
+    client = request.remote_addr or "unknown"
+    if trust_proxy_headers and is_trusted_proxy_source(client, trusted_proxy_networks):
+        return request.headers.get("X-Forwarded-For", "").split(",", 1)[0].strip() or client
+    return client
 
 
 @dataclass(frozen=True)
@@ -46,11 +77,12 @@ class HardeningOptions:
 
 class RateLimiter:
     """Thread-safe, in-memory fixed-window request limiter for one process."""
+
     def __init__(self, limit: int, window_seconds: int, max_clients: int = 10_000):
         if limit < 1 or window_seconds < 1 or max_clients < 1:
             raise ValueError("Rate limit, window, and max_clients must be positive integers.")
         self.limit, self.window_seconds, self.max_clients = limit, window_seconds, max_clients
-        self._requests = OrderedDict()
+        self._requests: OrderedDict[str, deque[float]] = OrderedDict()
         self._lock = Lock()
 
     def _prune(self, now: float) -> None:
@@ -91,22 +123,17 @@ class RateLimiter:
 
 class Hardening:
     """Validate requests and decorate responses using a single policy object."""
+
     def __init__(self, options: HardeningOptions):
         self.options = options
         self.limiter = RateLimiter(options.rate_limit, options.rate_window_seconds, options.rate_limit_max_clients)
         try:
-            self._trusted_proxy_networks = tuple(ip_network(value, strict=False) for value in options.trusted_proxy_ips)
+            self._trusted_proxy_networks = parse_trusted_proxy_networks(options.trusted_proxy_ips)
         except ValueError as error:
             raise ValueError("TRUSTED_PROXY_IPS must contain IP addresses or CIDR networks.") from error
 
     def _is_trusted_proxy(self, request) -> bool:
-        if not self.options.trust_proxy_headers or not self._trusted_proxy_networks:
-            return False
-        try:
-            source = ip_address(request.remote_addr)
-        except ValueError:
-            return False
-        return any(source in network for network in self._trusted_proxy_networks)
+        return self.options.trust_proxy_headers and is_trusted_proxy_source(request.remote_addr or "", self._trusted_proxy_networks)
 
     def reject_content_length(self, content_length: int) -> Response | None:
         if content_length > self.options.max_request_bytes:
@@ -117,10 +144,8 @@ class Hardening:
         host = request.headers.get("Host", "").split(":", 1)[0].lower()
         if self.options.allowed_hosts and "*" not in self.options.allowed_hosts and host not in self.options.allowed_hosts:
             return Response("<h1>400 Bad Request</h1>", status=400)
-        client = request.remote_addr or "unknown"
         trusted_proxy = self._is_trusted_proxy(request)
-        if trusted_proxy:
-            client = request.headers.get("X-Forwarded-For", "").split(",", 1)[0].strip() or client
+        client = resolve_client_ip(request, trust_proxy_headers=self.options.trust_proxy_headers, trusted_proxy_networks=self._trusted_proxy_networks)
         if not self.limiter.allow(client):
             return Response("<h1>429 Too Many Requests</h1>", status=429, headers=(("Retry-After", str(self.options.rate_window_seconds)),))
         forwarded_scheme = request.headers.get("X-Forwarded-Proto", "").lower()
@@ -159,7 +184,12 @@ class Hardening:
         if request_id and "x-request-id" not in existing:
             headers.append(("X-Request-ID", request_id))
         LOGGER.info(
-            "request id=%s method=%s path=%s status=%s duration_ms=%.2f", request_id, request.method, request.path, response.status, duration_ms or 0,
+            "request id=%s method=%s path=%s status=%s duration_ms=%.2f",
+            request_id,
+            request.method,
+            request.path,
+            response.status,
+            duration_ms or 0,
             extra={"request_id": request_id, "method": request.method, "path": request.path, "status": response.status, "duration_ms": duration_ms or 0},
         )
         return replace(response, headers=tuple(headers))

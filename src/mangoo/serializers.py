@@ -1,10 +1,12 @@
 """Schema-driven API presentation backed by msgspec JSON encoding."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import date, datetime
-import msgspec
 from typing import Any
+
+import msgspec
 
 
 class SerializationError(ValueError):
@@ -25,6 +27,7 @@ def _plain(value: Any) -> Any:
 
 class Serializer:
     """Validate external data and present entities without coupling to transport code."""
+
     fields: dict[str, type | tuple[type, ...]] = {}
 
     def __init__(self, fields: dict[str, type | tuple[type, ...]] | None = None):

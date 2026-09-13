@@ -10,3 +10,17 @@ htmlcov/
 
 # Rust build output; Cargo.lock is versioned, the compiled artifacts are not.
 /target/
+
+# Wheel/sdist build output.
+/dist/
+/build/
+*.egg-info/
+
+# Per-run benchmark server logs; RESULTS.md is the published artifact, these are not.
+/benchmarks/results/*_server.log
+
+# Generated on each run by native_template_engine.py; not meant to be committed.
+/benchmarks/native_template_engine_fixtures/
+
+# Personal editor config, not shared project configuration.
+/.vscode/

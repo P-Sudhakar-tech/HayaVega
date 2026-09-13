@@ -1,0 +1,12 @@
+.mgo-btn { display: inline-block; padding: 0.5em 1em; border: 1px solid transparent; border-radius: 0.25em; cursor: pointer; font: inherit; }
+.mgo-btn-primary { background: #2563eb; color: #fff; }
+.mgo-btn-secondary { background: #e5e7eb; color: #111827; }
+.mgo-alert-info { padding: 0.75em 1em; border-radius: 0.25em; background: #eff6ff; color: #1e3a8a; }
+.mgo-alert-success { padding: 0.75em 1em; border-radius: 0.25em; background: #ecfdf5; color: #065f46; }
+.mgo-alert-warning { padding: 0.75em 1em; border-radius: 0.25em; background: #fffbeb; color: #92400e; }
+.mgo-alert-error { padding: 0.75em 1em; border-radius: 0.25em; background: #fef2f2; color: #991b1b; }
+.mgo-card { border: 1px solid #e5e7eb; border-radius: 0.5em; padding: 1em; margin: 0.5em 0; }
+.mgo-field { margin: 0.5em 0; display: flex; flex-direction: column; gap: 0.25em; }
+.mgo-nav { display: flex; align-items: center; gap: 1em; padding: 0.75em 1em; border-bottom: 1px solid #e5e7eb; }
+.mgo-nav-brand { font-weight: 600; }
+.mgo-nav-link { color: #2563eb; text-decoration: none; }

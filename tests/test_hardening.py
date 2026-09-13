@@ -1,5 +1,5 @@
-import unittest
 import logging
+import unittest
 
 from mangoo import HardeningOptions, Response, path
 from mangoo.hardening import RateLimiter
@@ -9,9 +9,11 @@ from mangoo.runtime import create_application
 
 def call(application, request_path="/", *, method="GET", headers=None, remote_addr="127.0.0.1", scheme="http", content_length=None, query_string=""):
     captured = {}
+
     def start_response(status, response_headers):
         captured["status"] = status
         captured["headers"] = dict(response_headers)
+
     environ = {"PATH_INFO": request_path, "REQUEST_METHOD": method, "REMOTE_ADDR": remote_addr, "wsgi.url_scheme": scheme, "QUERY_STRING": query_string}
     if content_length is not None:
         environ["CONTENT_LENGTH"] = str(content_length)

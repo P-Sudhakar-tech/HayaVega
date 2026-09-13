@@ -1,10 +1,11 @@
 import unittest
 from types import SimpleNamespace
 
+from test_hardening import call
+
 from mangoo import health_routes
 from mangoo.production import ProductionConfigurationError, validate_production
 from mangoo.runtime import create_application
-from test_hardening import call
 
 
 class ProductionTests(unittest.TestCase):

@@ -1,9 +1,10 @@
 """Safe static-file routes for development and small deployments."""
+
 from __future__ import annotations
 
 import mimetypes
-from pathlib import Path
 from hashlib import sha256
+from pathlib import Path
 
 from .response import Response
 from .routing import path
@@ -15,6 +16,7 @@ def static_routes(directory: str | Path, prefix: str = "static", *, max_age: int
         raise ValueError("max_age cannot be negative")
     root = Path(directory).resolve()
     prefix = prefix.strip("/")
+
     def serve(request):
         relative = request.path.strip("/").removeprefix(prefix).lstrip("/")
         target = (root / relative).resolve()
@@ -28,4 +30,5 @@ def static_routes(directory: str | Path, prefix: str = "static", *, max_age: int
             return Response(b"", status=304, content_type=content_type, headers=headers)
         body = content.decode("utf-8") if content_type.startswith("text/") or content_type == "image/svg+xml" else content
         return Response(body, content_type=content_type, headers=headers)
+
     return [path(f"{prefix}/<path>", serve)]

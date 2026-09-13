@@ -1,9 +1,11 @@
 """Framework-neutral HTTP request object."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-import msgspec
 from urllib.parse import parse_qs
+
+import msgspec
 
 
 @dataclass(frozen=True)
@@ -28,14 +30,10 @@ class Request:
         return values
 
     @classmethod
-    def from_wsgi(cls, environ: dict, *, read_body: bool = True) -> "Request":
+    def from_wsgi(cls, environ: dict, *, read_body: bool = True) -> Request:
         content_length = int(environ.get("CONTENT_LENGTH") or 0)
-        body = environ.get("wsgi.input").read(content_length) if read_body and content_length else b""
-        headers = {
-            key[5:].replace("_", "-").title(): value
-            for key, value in environ.items()
-            if key.startswith("HTTP_")
-        }
+        body = environ["wsgi.input"].read(content_length) if read_body and content_length else b""
+        headers = {key[5:].replace("_", "-").title(): value for key, value in environ.items() if key.startswith("HTTP_")}
         if environ.get("CONTENT_TYPE"):
             headers["Content-Type"] = environ["CONTENT_TYPE"]
         return cls(
@@ -51,3 +49,7 @@ class Request:
 
     def json(self):
         return msgspec.json.decode(self.body)
+
+    def form(self) -> dict[str, str]:
+        """Parse an ``application/x-www-form-urlencoded`` body; last value wins per field."""
+        return {name: values[-1] for name, values in parse_qs(self.body.decode("utf-8")).items()}

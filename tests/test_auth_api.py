@@ -8,7 +8,6 @@ from mangoo.auth import create_superuser
 from mangoo.auth_api import auth_routes
 from mangoo.runtime import create_application
 
-
 PASSWORD = "Correct-Horse-7!"
 
 

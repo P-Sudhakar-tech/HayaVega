@@ -5,35 +5,58 @@ from getpass import getpass
 from mangoo.auth import UserAlreadyExistsError, create_superuser, enable_totp
 from mangoo.autoreload import run_with_reloader
 from mangoo.conf import load_settings
-from mangoo.runtime import serve
 from mangoo.hardening import HardeningOptions
-from mangoo.migrations import MigrationGenerationError, apply as apply_migrations, generate as generate_migration, status as migration_status
+from mangoo.migrations import MigrationGenerationError
+from mangoo.migrations import apply as apply_migrations
+from mangoo.migrations import generate as generate_migration
+from mangoo.migrations import status as lookup_migration_status
 from mangoo.production import ProductionConfigurationError, validate_production
+from mangoo.runtime import serve
+
+HELP_TEXT = "Commands: launch [port] [--noreload], newapp <name>, createadmin, enable2fa <username>, newmigration <app>, applymigrations, migrationstatus"
+
+# Django spells these runserver/startapp/createsuperuser/migrate/
+# makemigrations/showmigrations; Mangoo's own names below are distinct on
+# purpose. The Django names still work, unchanged, as deprecated aliases
+# rather than a hard break -- the same policy this project already applies
+# to `mangoo.addons.pulse`/`pulse=`.
+_DEPRECATED_ALIASES = {
+    "runserver": "launch",
+    "startapp": "newapp",
+    "createsuperuser": "createadmin",
+    "migrate": "applymigrations",
+    "makemigrations": "newmigration",
+    "showmigrations": "migrationstatus",
+}
 
 
 def execute_from_command_line(argv: list[str] | None = None) -> None:
     args = argv or sys.argv
     command = args[1] if len(args) > 1 else "help"
-    if command == "runserver":
-        _runserver(args)
-    elif command == "startapp" and len(args) == 3:
+    canonical = _DEPRECATED_ALIASES.get(command, command)
+    if canonical != command:
+        print(f"Warning: '{command}' is deprecated; use '{canonical}' instead.", file=sys.stderr)
+    if canonical == "launch":
+        _launch(args)
+    elif canonical == "newapp" and len(args) == 3:
         from mangoo.scaffold import startapp
+
         startapp(args[2])
-    elif command == "createsuperuser":
-        _create_superuser(args)
-    elif command == "enable2fa" and len(args) == 3:
+    elif canonical == "createadmin":
+        _createadmin(args)
+    elif canonical == "enable2fa" and len(args) == 3:
         _enable2fa(args[2])
-    elif command == "migrate":
-        _migrate()
-    elif command == "showmigrations":
-        _showmigrations()
-    elif command == "makemigrations" and len(args) == 3:
-        _makemigrations(args[2])
+    elif canonical == "applymigrations":
+        _applymigrations()
+    elif canonical == "migrationstatus":
+        _migrationstatus()
+    elif canonical == "newmigration" and len(args) == 3:
+        _newmigration(args[2])
     else:
-        print("Commands: runserver [port] [--noreload], startapp <name>, createsuperuser, enable2fa <username>, makemigrations <app>, migrate, showmigrations")
+        print(HELP_TEXT)
 
 
-def _runserver(args: list[str]) -> None:
+def _launch(args: list[str]) -> None:
     use_reloader = "--noreload" not in args
     if use_reloader and os.environ.get("MANGOO_RUN_MAIN") != "true":
         if os.environ.get("MANGOO_LAUNCH_MODE") == "module":
@@ -62,7 +85,7 @@ def _runserver(args: list[str]) -> None:
         print("\nMangoo development server stopped.")
 
 
-def _create_superuser(args: list[str], prompt=input, password_prompt=getpass) -> None:
+def _createadmin(args: list[str], prompt=input, password_prompt=getpass) -> None:
     settings = load_settings()
     username = prompt("Username: ").strip()
     email = prompt("Email address: ").strip()
@@ -90,23 +113,24 @@ def _enable2fa(username: str) -> None:
 
 
 def _migration_directories(settings) -> list:
-    directories = []
+    directories: list[str] = []
     for app in settings.installed_apps:
         module = __import__(app, fromlist=["__file__"])
-        if getattr(module, "__file__", None):
-            directories.append(os.path.join(os.path.dirname(module.__file__), "migrations"))
+        module_file = getattr(module, "__file__", None)
+        if module_file:
+            directories.append(os.path.join(os.path.dirname(module_file), "migrations"))
     return directories
 
 
-def _migrate() -> None:
+def _applymigrations() -> None:
     settings = load_settings()
     applied = apply_migrations(settings.database, _migration_directories(settings))
     print("Applied: " + ", ".join(applied) if applied else "No migrations to apply.")
 
 
-def _showmigrations() -> None:
+def _migrationstatus() -> None:
     settings = load_settings()
-    records = migration_status(settings.database, _migration_directories(settings))
+    records = lookup_migration_status(settings.database, _migration_directories(settings))
     if not records:
         print("No migrations found.")
         return
@@ -114,15 +138,19 @@ def _showmigrations() -> None:
         print(f"[{'X' if record.applied else ' '}] {record.name}")
 
 
-def _makemigrations(app: str) -> None:
+def _newmigration(app: str) -> None:
     settings = load_settings()
     if app not in settings.installed_apps:
         print(f"Error: {app!r} is not in INSTALLED_APPS.")
         return
     module = __import__(f"{app}.models", fromlist=["__file__"])
     app_module = __import__(app, fromlist=["__file__"])
+    app_module_file = getattr(app_module, "__file__", None)
+    if not app_module_file:
+        print(f"Error: {app!r} has no discoverable file path; cannot locate its migrations directory.")
+        return
     try:
-        generated = generate_migration(module, os.path.join(os.path.dirname(app_module.__file__), "migrations"), settings.database["ENGINE"])
+        generated = generate_migration(module, os.path.join(os.path.dirname(app_module_file), "migrations"), settings.database["ENGINE"])
     except MigrationGenerationError as error:
         print(f"Error: {error}")
         return

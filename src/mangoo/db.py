@@ -1,9 +1,10 @@
 """Pluggable DB-API database connections for Mangoo."""
+
 from __future__ import annotations
 
-from pathlib import Path
 import sqlite3
 from contextlib import contextmanager
+from pathlib import Path
 
 
 class DatabaseConfigurationError(ValueError):
@@ -85,8 +86,12 @@ def connect(database: str | Path | dict) -> Connection:
         except ImportError as error:
             raise DatabaseDriverError("PostgreSQL requires `uv add psycopg[binary]`.") from error
         raw = psycopg.connect(
-            dbname=config["NAME"], host=config.get("HOST", "localhost"), port=config.get("PORT", 5432),
-            user=config.get("USER"), password=config.get("PASSWORD"), row_factory=dict_row,
+            dbname=config["NAME"],
+            host=config.get("HOST", "localhost"),
+            port=config.get("PORT", 5432),
+            user=config.get("USER"),
+            password=config.get("PASSWORD"),
+            row_factory=dict_row,
         )
         return Connection(raw, "postgresql")
     if engine in {"mysql", "mariadb"}:
@@ -95,8 +100,12 @@ def connect(database: str | Path | dict) -> Connection:
         except ImportError as error:
             raise DatabaseDriverError("MySQL/MariaDB requires `uv add pymysql`.") from error
         raw = pymysql.connect(
-            host=config.get("HOST", "localhost"), port=int(config.get("PORT", 3306)), user=config.get("USER"),
-            password=config.get("PASSWORD"), database=config["NAME"], cursorclass=pymysql.cursors.DictCursor,
+            host=config.get("HOST", "localhost"),
+            port=int(config.get("PORT", 3306)),
+            user=config.get("USER"),
+            password=config.get("PASSWORD"),
+            database=config["NAME"],
+            cursorclass=pymysql.cursors.DictCursor,
         )
         return Connection(raw, "mysql")
     raise DatabaseConfigurationError(f"Unsupported database engine: {engine}")
