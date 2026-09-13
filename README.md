@@ -100,6 +100,14 @@ DATABASES = {
 }
 ```
 
+### Connection pooling
+
+By default, every database call opens a new connection and closes it when done. `create_application(pool_connections=True)` (or `mangoo.db.enable_connection_pooling()` directly) reuses one connection per worker thread instead -- no other code changes needed, since it only changes what `connect()`/`Connection.close()` do internally.
+
+**Benchmark this for your own deployment before enabling it -- it is not a universal win.** It's a real, measured improvement under ASGI/uvicorn, but a real, measured ~10-15% *regression* under WSGI/waitress with SQLite specifically (many threads holding a persistent SQLite connection open under contention is itself slower than each opening and closing one quickly -- confirmed with a framework-free reproduction, not a guess). `benchmarks/mangoo_asgi_app/app.py` enables it; `benchmarks/mangoo_app/app.py` (WSGI) deliberately does not. See `INDUSTRY_LEADERSHIP_ROADMAP.md`'s "Connection pooling, attempted" section for the full numbers.
+
+Also unresolved: a pooled MySQL/PostgreSQL connection that the server drops after sitting idle is not detected or reconnected automatically -- restart worker processes periodically if this matters for your deployment.
+
 ## Migrations and transactions
 
 Mangoo uses small, ordered SQL migrations. Add a numbered file such as

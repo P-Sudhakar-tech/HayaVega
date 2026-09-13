@@ -26,7 +26,7 @@ from mangoo.asgi import create_asgi_application
 
 def build_application():
     seed()
-    return create_asgi_application(urlpatterns, api_title="Benchmark", api_version="1.0.0")
+    return create_asgi_application(urlpatterns, api_title="Benchmark", api_version="1.0.0", pool_connections=True)
 
 
 application = build_application()

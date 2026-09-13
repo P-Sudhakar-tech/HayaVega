@@ -7,34 +7,34 @@ See `benchmarks/README.md` for methodology, scope, and honest caveats before dra
 
 | Framework | Server | req/s | p50 (ms) | p90 (ms) | p99 (ms) | Success |
 |---|---|---:|---:|---:|---:|---:|
-| Mangoo | waitress (Windows substitute for gunicorn; see README) | 3950 | 6.77 | 11.77 | 15.68 | 100.0% |
-| FastAPI | uvicorn (its standard/idiomatic server) | 1964 | 14.53 | 17.88 | 30.46 | 100.0% |
-| Mangoo (ASGI) | uvicorn (same server as the FastAPI target, for an apples-to-apples transport comparison) | 2586 | 11.02 | 13.50 | 19.44 | 100.0% |
-| Django | waitress (Windows substitute for gunicorn; see README) | 1864 | 14.44 | 23.45 | 35.64 | 100.0% |
+| Mangoo | waitress (Windows substitute for gunicorn; see README) | 3680 | 7.10 | 12.52 | 17.93 | 100.0% |
+| FastAPI | uvicorn (its standard/idiomatic server) | 1863 | 15.15 | 18.17 | 31.56 | 100.0% |
+| Mangoo (ASGI) | uvicorn (same server as the FastAPI target, for an apples-to-apples transport comparison) | 2624 | 11.09 | 13.03 | 15.37 | 100.0% |
+| Django | waitress (Windows substitute for gunicorn; see README) | 1552 | 17.99 | 26.03 | 38.59 | 100.0% |
 
 ## db_list
 
 | Framework | Server | req/s | p50 (ms) | p90 (ms) | p99 (ms) | Success |
 |---|---|---:|---:|---:|---:|---:|
-| Mangoo | waitress (Windows substitute for gunicorn; see README) | 727 | 38.76 | 61.66 | 91.70 | 100.0% |
-| FastAPI | uvicorn (its standard/idiomatic server) | 727 | 40.36 | 51.07 | 67.73 | 100.0% |
-| Mangoo (ASGI) | uvicorn (same server as the FastAPI target, for an apples-to-apples transport comparison) | 864 | 35.14 | 39.26 | 50.21 | 100.0% |
-| Django | waitress (Windows substitute for gunicorn; see README) | 374 | 74.72 | 112.87 | 145.62 | 100.0% |
+| Mangoo | waitress (Windows substitute for gunicorn; see README) | 692 | 40.19 | 64.45 | 94.37 | 100.0% |
+| FastAPI | uvicorn (its standard/idiomatic server) | 721 | 40.72 | 51.60 | 69.05 | 100.0% |
+| Mangoo (ASGI) | uvicorn (same server as the FastAPI target, for an apples-to-apples transport comparison) | 905 | 32.98 | 35.72 | 42.94 | 100.0% |
+| Django | waitress (Windows substitute for gunicorn; see README) | 377 | 75.86 | 109.47 | 146.15 | 100.0% |
 
 ## template_render
 
 | Framework | Server | req/s | p50 (ms) | p90 (ms) | p99 (ms) | Success |
 |---|---|---:|---:|---:|---:|---:|
-| Mangoo | waitress (Windows substitute for gunicorn; see README) | 681 | 41.18 | 64.35 | 92.79 | 100.0% |
-| FastAPI | uvicorn (its standard/idiomatic server) | 766 | 38.29 | 49.76 | 59.66 | 100.0% |
-| Mangoo (ASGI) | uvicorn (same server as the FastAPI target, for an apples-to-apples transport comparison) | 808 | 37.58 | 43.34 | 49.92 | 100.0% |
-| Django | waitress (Windows substitute for gunicorn; see README) | 324 | 88.46 | 122.63 | 158.10 | 100.0% |
+| Mangoo | waitress (Windows substitute for gunicorn; see README) | 641 | 43.86 | 68.36 | 99.04 | 100.0% |
+| FastAPI | uvicorn (its standard/idiomatic server) | 764 | 38.52 | 49.16 | 61.56 | 100.0% |
+| Mangoo (ASGI) | uvicorn (same server as the FastAPI target, for an apples-to-apples transport comparison) | 840 | 35.67 | 38.87 | 43.13 | 100.0% |
+| Django | waitress (Windows substitute for gunicorn; see README) | 311 | 90.92 | 130.83 | 180.38 | 100.0% |
 
 ## static_file
 
 | Framework | Server | req/s | p50 (ms) | p90 (ms) | p99 (ms) | Success |
 |---|---|---:|---:|---:|---:|---:|
-| Mangoo | waitress (Windows substitute for gunicorn; see README) | 1388 | 20.01 | 28.39 | 35.25 | 100.0% |
-| FastAPI | uvicorn (its standard/idiomatic server) | 743 | 39.91 | 45.16 | 52.96 | 100.0% |
-| Mangoo (ASGI) | uvicorn (same server as the FastAPI target, for an apples-to-apples transport comparison) | 1156 | 24.86 | 27.91 | 34.42 | 100.0% |
-| Django | waitress (Windows substitute for gunicorn; see README) | 744 | 36.46 | 51.38 | 91.10 | 100.0% |
+| Mangoo | waitress (Windows substitute for gunicorn; see README) | 1506 | 19.70 | 27.63 | 35.38 | 100.0% |
+| FastAPI | uvicorn (its standard/idiomatic server) | 742 | 39.89 | 44.92 | 57.23 | 100.0% |
+| Mangoo (ASGI) | uvicorn (same server as the FastAPI target, for an apples-to-apples transport comparison) | 1209 | 24.54 | 27.41 | 31.53 | 100.0% |
+| Django | waitress (Windows substitute for gunicorn; see README) | 910 | 30.43 | 43.35 | 76.39 | 100.0% |
