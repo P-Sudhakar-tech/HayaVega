@@ -79,7 +79,10 @@ Mangoo's database layer accepts SQLite, PostgreSQL, MySQL, and MariaDB through D
 
 ```powershell
 uv add "psycopg[binary]"   # PostgreSQL
-uv add pymysql              # MySQL or MariaDB
+uv add pymysql cryptography # MySQL or MariaDB -- cryptography is required by
+                             # pymysql to authenticate against MySQL 8's
+                             # default caching_sha2_password plugin; every
+                             # connection fails without it
 ```
 
 Example PostgreSQL configuration:
@@ -131,6 +134,13 @@ Before starting with `DEBUG = False`, Mangoo requires a non-default
 `FORCE_HTTPS` and `SECURE_COOKIES`. Add `*health_routes(DATABASES['default'])`
 to your URL patterns to expose `GET /healthz` (liveness) and `GET /readyz`
 (database readiness) for your deployment platform.
+
+Run `python manage.py diagnose` (or `mango diagnose`) to catch the same
+class of issue *before* a deploy attempt fails on it: unsafe settings
+(`DEBUG` left on, a placeholder `SECRET_KEY`, a wildcard `ALLOWED_HOSTS`),
+deprecated Pulse-era API usage anywhere in your own project files, and
+pending migrations -- each finding names exactly where the problem is and
+what to do about it, e.g. "Set SECRET_KEY ... in project.settings."
 
 ## Rate limiting
 

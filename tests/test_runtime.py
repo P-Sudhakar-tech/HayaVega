@@ -42,6 +42,19 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(captured["status"], "404 Not Found")
         self.assertEqual(body, b"<h1>404 Not Found</h1>")
 
+    def test_debug_404_names_the_requested_path_and_lists_registered_routes(self):
+        app = create_application([path("health", lambda request: "ok")], debug=True)
+        _, body = call(app, "/missing/")
+        text = body.decode()
+        self.assertIn("/missing", text)
+        self.assertIn("/health", text)
+
+    def test_production_404_never_lists_registered_routes(self):
+        app = create_application([path("health", lambda request: "ok")], debug=False)
+        _, body = call(app, "/missing/")
+        self.assertEqual(body, b"<h1>404 Not Found</h1>")
+        self.assertNotIn(b"health", body)
+
     def test_application_serves_openapi_document_for_api_routes(self):
         app = create_application([api_route("api/health", lambda request: {"status": "ok"})])
         captured, body = call(app, "/openapi.json")

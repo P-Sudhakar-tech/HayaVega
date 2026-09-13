@@ -15,16 +15,17 @@ def validate_production(settings) -> None:
     """Reject known-unsafe settings before a non-debug server starts."""
     if getattr(settings, "debug", True):
         return
+    module_name = getattr(settings, "module_name", "your settings module")
     errors = []
     if not getattr(settings, "secret_key", "") or settings.secret_key in {"change-this-in-production", "changeme", "secret"}:
-        errors.append("SECRET_KEY must be a unique environment-provided value")
+        errors.append(f"SECRET_KEY must be a unique environment-provided value -- set SECRET_KEY in {module_name} (e.g. os.getenv('MANGOO_SECRET_KEY'))")
     if not getattr(settings, "allowed_hosts", ()) or "*" in settings.allowed_hosts:
-        errors.append("ALLOWED_HOSTS must list explicit production hosts")
+        errors.append(f"ALLOWED_HOSTS must list explicit production hosts -- set ALLOWED_HOSTS in {module_name} to your real domain(s)")
     security = getattr(settings, "security", {})
     if not security.get("FORCE_HTTPS", False):
-        errors.append("SECURITY['FORCE_HTTPS'] must be True")
+        errors.append(f"SECURITY['FORCE_HTTPS'] must be True -- set SECURITY['FORCE_HTTPS'] = True in {module_name}")
     if not security.get("SECURE_COOKIES", False):
-        errors.append("SECURITY['SECURE_COOKIES'] must be True")
+        errors.append(f"SECURITY['SECURE_COOKIES'] must be True -- set SECURITY['SECURE_COOKIES'] = True in {module_name}")
     if errors:
         raise ProductionConfigurationError("Unsafe production configuration: " + "; ".join(errors) + ".")
 

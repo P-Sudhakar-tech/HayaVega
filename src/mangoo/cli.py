@@ -22,6 +22,7 @@ def main(argv: list[str] | None = None) -> None:
     launch = commands.add_parser("launch", help="Start the development server.")
     launch.add_argument("port", type=int, nargs="?", default=8000)
     launch.add_argument("--noreload", action="store_true")
+    commands.add_parser("diagnose", help="Report unsafe settings, deprecated API usage, and pending migrations.")
     args = parser.parse_args(argv)
 
     if args.command in _DEPRECATED_ALIASES:
@@ -35,6 +36,12 @@ def main(argv: list[str] | None = None) -> None:
         if args.noreload:
             command_args.append("--noreload")
         execute_from_command_line(command_args)
+        return
+
+    if args.command == "diagnose":
+        from .management.commands import execute_from_command_line
+
+        execute_from_command_line(["mango", "diagnose"])
         return
 
     canonical = _DEPRECATED_ALIASES.get(args.command, args.command)

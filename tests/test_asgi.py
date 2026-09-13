@@ -57,6 +57,18 @@ class AsgiApplicationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.content, b"<h1>404 Not Found</h1>")
 
+    def test_debug_404_names_the_requested_path_and_lists_registered_routes(self):
+        app = create_asgi_application([path("health", lambda request: "ok")], debug=True)
+        response = AsyncTestClient(app).get("/missing/")
+        self.assertIn("/missing", response.text)
+        self.assertIn("/health", response.text)
+
+    def test_production_404_never_lists_registered_routes(self):
+        app = create_asgi_application([path("health", lambda request: "ok")], debug=False)
+        response = AsyncTestClient(app).get("/missing/")
+        self.assertEqual(response.content, b"<h1>404 Not Found</h1>")
+        self.assertNotIn(b"health", response.content)
+
     def test_wrong_method_returns_405_with_allow_header(self):
         app = create_asgi_application([path("", lambda request: Response("ok"))])
         response = AsyncTestClient(app).post("/")

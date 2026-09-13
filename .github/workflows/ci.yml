@@ -121,7 +121,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install Mangoo with test and MySQL dependencies
-        run: pip install -e ".[dev]" pymysql
+        # cryptography is required by pymysql to authenticate against MySQL
+        # 8's default caching_sha2_password auth plugin -- without it every
+        # connection attempt fails, real production use included, not just
+        # this job.
+        run: pip install -e ".[dev]" pymysql cryptography
         env:
           MANGOO_SKIP_NATIVE_BUILD: "1"
       - name: Run the opt-in MySQL/MariaDB integration test

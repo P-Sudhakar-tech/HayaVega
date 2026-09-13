@@ -48,3 +48,8 @@ class CliTests(unittest.TestCase):
             self.assertTrue((Path(directory) / "blog" / "views.py").is_file())
             self.assertIn("deprecated", stderr.getvalue())
             self.assertIn("newapp", stderr.getvalue())
+
+    @patch("mangoo.management.commands.execute_from_command_line")
+    def test_diagnose_forwards_to_execute_from_command_line(self, execute):
+        main(["diagnose"])
+        execute.assert_called_once_with(["mango", "diagnose"])

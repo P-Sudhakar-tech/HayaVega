@@ -4,16 +4,17 @@ from getpass import getpass
 
 from mangoo.auth import UserAlreadyExistsError, create_superuser, enable_totp
 from mangoo.autoreload import run_with_reloader
+from mangoo.checks import run_checks
 from mangoo.conf import load_settings
 from mangoo.hardening import HardeningOptions
-from mangoo.migrations import MigrationGenerationError
+from mangoo.migrations import MigrationGenerationError, migration_directories
 from mangoo.migrations import apply as apply_migrations
 from mangoo.migrations import generate as generate_migration
 from mangoo.migrations import status as lookup_migration_status
 from mangoo.production import ProductionConfigurationError, validate_production
 from mangoo.runtime import serve
 
-HELP_TEXT = "Commands: launch [port] [--noreload], newapp <name>, createadmin, enable2fa <username>, newmigration <app>, applymigrations, migrationstatus"
+HELP_TEXT = "Commands: launch [port] [--noreload], newapp <name>, createadmin, enable2fa <username>, newmigration <app>, applymigrations, migrationstatus, diagnose"
 
 # Django spells these runserver/startapp/createsuperuser/migrate/
 # makemigrations/showmigrations; Mangoo's own names below are distinct on
@@ -52,6 +53,8 @@ def execute_from_command_line(argv: list[str] | None = None) -> None:
         _migrationstatus()
     elif canonical == "newmigration" and len(args) == 3:
         _newmigration(args[2])
+    elif canonical == "diagnose":
+        _diagnose()
     else:
         print(HELP_TEXT)
 
@@ -112,25 +115,15 @@ def _enable2fa(username: str) -> None:
     print(f"Add this secret to an authenticator app: {secret}")
 
 
-def _migration_directories(settings) -> list:
-    directories: list[str] = []
-    for app in settings.installed_apps:
-        module = __import__(app, fromlist=["__file__"])
-        module_file = getattr(module, "__file__", None)
-        if module_file:
-            directories.append(os.path.join(os.path.dirname(module_file), "migrations"))
-    return directories
-
-
 def _applymigrations() -> None:
     settings = load_settings()
-    applied = apply_migrations(settings.database, _migration_directories(settings))
+    applied = apply_migrations(settings.database, migration_directories(settings))
     print("Applied: " + ", ".join(applied) if applied else "No migrations to apply.")
 
 
 def _migrationstatus() -> None:
     settings = load_settings()
-    records = lookup_migration_status(settings.database, _migration_directories(settings))
+    records = lookup_migration_status(settings.database, migration_directories(settings))
     if not records:
         print("No migrations found.")
         return
@@ -155,3 +148,16 @@ def _newmigration(app: str) -> None:
         print(f"Error: {error}")
         return
     print(f"Created {generated}" if generated else "No entities found; no migration created.")
+
+
+def _diagnose() -> None:
+    settings = load_settings()
+    messages = run_checks(settings)
+    if not messages:
+        print("No issues found.")
+        return
+    for message in messages:
+        print(message)
+    errors = sum(1 for message in messages if message.level == "error")
+    warnings_count = sum(1 for message in messages if message.level == "warning")
+    print(f"\n{errors} error(s), {warnings_count} warning(s).")

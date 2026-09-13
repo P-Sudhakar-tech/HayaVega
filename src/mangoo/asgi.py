@@ -18,6 +18,7 @@ work completely unmodified under either transport).
 from __future__ import annotations
 
 import asyncio
+import html
 import inspect
 import logging
 import re
@@ -38,6 +39,23 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger("mangoo.asgi")
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _available_routes_html(route_list) -> str:
+    """List registered route patterns for a debug-mode 404 page.
+
+    Computed once at application-build time, not per-request -- a 404's
+    actionable next step ("here's what *is* registered, check urlpatterns
+    for the one you meant") only costs anything when ``debug=True``, never
+    in production. Never enabled unless the application opted into
+    ``debug=True`` -- listing an app's own route patterns is standard
+    development-mode behavior (the same tradeoff Django's DEBUG 404 page
+    makes), not the kind of confidential system detail (credentials, host
+    info) `_error_response` above is careful to never expose regardless
+    of `debug`.
+    """
+    items = "".join(f"<li>/{html.escape(route.pattern)}</li>" for route in sorted(route_list, key=lambda route: route.pattern))
+    return f"<p>Registered routes:</p><ul>{items}</ul>" if items else ""
 
 
 def _error_response(route, exc: Exception, *, debug: bool) -> Response:
@@ -143,6 +161,7 @@ def create_asgi_application(
     routes = {route.pattern: route for route in route_list}
     wildcard_routes = [route for route in route_list if route.pattern.endswith("/<path>")]
     hardening_layer = Hardening(hardening) if hardening else None
+    available_routes_html = _available_routes_html(route_list) if debug else ""
 
     async def application(scope: dict, receive, send) -> None:
         if scope["type"] == "lifespan":
@@ -171,7 +190,8 @@ def create_asgi_application(
         elif preflight is not None:
             response = preflight
         elif route is None:
-            response = Response("<h1>404 Not Found</h1>", status=404)
+            not_found_body = f"<h1>404 Not Found</h1><p>No route matches '/{html.escape(requested)}'.</p>{available_routes_html}" if debug else "<h1>404 Not Found</h1>"
+            response = Response(not_found_body, status=404)
         elif request.method not in route.methods:
             response = Response("<h1>405 Method Not Allowed</h1>", status=405, headers=(("Allow", ", ".join(route.methods)),))
         else:

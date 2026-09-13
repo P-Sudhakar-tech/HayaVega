@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import os
 import re
 import warnings
 from collections.abc import Iterable
@@ -152,6 +153,23 @@ def _declared_columns(paths: Iterable[Path]) -> dict[str, dict[str, str]]:
     return tables
 
 
+def migration_directories(settings) -> list[str]:
+    """Return each installed app's ``migrations`` directory, in declaration order.
+
+    Shared by `manage.py applymigrations`/`migrationstatus`/`newmigration`
+    and the `diagnose` command's pending-migration check, so both walk
+    `settings.installed_apps` identically rather than maintaining two
+    copies of the same import-and-locate logic.
+    """
+    directories: list[str] = []
+    for app in settings.installed_apps:
+        module = __import__(app, fromlist=["__file__"])
+        module_file = getattr(module, "__file__", None)
+        if module_file:
+            directories.append(os.path.join(os.path.dirname(module_file), "migrations"))
+    return directories
+
+
 def discover(directories: Iterable[str | Path]) -> list[Migration]:
     """Load and validate ordered migration modules from one or more folders."""
     migrations: list[Migration] = []
@@ -246,13 +264,13 @@ def apply(database, directories: Iterable[str | Path], *, signals: SignalBus | N
         known = {migration.name for migration in migrations}
         missing = set(applied) - known
         if missing:
-            raise MigrationIntegrityError(f"Applied migration files are missing: {', '.join(sorted(missing))}")
+            raise MigrationIntegrityError(f"Applied migration files are missing: {', '.join(sorted(missing))}. Restore the missing file(s) from version control, or remove their rows from the mangoo_migrations table if the removal was intentional.")
         completed: list[str] = []
         for migration in migrations:
             checksum = applied.get(migration.name)
             if checksum is not None:
                 if checksum != migration.checksum:
-                    raise MigrationIntegrityError(f"Applied migration was altered: {migration.name}")
+                    raise MigrationIntegrityError(f"Applied migration was altered: {migration.name} ({migration.source}). An already-applied migration must never be edited -- revert {migration.source} to its applied contents, or write a new migration for the change instead.")
                 continue
             try:
                 with connection.atomic():
@@ -260,7 +278,7 @@ def apply(database, directories: Iterable[str | Path], *, signals: SignalBus | N
                         connection.execute(operation)
                     connection.execute("INSERT INTO mangoo_migrations (name, checksum) VALUES (?, ?)", (migration.name, migration.checksum))
             except Exception as error:
-                raise MigrationError(f"Migration {migration.name} failed: {error}") from error
+                raise MigrationError(f"Migration {migration.name} ({migration.source}) failed: {error}. Fix the operation in {migration.source} and re-run -- this migration was rolled back, no partial schema change was committed.") from error
             if signals is not None:
                 signals.publish("migration.applied", data={"name": migration.name})
             completed.append(migration.name)

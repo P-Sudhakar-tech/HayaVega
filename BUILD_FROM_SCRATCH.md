@@ -385,8 +385,11 @@ DATABASES = {
 ### MySQL or MariaDB
 
 ```powershell
-uv add pymysql
+uv add pymysql cryptography
 ```
+
+`cryptography` is required by `pymysql` to authenticate against MySQL 8's
+default `caching_sha2_password` plugin -- every connection fails without it.
 
 ```python
 DATABASES = {

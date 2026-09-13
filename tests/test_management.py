@@ -67,3 +67,30 @@ class ManagementTests(unittest.TestCase):
 
         for alias, canonical in _DEPRECATED_ALIASES.items():
             self.assertIn(canonical, HELP_TEXT, f"{alias!r} aliases {canonical!r}, which should be documented in HELP_TEXT")
+
+    @patch("mangoo.management.commands.load_settings")
+    def test_diagnose_reports_findings_and_a_summary_line(self, load_settings):
+        load_settings.return_value = SimpleNamespace(
+            module_name="project.settings",
+            debug=True,
+            secret_key="a-real-unique-secret",
+            allowed_hosts=("example.com",),
+            installed_apps=(),
+            security={"FORCE_HTTPS": True, "SECURE_COOKIES": True},
+            database={"ENGINE": "sqlite3", "NAME": Path(tempfile.gettempdir()) / "diagnose_test.sqlite3"},
+            base_dir=Path(tempfile.gettempdir()),
+        )
+        output = io.StringIO()
+        with redirect_stdout(output):
+            execute_from_command_line(["manage.py", "diagnose"])
+        text = output.getvalue()
+        self.assertIn("DEBUG is enabled", text)
+        self.assertIn("warning(s)", text)
+
+    @patch("mangoo.management.commands.run_checks", return_value=[])
+    @patch("mangoo.management.commands.load_settings")
+    def test_diagnose_reports_no_issues_when_clean(self, load_settings, run_checks):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            execute_from_command_line(["manage.py", "diagnose"])
+        self.assertIn("No issues found.", output.getvalue())

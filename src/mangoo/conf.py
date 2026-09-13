@@ -21,6 +21,7 @@ class ProjectSettings:
     server_host: str
     server_port: int
     security: dict
+    module_name: str = "project.settings"
 
     @property
     def database_path(self) -> Path:
@@ -39,10 +40,10 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
     default_database = databases.get("default", {})
     engine = str(default_database.get("ENGINE", "sqlite3")).lower()
     if engine not in {"sqlite", "sqlite3", "postgres", "postgresql", "mysql", "mariadb"}:
-        raise ValueError("DATABASES['default']['ENGINE'] must be sqlite3, postgresql, mysql, or mariadb.")
+        raise ValueError(f"{module.__name__}: DATABASES['default']['ENGINE'] must be sqlite3, postgresql, mysql, or mariadb -- got {engine!r}. Fix DATABASES['default']['ENGINE'] in {module.__name__}.")
     database_name = default_database.get("NAME")
     if not database_name:
-        raise ValueError("DATABASES['default']['NAME'] must be configured.")
+        raise ValueError(f"{module.__name__}: DATABASES['default']['NAME'] must be configured. Add a NAME entry to DATABASES['default'] in {module.__name__}.")
     database = dict(default_database)
     database["ENGINE"] = "sqlite3" if engine == "sqlite" else engine
     if engine in {"sqlite", "sqlite3"}:
@@ -52,7 +53,7 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
     server = getattr(module, "SERVER", {})
     port = server.get("PORT", 8000)
     if not isinstance(port, int) or not 1 <= port <= 65535:
-        raise ValueError("SERVER['PORT'] must be an integer between 1 and 65535.")
+        raise ValueError(f"{module.__name__}: SERVER['PORT'] must be an integer between 1 and 65535 -- got {port!r}. Fix SERVER['PORT'] in {module.__name__}.")
 
     return ProjectSettings(
         base_dir=base_dir,
@@ -66,4 +67,5 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
         server_host=server.get("HOST", "127.0.0.1"),
         server_port=port,
         security=dict(getattr(module, "SECURITY", {})),
+        module_name=module.__name__,
     )

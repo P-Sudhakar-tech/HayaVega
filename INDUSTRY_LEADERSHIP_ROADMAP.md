@@ -1,6 +1,6 @@
 # Mangoo industry-leadership roadmap
 
-## Status: in progress (August 2026) -- Pillar A (Signals) delivered; Pillar B Phase 1 (benchmark infrastructure) delivered with published results; linting/formatting from Pillar C delivered; Pillar B Phases 2-3 and the rest of Pillar C not started
+## Status: in progress (August 2026) -- Pillar A (Signals) delivered; Pillar B (Performance, phases 1-3 plus the ORM/runtime follow-ups) delivered with published results; Pillar C (Developer experience) delivered in full
 
 This is the next chapter after `UPCOMING_IMPROVEMENT_ROADMAP.md`, whose own
 scope ("convert the prototype into a safer, more deployable framework") is
@@ -701,16 +701,104 @@ Full writeup, including the exact failed attempts and why:
       `management/commands.py`) rather than suppressed. Same work as
       "Order 8b" in `UPCOMING_IMPROVEMENT_ROADMAP.md`, see Week 13 there
       for the full writeup.
-- [ ] Add a `manage.py check` / `mango check` diagnostics command
+- [x] Add a `manage.py check` / `mango check` diagnostics command
       (Django-style): proactively reports unsafe settings, deprecated API
       usage (including the Pulse-to-Signals alias above), and pending
-      migrations, before the developer hits them at runtime.
-- [ ] Write down an explicit error-message quality bar and apply it
+      migrations, before the developer hits them at runtime. **Delivered
+      as `diagnose`, not `check`** -- Django's own command is literally
+      called `check`, and this project had just finished renaming every
+      other command that collided with Django's naming (`runserver` ->
+      `launch`, `startproject` -> `newproject`, etc., all in
+      `management/commands.py`'s `_DEPRECATED_ALIASES`); adding a brand
+      new command that reintroduced the exact collision that work just
+      removed would have been inconsistent with its own stated purpose.
+      `src/mangoo/checks.py`'s `run_checks(settings)` returns
+      `CheckMessage` findings (level, message, actionable hint), most
+      severe first; wired into both `manage.py diagnose` and `mango
+      diagnose`. Checks three things a developer would otherwise only
+      discover at runtime: unsafe settings (`DEBUG` left on, a placeholder
+      `SECRET_KEY`, a wildcard or empty `ALLOWED_HOSTS`, `FORCE_HTTPS`/
+      `SECURE_COOKIES` off -- severity scaled by whether `DEBUG` is on,
+      matching `validate_production`'s existing judgment about what's
+      merely worth a warning in development versus a hard error in
+      production); deprecated Pulse-era API usage (a source-text scan for
+      `mangoo.addons.pulse`, `PulseBus`/`PulseEvent`/`PulseSubscriber`,
+      and `pulse=`, across the project's own `.py` files, skipping
+      `migrations/`/`.venv`/`.git`/etc.); and pending migrations (reusing
+      `migrations.status()`, the same function `migrationstatus` already
+      calls). 17 tests in `tests/test_checks.py`, plus CLI-level coverage
+      in `tests/test_management.py` and `tests/test_cli.py`. Verified
+      against the real scaffolded sample project, not just unit tests:
+      catches a real `DEBUG`/`SECRET_KEY` pair and a real injected
+      `from mangoo.addons.pulse import PulseBus` line, each with the
+      exact file it was found in.
+- [x] Write down an explicit error-message quality bar and apply it
       everywhere: file-and-line context plus an actionable next step, the
       standard `TemplateSyntaxError`, `GraphQLSyntaxError`, and the admin's
       form validation already meet -- extend it to routing 404s, settings
       validation, and migration errors, which don't consistently meet it
-      today.
+      today. **The standard, written down:** every error a developer (not
+      an anonymous HTTP client -- see the security fix below for that
+      boundary) can encounter should name *where* the problem is (a file,
+      a module, or as close to a line number as the error's own nature
+      allows) and *what to do next* in the same message, not just what
+      went wrong. Applied to the three named gaps:
+  - **Routing 404s** now name the requested path and, only when
+    `debug=True`, list every registered route pattern -- the same
+    tradeoff Django's own `DEBUG` 404 page makes (listing an app's own
+    route table is standard development-mode behavior, not the kind of
+    confidential system/credential detail the error-disclosure fix below
+    is careful to never expose regardless of `debug`). Computed once at
+    application-build time, not per request, so it costs nothing when
+    `debug=False` (the default) or when a route *does* match.
+    `src/mangoo/runtime.py`, `src/mangoo/asgi.py`.
+  - **Settings validation** (`conf.py`'s `load_settings` and
+    `production.py`'s `validate_production`) now names the exact settings
+    module (`ProjectSettings.module_name`, new field) in every message,
+    e.g. "Set SECRET_KEY to a unique, environment-provided value in
+    project.settings" instead of just "SECRET_KEY must be a unique
+    environment-provided value" -- a real settings module has no
+    meaningful "line number" to point at (these are runtime attribute
+    checks against an already-imported module, not a parse error), so the
+    module name is the honest equivalent of "file" here.
+  - **Migration errors** (`migrations.py`'s `apply()`) now include the
+    migration's source file path alongside its name, and each message
+    ends with a concrete instruction ("Fix the operation in
+    `<path>` and re-run", "revert `<path>` to its applied contents, or
+    write a new migration instead"). These are CLI/operator-facing
+    errors (raised by `manage.py applymigrations`, seen only by whoever
+    runs that command), so including the underlying database error's
+    message is appropriate and expected here -- a materially different
+    trust boundary than an HTTP response to an anonymous client, which is
+    exactly the distinction the error-disclosure fix below draws.
+  - Regression coverage: `tests/test_runtime.py`,
+    `tests/test_asgi.py` (`debug_404_names_the_requested_path_...`/
+    `production_404_never_lists_registered_routes` pairs, proving both
+    the improvement and its production-mode boundary), `tests/
+    test_conf.py`, `tests/test_production.py`, `tests/test_migrations.py`.
+- [x] **Found and fixed along the way, not originally scoped here: a real
+      confidential-data disclosure gap**, per direct user request to audit
+      every error path (API, code, connection, or otherwise) for
+      leaking system/database details. `graphql.py`'s resolver-exception
+      handler put a caught exception's raw message directly into the
+      client-facing GraphQL response, unconditionally -- a database
+      driver's connection-failure message routinely embeds the host,
+      port, and username it tried, which would have gone straight to any
+      GraphQL client. **Fixed:** `Schema(debug=False)` (new, default)
+      exposes only `error_type` (e.g. `"RuntimeError"`) to the client; the
+      full exception, with traceback, is always logged server-side.
+      `runtime.py`/`asgi.py`'s generic 500 handler was also inconsistent
+      (always HTML, even for `api_route`-marked JSON endpoints) --
+      unified into the documented `{"detail": string}` envelope with an
+      added `error_type` for API routes, plain HTML with `error_type` for
+      page routes, never the exception's message either way. One existing
+      test (`test_runtime_hides_traceback_and_logs_server_error`) had been
+      written to hide *even the exception type name* -- a stricter stance
+      than requested; updated it to the new, explicitly-requested
+      behavior rather than silently overriding a prior deliberate design
+      choice without saying so. Tracked in
+      `SECURITY_REVIEW_CHECKLIST.md`'s "Error disclosure" row with direct
+      test references.
 
 ## Sequencing
 
@@ -722,10 +810,19 @@ benchmarks~~ -- delivered, decision was "don't wire the native functions
 in" (see Phase 2 above).
 ~~Phase 3: ASGI support~~ -- delivered, with scope sign-off obtained first
 and benchmarked against FastAPI on the same server before being called done
-(see Phase 3 above). Next: the remaining Pillar C developer-experience
-items, with the full async/Rust runtime remaining deliberately unscheduled
--- ASGI support's benchmark data did not surface a bottleneck that would
-justify planning it.
+(see Phase 3 above).
+~~Pillar C: `diagnose` diagnostics command, the error-message quality
+bar (routing 404s, settings validation, migration errors), and the
+error-disclosure security fix found along the way~~ -- delivered, see
+Pillar C above.
+Remaining, deliberately unscheduled: a custom async/Rust HTTP runtime --
+ASGI support's benchmark data did not surface a bottleneck that would
+justify planning it; connection pooling for the last `template_render`
+gap on WSGI -- a real architecture change touching every caller of
+`mangoo.db.connect()`, not something to fold into a quick fix; a Tortoise
+ORM benchmark comparison -- new scope (an async-driver comparison app),
+requested but not started; dependency scanning and release automation
+(`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8c).
 
 ## Definition of done
 
