@@ -10,9 +10,13 @@ class UiRoutesTests(unittest.TestCase):
         self.client = TestClient(create_application(list(ui_routes())))
 
     def test_serves_mangoo_ui_js_with_correct_content_type(self):
+        """text/javascript, not the obsolete application/javascript -- the
+        current standard (RFC 9239), and fixed regardless of what the host
+        OS's own mimetypes database happens to say (see static.py's
+        _CONTENT_TYPE_OVERRIDES)."""
         response = self.client.get("/mangoo-ui/mangoo-ui.js")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.headers["Content-Type"], "application/javascript")
+        self.assertEqual(response.headers["Content-Type"], "text/javascript")
         self.assertIn("hx-get", response.text)
         self.assertIn("mgo-boost", response.text)
 
