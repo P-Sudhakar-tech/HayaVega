@@ -96,7 +96,14 @@ def generate(models_module, migrations_directory: str | Path, engine: str = "sql
         return None
     directory = Path(migrations_directory)
     directory.mkdir(parents=True, exist_ok=True)
-    existing = [path for path in directory.iterdir() if _MIGRATION_FILE.fullmatch(path.name)]
+    # Sorted by filename (so numerically, since names are zero-padded) --
+    # `_declared_columns` below must see each table's CREATE TABLE before any
+    # ALTER TABLE ADD COLUMN that follows it, or the added column is silently
+    # dropped. `Path.iterdir()` makes no ordering guarantee; unlike NTFS,
+    # ext4 does not happen to return entries in creation order, so this was
+    # silently broken on Linux (and any filesystem without that coincidence)
+    # while appearing to work on Windows.
+    existing = sorted((path for path in directory.iterdir() if _MIGRATION_FILE.fullmatch(path.name)), key=lambda path: path.name)
     if not existing:
         operations = [create_table_operation(entity, engine) for entity in sorted(entities, key=lambda item: item.__table__)]
         target = directory / "0001_initial.py"
@@ -219,7 +226,12 @@ def discover(directories: Iterable[str | Path]) -> list[Migration]:
 
 
 def _prepare_history(connection) -> None:
-    connection.execute("CREATE TABLE IF NOT EXISTS mangoo_migrations (name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+    # VARCHAR (not TEXT) for the primary key: MySQL cannot index a TEXT/BLOB
+    # column without an explicit prefix length. TIMESTAMP (not TEXT) for
+    # applied_at: MySQL rejects CURRENT_TIMESTAMP as a default on a non-
+    # temporal column type ("Invalid default value"). Both are accepted by
+    # SQLite (type affinity, not enforcement) and PostgreSQL unchanged.
+    connection.execute("CREATE TABLE IF NOT EXISTS mangoo_migrations (name VARCHAR(255) PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
 
 def _history(connection) -> dict[str, str]:

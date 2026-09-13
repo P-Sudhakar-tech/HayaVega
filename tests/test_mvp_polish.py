@@ -21,6 +21,23 @@ class MvpPolishTests(unittest.TestCase):
             self.assertEqual(TestClient(app).get("/assets/mark.svg").text, "<svg/>")
             self.assertEqual(TestClient(app).get("/assets/../../secret").status_code, 404)
 
+    def test_static_routes_serve_common_web_assets_with_a_fixed_content_type(self):
+        """These extensions get a fixed, standards-current content type
+        regardless of what the host OS's own mimetypes database says --
+        .js in particular resolves differently across machines depending on
+        OS-provided mime data (the Windows Registry, /etc/mime.types),
+        which previously made this framework's own behavior nondeterministic
+        across platforms for the exact same file."""
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "app.js").write_text("console.log(1);", encoding="utf-8")
+            Path(directory, "app.css").write_text("body{}", encoding="utf-8")
+            Path(directory, "data.json").write_text("{}", encoding="utf-8")
+            app = create_application(static_routes(directory, "assets"))
+            client = TestClient(app)
+            self.assertEqual(client.get("/assets/app.js").headers["Content-Type"], "text/javascript")
+            self.assertEqual(client.get("/assets/app.css").headers["Content-Type"], "text/css")
+            self.assertEqual(client.get("/assets/data.json").headers["Content-Type"], "application/json")
+
     def test_static_routes_serve_binary_assets_with_etag_and_cache_headers(self):
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "icon.png").write_bytes(b"\x89PNG\r\n\x1a\n")
