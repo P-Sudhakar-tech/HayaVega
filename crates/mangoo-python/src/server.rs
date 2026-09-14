@@ -15,13 +15,16 @@
 //! writing) around Python code that is unchanged and still owns all
 //! request-handling logic via the standard WSGI contract.
 //!
-//! No keep-alive: every connection is closed after one response, matching
-//! HTTP/1.0-style semantics even when speaking HTTP/1.1. This is a real,
-//! disclosed limitation (see `mangoo.rust_runtime`'s module docstring) --
-//! implementing pipelined keep-alive correctly needs more parsing/timeout
-//! machinery than this first version adds, and every benchmark scenario
-//! this project runs already treats connections as short-lived per `oha`'s
-//! default behavior on this suite's target endpoints.
+//! Real HTTP/1.1 keep-alive is implemented (a shared `BufReader` per
+//! connection, `Connection: keep-alive` by default, an idle-connection read
+//! timeout). Hardened against the well-known failure modes of a
+//! hand-written HTTP server: request smuggling via `Transfer-Encoding`/
+//! malformed `Content-Length`, response splitting via header injection,
+//! Slowloris (a per-request wall-clock deadline, not just a per-syscall
+//! one), and a single connection panicking permanently shrinking the
+//! worker pool. TLS termination and HTTP/2 are explicitly out of scope --
+//! a reverse proxy's job, not this server's, matching this project's own
+//! `DEPLOYMENT.md` guidance for `gunicorn`/`waitress`.
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -31,7 +34,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Applied to every connection, including idle time between keep-alive
 /// requests. Bounds how long a fixed-size worker thread can be pinned by a
@@ -40,6 +43,15 @@ use std::time::Duration;
 /// (`workers`) and stall every other client, since this server has no
 /// separate async I/O layer to hold idle connections without a thread.
 const CONNECTION_READ_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// A Slowloris-style attacker sends real bytes just slowly enough that
+/// each individual `read()` still completes inside `CONNECTION_READ_TIMEOUT`
+/// -- that per-syscall timeout resets on every successful read and never
+/// fires, so a client trickling one byte every 29 seconds would otherwise
+/// pin a worker thread indefinitely. This is a separate, wall-clock
+/// deadline for completing one whole request (headers plus body), checked
+/// independently of the socket-level timeout above.
+const REQUEST_READ_DEADLINE: Duration = Duration::from_secs(30);
 
 const MAX_HEADER_LINE: usize = 16 * 1024;
 const MAX_HEADERS: usize = 200;
@@ -88,6 +100,12 @@ fn read_request(reader: &mut BufReader<TcpStream>) -> Result<Option<ParsedReques
     if request_line.len() > MAX_HEADER_LINE {
         return Err("request line too long".to_string());
     }
+    // A request has now genuinely started (the idle-connection case above
+    // already returned). Everything from here must complete within
+    // REQUEST_READ_DEADLINE regardless of how many individual reads it
+    // takes -- the per-syscall socket timeout alone does not bound this,
+    // since it resets on every read that returns any data at all.
+    let deadline = Instant::now() + REQUEST_READ_DEADLINE;
     let request_line = request_line.trim_end();
     let mut parts = request_line.splitn(3, ' ');
     let method = parts.next().ok_or("malformed request line")?.to_string();
@@ -101,6 +119,9 @@ fn read_request(reader: &mut BufReader<TcpStream>) -> Result<Option<ParsedReques
 
     let mut headers = Vec::new();
     loop {
+        if Instant::now() > deadline {
+            return Err("request took too long to arrive (Slowloris-style deadline exceeded)".to_string());
+        }
         if headers.len() > MAX_HEADERS {
             return Err("too many headers".to_string());
         }
@@ -120,17 +141,53 @@ fn read_request(reader: &mut BufReader<TcpStream>) -> Result<Option<ParsedReques
         headers.push((name.trim().to_string(), value.trim().to_string()));
     }
 
-    let content_length: u64 = headers
-        .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
-        .map(|(_, value)| value.parse().unwrap_or(0))
-        .unwrap_or(0);
+    // Request-smuggling defense (RFC 7230 SS3.3.3): a request naming both
+    // `Content-Length` and `Transfer-Encoding` is exactly the ambiguity
+    // smuggling attacks exploit -- reject it outright rather than guessing
+    // which header a downstream proxy would honor.
+    let has_content_length = headers.iter().any(|(name, _)| name.eq_ignore_ascii_case("content-length"));
+    let transfer_encoding = headers.iter().find(|(name, _)| name.eq_ignore_ascii_case("transfer-encoding")).map(|(_, value)| value.to_ascii_lowercase());
+    if has_content_length && transfer_encoding.is_some() {
+        return Err("Content-Length and Transfer-Encoding must not both be present".to_string());
+    }
+    if let Some(encoding) = &transfer_encoding {
+        // Chunked request bodies are not decoded by this version. Reading
+        // zero bytes and continuing would leave the actual chunked body
+        // sitting unread in the stream, which is misparsed as the *next*
+        // request on a keep-alive connection -- the same desync class of
+        // bug smuggling attacks rely on. Rejecting outright (and the
+        // caller closing the connection, since the body's true end is
+        // unknown) is the safe behavior; any other unrecognized
+        // Transfer-Encoding is rejected for the same reason.
+        return Err(format!("Transfer-Encoding {encoding:?} is not supported by this server"));
+    }
+
+    let content_length: u64 = match headers.iter().find(|(name, _)| name.eq_ignore_ascii_case("content-length")) {
+        Some((_, value)) => value.trim().parse().map_err(|_| format!("malformed Content-Length: {value:?}"))?,
+        None => 0,
+    };
     if content_length > MAX_BODY_BYTES {
         return Err(format!("request body too large: {content_length} bytes"));
     }
     let mut body = vec![0u8; content_length as usize];
     if content_length > 0 {
-        reader.read_exact(&mut body).map_err(|e| e.to_string())?;
+        // Deliberately not a single `reader.read_exact(&mut body)`: a
+        // client trickling a few bytes at a time would let each
+        // underlying read succeed inside the per-syscall socket timeout
+        // forever, the same Slowloris pattern the header-reading loop
+        // above guards against -- so the body is read in a loop with its
+        // own deadline check instead.
+        let mut filled = 0usize;
+        while filled < body.len() {
+            if Instant::now() > deadline {
+                return Err("request body took too long to arrive (Slowloris-style deadline exceeded)".to_string());
+            }
+            let read_now = reader.read(&mut body[filled..]).map_err(|e| e.to_string())?;
+            if read_now == 0 {
+                return Err("connection closed while reading the request body".to_string());
+            }
+            filled += read_now;
+        }
     }
 
     Ok(Some(ParsedRequest { method, path, query, version, headers, body }))
@@ -228,7 +285,20 @@ fn build_environ<'py>(py: Python<'py>, request: &ParsedRequest, host: &str, port
     Ok(environ)
 }
 
+/// A header name or value containing a bare CR or LF could inject extra
+/// header lines -- or, with a blank line, a forged second response --
+/// into the stream (HTTP response splitting). A WSGI application's own
+/// `start_response` call is exactly where an unsanitized value (e.g.
+/// reflecting request input into a header) could introduce one, so this
+/// server -- not just the application -- must be the backstop.
+fn contains_crlf(value: &str) -> bool {
+    value.contains('\r') || value.contains('\n')
+}
+
 fn write_response(stream: &mut TcpStream, status: &str, headers: &[(String, String)], body: &[u8], keep_alive: bool) -> std::io::Result<()> {
+    if contains_crlf(status) || headers.iter().any(|(name, value)| contains_crlf(name) || contains_crlf(value)) {
+        return write_response(stream, "500 Internal Server Error", &[("Content-Type".to_string(), "text/plain".to_string())], b"500 Internal Server Error: a response header contained a CR or LF byte", false);
+    }
     let mut out = Vec::with_capacity(body.len() + 256);
     out.extend_from_slice(b"HTTP/1.1 ");
     out.extend_from_slice(status.as_bytes());
@@ -346,7 +416,24 @@ pub fn serve_wsgi(py: Python<'_>, application: Py<PyAny>, host: String, port: u1
             handles.push(thread::spawn(move || {
                 while !shutdown.load(Ordering::Relaxed) {
                     match listener.accept() {
-                        Ok((stream, _addr)) => handle_connection(stream, &application, &host, port),
+                        Ok((stream, _addr)) => {
+                            // A panic anywhere in handle_connection (an
+                            // unexpected bug, not any of the error paths
+                            // above, which all return normally) must not
+                            // take the whole worker thread down with it --
+                            // Rust threads don't restart, so that would
+                            // permanently shrink the pool by one for the
+                            // rest of the process's life. The GIL guard
+                            // inside handle_connection's `Python::with_gil`
+                            // call still releases the GIL correctly during
+                            // unwinding (its Drop impl runs regardless), so
+                            // catching here is safe, not just convenient.
+                            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handle_connection(stream, &application, &host, port)));
+                            if let Err(panic) = outcome {
+                                let message = panic.downcast_ref::<&str>().copied().or_else(|| panic.downcast_ref::<String>().map(String::as_str)).unwrap_or("<non-string panic payload>");
+                                eprintln!("mangoo rust runtime: a connection handler panicked and was recovered: {message}");
+                            }
+                        }
                         Err(_) => continue,
                     }
                 }

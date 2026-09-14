@@ -260,6 +260,82 @@ are all out of scope. This remains development/load-testing tooling
 replaces `gunicorn`/`waitress` for a real production deployment -- the
 same production-server guidance in `DEPLOYMENT.md` is unchanged.
 
+### Hardening pass: the known failure modes of a hand-written HTTP server, found and fixed
+
+Shipping a raw socket-facing server carries a well-known checklist of
+security/robustness gaps beyond "does it parse a normal request
+correctly." A dedicated audit against that checklist, done against the
+delivered server rather than assumed safe because the benchmark numbers
+looked good, found five real issues -- three of them exploitable
+correctness bugs, not just missing features.
+
+- [x] **HTTP request smuggling via `Transfer-Encoding: chunked`.** The
+      parser had no concept of chunked bodies: with no `Content-Length`
+      header, it read zero body bytes and returned a normal 200 --
+      leaving the actual chunked body sitting unread in the stream, where
+      it would be misparsed as the *start of the next request* on a
+      keep-alive connection. This is the textbook desync bug request
+      smuggling exploits, especially dangerous behind a reverse proxy that
+      disagrees with the backend about where one request ends. **Fixed:**
+      any `Transfer-Encoding` is rejected outright (501-shaped 400, the
+      caller closes the connection since the body's true end is unknown)
+      rather than guessed at.
+- [x] **The same desync bug via a malformed `Content-Length`.** A header
+      like `Content-Length: not-a-number` silently became `0`
+      (`.unwrap_or(0)`), again leaving whatever bytes the client actually
+      sent unread and misparsed as the next request. **Fixed:** a
+      malformed `Content-Length` is now a hard 400, connection closed.
+- [x] **`Content-Length` and `Transfer-Encoding` present together.** RFC
+      7230 SS3.3.3 treats this combination itself as the ambiguity
+      smuggling attacks exploit (which header does a downstream proxy
+      honor vs. this server?), independent of whether either value alone
+      looks valid. **Fixed:** rejected outright, regardless of content.
+- [x] **HTTP response splitting via header injection.** Response headers
+      (including any header value a WSGI application builds from request
+      input, e.g. reflecting a redirect target or a client-supplied label)
+      were written to the socket with no check for embedded CR/LF bytes.
+      A value containing them could inject extra header lines or, with a
+      blank line, forge a second response entirely. **Fixed:** every
+      status line and header name/value is scanned for `\r`/`\n` before
+      writing; any hit produces a safe generic 500 instead of writing the
+      tainted bytes. This server, not just the application, is now the
+      backstop -- proven with a real end-to-end test
+      (`tests/test_rust_runtime_hardening.py`) reflecting a
+      `%0d%0a`-carrying query parameter into a response header exactly
+      the way a real view might.
+- [x] **Slowloris.** The existing idle-connection read timeout resets on
+      *every* successful read, however small -- a client trickling one
+      byte every 29 seconds would keep each individual read inside the
+      30-second window forever, pinning a worker thread indefinitely.
+      **Fixed:** a separate wall-clock deadline for completing one whole
+      request (headers *and* body, read in an explicit loop rather than a
+      single `read_exact` for the same reason), checked independently of
+      the per-syscall socket timeout.
+- [x] **A single connection panicking permanently shrinking the worker
+      pool.** Rust threads do not restart after a panic; an unexpected bug
+      in one connection's handling would silently and permanently reduce
+      server capacity by one worker for the rest of the process's life.
+      **Fixed:** each connection is now handled inside
+      `std::panic::catch_unwind`, logged and recovered rather than taking
+      the thread down -- safe here because the GIL guard inside the
+      panicking code's `Python::with_gil` call still releases the GIL
+      correctly during unwinding (`Drop` runs regardless of unwind vs.
+      normal return).
+
+**Verified with real, adversarial-shaped requests over raw sockets, not
+just re-running the existing well-formed-request tests.**
+`tests/test_rust_runtime_hardening.py` sends deliberately malformed
+requests (both smuggling combinations, a malformed `Content-Length`, a
+CRLF-carrying reflected header) and asserts the server rejects each one
+safely, plus that a malformed request on one connection never corrupts a
+different, later connection, and that keep-alive genuinely serves
+multiple requests over one socket. 6 new tests, wired into the same
+`native-extension` CI job. **Re-benchmarked after all six fixes to confirm
+no performance cost:** two more full runs, still winning every scenario
+(1.37x-2.91x over `waitress`) with a 100% success rate -- the hardening
+checks (deadline comparisons, a CRLF scan over already-tiny header
+strings) are cheap enough to be within this benchmark's run-to-run noise.
+
 ## About `oha`
 
 [`oha`](https://github.com/hatoo/oha) is a Rust-based HTTP load generator,

@@ -1325,6 +1325,25 @@ specific workload shape.
 Full numbers, both bugs, and the scope-decision reasoning:
 [`benchmarks/README.md`](benchmarks/README.md#the-rust-runtime-vs-the-python-runtime-waitress).
 
+### Rust runtime hardening: a dedicated audit found five more real issues, three of them exploitable
+
+A follow-up request ("Rust runtime hardening") to audit the delivered
+server against the known failure-mode checklist for a hand-written HTTP
+server -- not just re-confirm the happy-path benchmark -- found five real
+gaps, three of them genuine security bugs (request smuggling via
+`Transfer-Encoding: chunked`, the same desync bug via a malformed
+`Content-Length`, and HTTP response splitting via unescaped header
+values), plus a Slowloris vulnerability and a worker-pool-shrinking panic
+risk. All five are fixed, covered by 6 new adversarial-request tests
+(`tests/test_rust_runtime_hardening.py`) that send deliberately malformed
+requests over raw sockets and assert safe rejection, and re-benchmarked
+afterward to confirm zero performance cost (still 1.37x-2.91x over
+`waitress`, 100% success both runs). TLS termination and HTTP/2 remain
+explicitly out of scope -- a reverse proxy's job, matching this project's
+own `gunicorn`/`waitress` production guidance. Full detail, all five
+issues explained, and the exact fix for each:
+[`benchmarks/README.md`](benchmarks/README.md#hardening-pass-the-known-failure-modes-of-a-hand-written-http-server-found-and-fixed).
+
 ## Definition of done
 
 Matching the standard already set in `UPCOMING_IMPROVEMENT_ROADMAP.md`, an
