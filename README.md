@@ -1,5 +1,7 @@
 # Mangoo
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Mangoo is an early, runnable experiment in a conventional, batteries-included project structure and automatic, interactive API documentation, backed by a Rust core.
 
 **A browsable documentation site** (tutorials, topic guides, a generated

@@ -4,6 +4,7 @@ site_url: https://mangoo-framework.readthedocs.io/
 repo_url: https://github.com/P-Sudhakar-tech/mangoo-framework
 repo_name: mangoo-framework
 edit_uri: edit/main/docs/
+copyright: Released under the <a href="https://github.com/P-Sudhakar-tech/mangoo-framework/blob/main/LICENSE">MIT License</a>.
 
 docs_dir: docs
 site_dir: site
