@@ -35,7 +35,7 @@ theme:
   font: false
   icon:
     repo: fontawesome/brands/github
-    logo: material/food-apple
+  logo: assets/logo.svg
   favicon: assets/favicon.svg
   features:
     - navigation.tabs

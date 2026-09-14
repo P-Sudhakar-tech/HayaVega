@@ -1,6 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <circle cx="16" cy="18" r="12" fill="#ff6f3c"/>
-  <ellipse cx="12" cy="14" rx="4" ry="3" fill="#ffab7a" opacity="0.6"/>
-  <path d="M16 6c1.5-2 4-3 6-2-1 2-3 3.5-5 4z" fill="#3a7d44"/>
-  <rect x="15" y="4" width="2" height="4" rx="1" fill="#6b4226"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Mangoo">
+  <defs>
+    <linearGradient id="mangoo-favicon-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ff6f3c"/>
+      <stop offset="100%" stop-color="#ffb347"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="12" fill="url(#mangoo-favicon-gradient)"/>
+  <path d="M12 34V16.6c0-1.1.9-2 2-2 .66 0 1.28.33 1.66.87L24 27.4l8.34-11.93c.38-.54 1-.87 1.66-.87 1.1 0 2 .9 2 2V34h-4V23.2l-6.13 8.77c-.38.53-.99.85-1.87.85s-1.49-.32-1.87-.85L16 23.2V34h-4z" fill="#ffffff"/>
 </svg>

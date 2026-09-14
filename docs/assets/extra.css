@@ -137,8 +137,15 @@ html, body {
   font-size: 0.82rem;
 }
 
-/* Logo mark in the nav */
-.md-header__button.md-logo img,
-.md-header__button.md-logo svg {
+/* Logo mark in the nav -- Material sizes a font-icon logo via its own
+   icon system by default; a custom <img> logo needs explicit width and
+   height here or it can render at zero size in some header states. */
+.md-header__button.md-logo,
+.md-header__button.md-logo img {
   height: 1.4rem;
+  width: 1.4rem;
+  display: inline-flex;
+}
+.md-header__button.md-logo img {
+  object-fit: contain;
 }
