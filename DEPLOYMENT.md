@@ -54,14 +54,20 @@ hypercorn project.asgi:application --workers 4 --bind 0.0.0.0:8000
 ```
 
 Views may be `async def` (awaited directly on the event loop) or ordinary
-synchronous functions (run via `asyncio.to_thread`, so every existing sync
-view -- and every existing `api_route`/`csrf_protect`/`login_required`
+synchronous functions (run via a dedicated worker-thread pool --
+`create_asgi_application(..., max_sync_workers=16)` by default, matching
+this guide's own `waitress --threads=16` -- so every existing sync view --
+and every existing `api_route`/`csrf_protect`/`login_required`
 view -- keeps working completely unmodified under ASGI with no migration
 required). [`benchmarks/README.md`](benchmarks/README.md#asgi-vs-fastapi)
 benchmarks Mangoo's ASGI transport against FastAPI on the same server
-(`uvicorn`) before recommending it for anything: it wins three of the four
-scenarios there, though none of those scenarios exercise the concurrent
-I/O that is the actual reason to choose ASGI over WSGI in a real project
+(`uvicorn`) before recommending it for anything: after fixing the default
+`asyncio.to_thread` event-loop-wide executor being sized for occasional
+CPU-bound offloading (`min(32, os.cpu_count() + 4)`, a real bottleneck
+under real concurrency) rather than a whole application's I/O-bound sync
+views, Mangoo (ASGI) wins or ties FastAPI on every scenario, though none of
+those scenarios exercise the concurrent I/O that is the actual reason to
+choose ASGI over WSGI in a real project
 with that shape of workload.
 
 ## Before deployment

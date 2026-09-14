@@ -7,7 +7,7 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Any, ClassVar
 
-from .db import connect, normalize_config
+from .db import connect, connect_readonly, normalize_config
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -259,7 +259,7 @@ class Selection:
 
     def fetch(self) -> list[Entity]:
         self.collection.prepare()
-        connection = connect(self.collection.database)
+        connection = connect_readonly(self.collection.database)
         try:
             rows = connection.execute(*self._sql()).fetchall()
             return [self.collection.entity(**dict(row)) for row in rows]
@@ -283,7 +283,7 @@ class Selection:
             if field not in self.collection.entity._columns:
                 raise EntityError(f"Unknown column: {field}")
         self.collection.prepare()
-        connection = connect(self.collection.database)
+        connection = connect_readonly(self.collection.database)
         try:
             columns = ", ".join(_identifier(field) for field in fields) if fields else "*"
             rows = connection.execute(*self._sql(columns)).fetchall()
@@ -303,7 +303,7 @@ class Selection:
 
     def total(self) -> int:
         self.collection.prepare()
-        connection = connect(self.collection.database)
+        connection = connect_readonly(self.collection.database)
         try:
             query, values = self._sql("COUNT(*) AS total")
             return int(connection.execute(query, values).fetchone()["total"])

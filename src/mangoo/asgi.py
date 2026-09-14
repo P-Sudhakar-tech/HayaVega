@@ -11,8 +11,8 @@ I/O (calling another service, awaiting a database driver's async API) that
 WSGI's one-thread-per-request model can't overlap as cheaply.
 
 Views may be ``async def`` (awaited directly on the event loop) or plain
-synchronous functions (run via ``asyncio.to_thread``, so existing sync views
-work completely unmodified under either transport).
+synchronous functions (run via a dedicated worker-thread pool, so existing
+sync views work completely unmodified under either transport).
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ import inspect
 import logging
 import re
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs
@@ -146,6 +147,7 @@ def create_asgi_application(
     api_title: str = "Mangoo API",
     api_version: str = "0.1.0",
     pool_connections: bool = False,
+    max_sync_workers: int = 16,
 ):
     """Build the ASGI application for a route list.
 
@@ -154,16 +156,40 @@ def create_asgi_application(
     ``runtime.create_application``, with identical behavior (request
     hardening, Signals events, metrics recording, OpenAPI/Swagger routes)
     -- only the transport differs. Pooling is thread-local and sync views
-    run via ``asyncio.to_thread``'s own worker threads, so each of those
-    threads gets its own reused connection across the requests it handles,
-    the same benefit WSGI's thread-per-request model gets. ``pulse``
-    is a deprecated alias for ``signals``, kept for parity with the WSGI path.
+    run via a dedicated worker-thread pool (see ``max_sync_workers`` below),
+    so each of those threads gets its own reused connection across the
+    requests it handles, the same benefit WSGI's thread-per-request model
+    gets. ``pulse`` is a deprecated alias for ``signals``, kept for parity
+    with the WSGI path.
+
+    ``max_sync_workers`` (default 16, matching this project's own documented
+    ``waitress --threads=16`` guidance in ``DEPLOYMENT.md``) sizes a
+    dedicated ``ThreadPoolExecutor`` that every synchronous view runs on,
+    instead of ``asyncio.to_thread``'s event-loop-wide default executor.
+    That default executor is sized ``min(32, os.cpu_count() + 4)`` --
+    tuned for occasional CPU-bound offloading, not for a whole
+    application's worth of concurrent I/O-bound sync views, and on a
+    modest machine (4 cores -> 8 workers) it becomes a real queuing
+    bottleneck under realistic concurrency well before the database or the
+    network does. An in-process microbenchmark for this
+    (``benchmarks/asgi_executor_sizing.py``) was tried first but proved too
+    noisy on this environment to trust on its own -- repeated runs
+    disagreed on which worker count won. The real evidence is the
+    HTTP-level before/after comparison in
+    ``benchmarks/README.md#asgi-vs-fastapi``: a real ``uvicorn`` server
+    under real ``oha`` load, run twice before and twice after this change,
+    which was large and consistent in every run (e.g. ``json_echo`` roughly
+    doubled). Benchmark your own deployment's concurrency and core count
+    before assuming 16 is right for it, the same standing advice
+    ``enable_connection_pooling()`` and ``DEPLOYMENT.md`` already give for
+    their own tunables.
     """
     if pulse is not None:
         warnings.warn("`pulse=` is deprecated; use `signals=` instead.", DeprecationWarning, stacklevel=2)
         signals = pulse if signals is None else signals
     if pool_connections:
         db.enable_connection_pooling()
+    sync_executor = ThreadPoolExecutor(max_workers=max_sync_workers, thread_name_prefix="mangoo-asgi-sync")
     route_list = [*urlpatterns]
     route_list.extend(documentation_routes(route_list, title=api_title, version=api_version))
     routes = {route.pattern: route for route in route_list}
@@ -174,6 +200,7 @@ def create_asgi_application(
     async def application(scope: dict, receive, send) -> None:
         if scope["type"] == "lifespan":
             await _handle_lifespan(receive, send)
+            sync_executor.shutdown(wait=False)
             return
         if scope["type"] != "http":
             raise ValueError(f"Mangoo's ASGI application only supports 'http' and 'lifespan' scopes, got {scope['type']!r}.")
@@ -207,7 +234,7 @@ def create_asgi_application(
                 if inspect.iscoroutinefunction(route.view):
                     result = await route.view(request)
                 else:
-                    result = await asyncio.to_thread(route.view, request)
+                    result = await asyncio.get_running_loop().run_in_executor(sync_executor, route.view, request)
                 response = result if isinstance(result, Response) else Response(str(result))
             except Exception as exc:
                 LOGGER.exception("Unhandled request error path=%s", request.path)

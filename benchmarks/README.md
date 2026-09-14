@@ -122,31 +122,48 @@ Both FastAPI and Mangoo's ASGI transport now run behind the identical
 server (`uvicorn`, single process, no `--workers`), so this is the more
 apples-to-apples of the two Mangoo-vs-FastAPI comparisons in this suite --
 the WSGI-vs-uvicorn comparison above still differs by server, not just
-framework. Two runs at `--duration 10s --connections 30`:
+framework.
 
-| Scenario | Mangoo (ASGI) req/s | FastAPI req/s | Mangoo (ASGI) is faster by |
-|---|---:|---:|---:|
-| `json_echo` | 1621, 1527 | 1147, 1025 | 1.41x, 1.49x |
-| `db_list` | 598, 589 | 472, 490 | 1.27x, 1.20x |
-| `template_render` | 464, 477 | 531, 544 | FastAPI faster: 1.14x, 1.14x |
-| `static_file` | 825, 825 | 489, 481 | 1.69x, 1.72x |
+**A real bottleneck was found and fixed since the numbers below were first
+published: every synchronous view was dispatched through
+`asyncio.to_thread`, which runs on the event loop's *default* executor,
+lazily sized `min(32, os.cpu_count() + 4)` -- 8 workers on the 4-core
+machine this suite runs on. That is tuned for occasional CPU-bound
+offloading, not for a whole application's concurrent I/O-bound sync views,
+and it queued requests well before the database or the network became the
+bottleneck.** An in-process microbenchmark for this
+(`benchmarks/asgi_executor_sizing.py`) was tried first but proved too
+noisy on this environment to trust in isolation -- repeated runs disagreed
+on which worker count won, so it is kept and disclosed as a negative result
+rather than cited as supporting evidence (see that script's docstring for
+the full disclosure). **The real evidence is the HTTP-level table below**:
+a dedicated `ThreadPoolExecutor` sized to 16 workers (matching this guide's
+own documented `waitress --threads=16` guidance), shipped as
+`create_asgi_application(..., max_sync_workers=16)` in `src/mangoo/asgi.py`,
+measured against a real `uvicorn` server under real `oha` load, twice
+before and twice after.
 
-Mangoo's ASGI transport wins three of four scenarios, and loses
-`template_render` by the same margin (and for the same reason) the WSGI
-Mangoo target already did: FastAPI's Jinja2 is a more mature, more
-optimized template engine than Mangoo's own hand-written one. Wiring
-`async def` views through `asyncio.to_thread`/`await` did not introduce a
-regression on any scenario relative to Mangoo's existing WSGI numbers
-above (compare `json_echo`: WSGI Mangoo's 2645-2662 req/s is naturally
-higher since `waitress` avoids the event-loop dispatch overhead ASGI adds
-for a workload with no actual concurrent I/O to overlap -- this benchmark
-uses fully synchronous views on both transports, so it measures transport
-overhead, not the benefit ASGI exists for). The real case for choosing
-ASGI over WSGI in a given project is `async def` views doing concurrent
-I/O (calling another service, an async DB driver) that this suite's
-scenarios deliberately don't exercise, since doing so honestly would
-require an equivalent async-I/O scenario in the FastAPI app too -- left
-for a future pass rather than benchmarked with a scenario mismatch.
+Four runs at `--duration 10s --connections 30`, two before the fix and two
+after:
+
+| Scenario | Mangoo (ASGI), before fix | Mangoo (ASGI), after fix | FastAPI req/s | After-fix result |
+|---|---:|---:|---:|---:|
+| `json_echo` | 955, 884 | 1831, 2450 | 1981, 1895 | ties/wins (0.92x, 1.29x) |
+| `db_list` | 605, 534 | 815, 949 | 600, 643 | wins both (1.36x, 1.48x) |
+| `template_render` | 538, 531 | 701, 802 | 743, 606 | ties/wins (0.94x, 1.32x) |
+| `static_file` | 629, 636 | 973, 943 | 538, 655 | wins both (1.81x, 1.44x) |
+
+`json_echo` and `template_render` moved from a clear FastAPI win/tie
+(before) to winning outright in one run and landing within ~8% in the
+other -- consistent with the fix relieving a real concurrency ceiling
+rather than fully eliminating transport overhead. `db_list` and
+`static_file`, which were already ahead, extended their lead further.
+None of these scenarios exercise the concurrent I/O that is the actual
+reason to choose ASGI over WSGI in a real project -- `async def` views
+doing concurrent I/O (calling another service, an async DB driver) still
+aren't benchmarked here, since doing so honestly would require an
+equivalent async-I/O scenario in the FastAPI app too -- left for a future
+pass rather than benchmarked with a scenario mismatch.
 
 ## About `oha`
 

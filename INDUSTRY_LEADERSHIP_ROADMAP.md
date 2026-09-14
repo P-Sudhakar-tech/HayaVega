@@ -723,6 +723,165 @@ disclosed here exactly as measured, both the win and the loss.
   point (many-threads-holding-SQLite-connections-open is itself a cost,
   not just neutral) for whoever picks up the WSGI gap next.
 
+### Read-only SQLite connections for pure reads: a real, shipped isolated win -- HTTP-level result unchanged, and consistent with the pattern above
+
+Connection pooling (above) was one specific idea for the WSGI `template_render`
+gap and it regressed WSGI. This is a different, narrower idea for the same
+gap, tried next: `Selection.fetch()`/`values()`/`total()` never write, so do
+they need a read-write connection at all? SQLite does extra bookkeeping on
+every statement over a read-write connection to guard against a concurrent
+writer (reserved/pending lock checks) that a connection opened read-only
+never needs to do.
+
+- [x] **Added `mangoo.db.connect_readonly()`**: for SQLite, opens
+      `file:<path>?mode=ro` (a URI-mode read-only connection) instead of a
+      plain read-write one; falls back to `connect()` if the read-only open
+      fails (in practice never reached, since every read call site runs
+      `Collection.prepare()` first, which always creates the file via a
+      normal `connect()` if missing) and for non-SQLite engines (no
+      equivalent tested here). Wired into `Selection.fetch()`, `values()`,
+      and `total()` only -- `Collection.append()`/`Selection.revise()`/
+      `erase()` are unaffected and keep using `connect()`. Unlike
+      `enable_connection_pooling()`, a connection opened here is still
+      opened and closed fresh on every call, never held open across
+      requests -- it does not reproduce the many-threads-holding-a-
+      connection-open contention that made pooling regress WSGI, because it
+      is a different mechanism (skip lock bookkeeping) rather than the same
+      mechanism (reuse the connection) applied more narrowly.
+- [x] **Benchmarked in isolation before wiring in anywhere, per this
+      document's own standing principle** (`benchmarks/sqlite_readonly_reads.py`):
+      through the *exact same* `Selection.values()` code path, with only the
+      connection function swapped via monkeypatch (so `prepare()`'s cache
+      lookup, `_sql()` building, and dict construction are identical in both
+      arms -- the connection is the only variable), for the same 20-row
+      query `benchmarks/mangoo_app/app.py` runs. Two full runs, single-
+      threaded and under 16-thread contention:
+
+  | Variant | Single-thread (run 1 / run 2) | 16-thread throughput (run 1 / run 2) |
+  |---|---:|---:|
+  | `values()` with `connect_readonly()` [shipped] | 1.4300 / 1.3986 ms/call | 3006 / 3084 calls/sec |
+  | `values()` with plain `connect()` [pre-change] | 1.7080 / 1.8473 ms/call | 2519 / 2532 calls/sec |
+  | Raw sqlite3, read-write connect (FastAPI-shaped) | 1.5273 / 1.3995 ms/call | 2834 / 3258 calls/sec |
+  | Raw sqlite3, read-only URI connect | 1.3938 / 1.1852 ms/call | 3643 / 3301 calls/sec |
+
+  **Result: a real, reproducible win at the ORM layer** -- `values()` with
+  `connect_readonly()` beat the identical code path on plain `connect()` by
+  16-24% single-threaded and 19-22% under contention, both runs, matching
+  the isolated raw-sqlite3 finding (read-only URI connect beats read-write
+  by a comparable margin on this environment) that motivated trying this in
+  the first place.
+- [x] **Verified against the real test suite, not just the isolated
+      benchmark:** `tests/test_models.py::test_repeated_fetches_do_not_reissue_create_table`
+      updated to spy on `connect_readonly` (the function `fetch()` now
+      actually calls) instead of `connect`, still asserting exactly one
+      connection per `fetch()` once a table is prepared. All 389 tests,
+      `ruff`, and `mypy` stay clean.
+- **Measured at the HTTP level (`waitress`, `oha -z 10s -c 30`, two paired
+  before/after runs): no measurable movement, within noise.** `db_list`:
+  786-820 req/s before, 807-821 req/s after. `template_render`: 665-666
+  req/s before, 635-672 req/s after. Both ranges overlap run-to-run noise
+  seen elsewhere in this document at the same settings.
+- **Why, and it is the same answer this document already reached for the
+  `_render_for`/`Collection.prepare()`/path-splitting fixes above:** the
+  saving this change recovers is a fraction of a millisecond of SQLite lock
+  bookkeeping inside a request whose *own* `sqlite3.connect()` +
+  `.execute()` already costs ~35-45ms end to end on this environment (the
+  "environment ceiling" finding earlier in this document). A sub-millisecond
+  saving is proportionally invisible against that floor, exactly like the
+  `Collection.prepare()` connection-count fix was before it.
+- **Ships regardless, on the same standing the `Collection.prepare()` fix
+  shipped on:** it is strictly less work for identical behavior on the read
+  path (a query that never writes no longer pays for write-lock bookkeeping
+  it never uses), it is unconditional (no new opt-in flag, no documented
+  asymmetry between transports the way connection pooling has), and the
+  isolated ORM-layer benchmark is real even though this specific HTTP
+  benchmark isn't sensitive enough to see it -- consistent with this
+  document's standard of shipping a proven-real, low-risk improvement on its
+  own merits rather than only on whether one specific benchmark moves.
+- **The WSGI `template_render` gap to FastAPI (~11%) remains open.** Every
+  idea tried against it so far -- connection pooling, the read-only
+  connection above -- has run into the same wall: the per-request SQLite
+  connection/query cost so dominates total request time on this environment
+  that neither a connection-reuse strategy nor a lock-bookkeeping reduction
+  registers at the HTTP level. Closing it further would need either a
+  change to the *environment* (a faster filesystem/lock path, which is
+  outside this project's control) or accepting a different request-handling
+  model entirely (e.g. batching several logical reads behind one connection
+  open per request rather than per query -- not attempted, not scoped).
+
+### ASGI's own concurrency ceiling: a real, large, reproducible fix -- and a benchmark that didn't hold up, disclosed rather than hidden
+
+Separately from the WSGI `template_render` gap above, a direct request
+("ASGI is also needed to be fast in all the scenarios") pointed at a gap in
+Mangoo's ASGI transport itself: it was trailing FastAPI (and sometimes
+Django) on `json_echo` even though that scenario does no database work at
+all -- a pure transport-overhead question, not the SQLite-cost question the
+WSGI gap already is.
+
+- [x] **Found: every synchronous view under ASGI was dispatched through
+      `asyncio.to_thread`**, which runs on `asyncio`'s event-loop-wide
+      *default* executor -- lazily created, sized
+      `min(32, os.cpu_count() + 4)`. On this project's 4-core dev machine
+      that is 8 worker threads, but `benchmarks/run.py` drives every
+      scenario at `oha -c 30` (30 concurrent connections). That sizing is
+      tuned for occasional CPU-bound offloading elsewhere in a program, not
+      for an entire web application's concurrent I/O-bound sync views, so
+      it queues requests well before the database, the template engine, or
+      the network becomes the real bottleneck -- a queuing ceiling with
+      nothing to do with view code speed.
+- [x] **Tried to verify with an isolated microbenchmark first, per this
+      document's own standing principle -- and it didn't hold up, disclosed
+      rather than discarded.** `benchmarks/asgi_executor_sizing.py`
+      simulates 30 concurrent "clients" hammering a trivial sync view
+      through the default executor versus a dedicated one. The first run
+      looked clean (8 workers ~7900 calls/sec, 16 ~9800, 32 and 64 worse
+      than the default) and shaped the initial write-up -- but five total
+      repeats disagreed on which worker count won each time. Rather than
+      keep the flattering first run's numbers, the script and its
+      docstring were corrected to disclose the non-reproducibility plainly:
+      this in-process simulation is too noisy on this environment to trust
+      as evidence on its own, most likely dominated by thread-creation/
+      scheduling noise at this call volume rather than measuring worker-
+      count itself.
+- [x] **The real evidence: a dedicated, explicitly-sized `ThreadPoolExecutor`**
+      (`create_asgi_application(..., max_sync_workers=16)`, default 16 to
+      match this project's own documented `waitress --threads=16` guidance)
+      replacing `asyncio.to_thread`'s shared default executor, in
+      `src/mangoo/asgi.py`. Measured at the HTTP level against a real
+      `uvicorn` server under real `oha -z 10s -c 30` load -- two full runs
+      before the fix, two full runs after:
+
+  | Scenario | Mangoo (ASGI), before | Mangoo (ASGI), after | FastAPI (same runs) |
+  |---|---:|---:|---:|
+  | `json_echo` | 955, 884 req/s | 1831, 2450 req/s | 1981, 1895 req/s |
+  | `db_list` | 605, 534 req/s | 815, 949 req/s | 600, 643 req/s |
+  | `template_render` | 538, 531 req/s | 701, 802 req/s | 743, 606 req/s |
+  | `static_file` | 629, 636 req/s | 973, 943 req/s | 538, 655 req/s |
+
+  **Result: large and consistent across both after-runs** -- `json_echo`
+  roughly doubled (and moved from a clear FastAPI win to a tie/win);
+  `db_list` and `static_file`, already ahead of FastAPI, extended their
+  lead further (up to 1.81x); `template_render`, previously Mangoo's one
+  loss on this transport, now ties or wins depending on the run. No
+  scenario regressed.
+- [x] **Verified safe, not just fast:** all 389 tests (including
+      `tests/test_asgi.py`'s 23 sync/async-composition tests), `ruff`, and
+      `mypy` stay clean. The executor is created once per
+      `create_asgi_application()` call and shut down on ASGI
+      `lifespan.shutdown` rather than leaked; sync views' behavior
+      (return value handling, exception-to-500 conversion, Signals/metrics
+      recording) is unchanged -- only which thread pool runs them changed.
+- **What this does not change:** none of these four scenarios exercise the
+  concurrent I/O (calling another service, an async DB driver) that is the
+  actual reason to choose ASGI over WSGI in a real project -- that
+  comparison remains unbenchmarked here, as already noted in
+  `benchmarks/README.md#asgi-vs-fastapi`. This fix closes a transport-level
+  concurrency ceiling that was suppressing *every* ASGI scenario's ceiling,
+  independent of that larger, still-open question.
+
+Full numbers, the disclosed noisy microbenchmark, and the shipped fix:
+[`benchmarks/README.md`](benchmarks/README.md#asgi-vs-fastapi).
+
 ### Line-by-line memory profiling: tooling now in place for the above
 
 Before starting the two items above, the project needed a working way to
@@ -897,14 +1056,37 @@ opt-in capability; result was a genuine win for ASGI and a genuine
 regression for WSGI specifically, so the WSGI `template_render` gap itself
 remains open (see "Connection pooling, attempted" above for the full,
 disclosed result).
+~~Read-only SQLite connections for pure reads (`mangoo.db.connect_readonly()`)~~
+-- attempted, delivered as a real, tested, unconditional improvement on the
+read path; a real isolated ORM-layer win (16-24% faster, both runs), but --
+like the `_render_for`/`Collection.prepare()`/path-splitting fixes before
+it -- no measurable HTTP-level movement, for the same already-documented
+reason (the ~35-45ms per-request SQLite connection/query cost dominates
+total request time on this environment). Ships anyway, on its own merits
+(see "Read-only SQLite connections for pure reads" above for the full,
+disclosed result).
+~~ASGI's `asyncio.to_thread` default-executor concurrency ceiling
+(`max_sync_workers=` on `create_asgi_application`)~~ -- found in response to
+a direct request that ASGI be fast on every scenario, not just some;
+delivered as a real, large, reproducible fix (`json_echo` roughly doubled;
+every scenario ties or wins against FastAPI across two full before/after
+runs). The isolated microbenchmark written to support it did not hold up
+under repetition and is disclosed as unreliable rather than cited as
+evidence -- the HTTP-level before/after comparison is what actually backs
+this one (see "ASGI's own concurrency ceiling" above).
 Remaining, deliberately unscheduled: a custom async/Rust HTTP runtime --
 ASGI support's benchmark data did not surface a bottleneck that would
-justify planning it; the WSGI `template_render` gap itself -- connection
-pooling was the one concrete idea this document had for it, and it made
-things worse rather than better, so this is back to genuinely unscoped; a
-Tortoise ORM benchmark comparison -- new scope (an async-driver comparison
-app), requested but not started; dependency scanning and release
-automation (`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8c).
+justify planning it (now that the executor-sizing ceiling above is fixed,
+this should be re-examined against fresh data before being ruled out
+again); the WSGI `template_render` gap itself -- connection
+pooling and read-only connections were the two concrete ideas this document
+had for it, and neither moved the HTTP-level number, so closing it further
+would need either an environment-level change (outside this project's
+control) or a different request-handling model (e.g. one connection open
+per request instead of per query -- not attempted, not scoped); a Tortoise
+ORM benchmark comparison -- new scope (an async-driver comparison app),
+requested but not started; dependency scanning and release automation
+(`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8c).
 
 ## Definition of done
 

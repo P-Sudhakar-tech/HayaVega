@@ -52,7 +52,8 @@ uvicorn project.asgi:application --host 0.0.0.0 --port 8000
 ```
 
 Views may be `async def` (awaited directly) or ordinary synchronous
-functions (run via `asyncio.to_thread`), so every existing sync view --
+functions (run via a dedicated worker-thread pool, `max_sync_workers=` on
+`create_asgi_application`, default 16), so every existing sync view --
 including ones wrapped in `api_route`, `csrf_protect`, or
 `login_required`/`permission_required` -- keeps working unmodified under
 either transport with no migration required. `mangoo.testing.AsyncTestClient`

@@ -104,9 +104,10 @@ def enable_connection_pooling() -> None:
 
     Scoped deliberately to match Mangoo's WSGI/ASGI concurrency model: one
     connection per worker thread, matching the one-request-per-thread (WSGI)
-    or one-coroutine-at-a-time-per-thread (ASGI sync views run via
-    `asyncio.to_thread`) model this framework already uses, rather than a
-    general bounded pool shared across threads with checkout/checkin
+    or one-coroutine-at-a-time-per-thread (ASGI sync views run on
+    `create_asgi_application`'s dedicated `max_sync_workers`-sized thread
+    pool) model this framework already uses, rather than a general bounded
+    pool shared across threads with checkout/checkin
     queuing. That keeps the mechanism simple and avoids the cross-thread
     connection-sharing hazards DB-API connections generally aren't safe for
     (SQLite enforces this directly: a connection created with the default
@@ -188,6 +189,49 @@ def connect(database: str | Path | dict) -> Connection:
         pool[key] = connection
         return connection
     return _open(config)
+
+
+def connect_readonly(database: str | Path | dict) -> Connection:
+    """Open a connection scoped to reads only, never pooled.
+
+    For SQLite, this opens the file with the `mode=ro` URI parameter instead
+    of a plain read-write connection. Measured (`benchmarks/
+    sqlite_readonly_reads.py`) at a real, consistent win on this project's
+    actual default (`journal_mode=DELETE`, untouched): ~25-30% faster per
+    call single-threaded and ~18-30% higher aggregate throughput under
+    16-thread contention, on Windows -- a read-only open skips the
+    reserved/pending-lock bookkeeping SQLite otherwise does on every
+    statement to guard against a writer, which a connection that will only
+    ever `SELECT` never needs. This is a different mechanism from
+    `enable_connection_pooling()`, and does not carry that feature's
+    downside: a connection opened here is still opened and closed fresh on
+    every call (never held open across requests), so it does not reproduce
+    the many-threads-holding-a-connection-open contention that made pooling
+    regress the WSGI path.
+
+    Only used internally by `Selection.fetch()`/`values()`/`total()` --
+    pure-read call sites that never call `.commit()`. `Collection.append()`/
+    `Selection.revise()`/`erase()` are unaffected and keep using `connect()`.
+
+    Falls back to a normal `connect()` if the read-only open fails (for
+    example, the database file does not exist yet) rather than raising --
+    in practice this never happens on the read path, since every read call
+    site calls `Collection.prepare()` first, which always creates the file
+    via a normal read-write `connect()` if it is missing.
+
+    Non-SQLite engines have no equivalent parameter tested here and fall
+    back to `connect()` unchanged.
+    """
+    config = normalize_config(database)
+    engine = str(config.get("ENGINE", "sqlite3")).lower()
+    if engine not in {"sqlite", "sqlite3"}:
+        return connect(database)
+    try:
+        raw = sqlite3.connect(f"file:{config['NAME']}?mode=ro", uri=True)
+    except sqlite3.OperationalError:
+        return connect(database)
+    raw.row_factory = sqlite3.Row
+    return Connection(raw, "sqlite3")
 
 
 def _open(config: dict) -> Connection:
