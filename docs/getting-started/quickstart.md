@@ -7,7 +7,7 @@ mangoo-admin newproject mysite
 cd mysite
 ```
 
-This creates a Django-familiar layout:
+This creates a familiar, conventional layout:
 
 ```text
 mysite/

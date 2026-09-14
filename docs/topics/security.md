@@ -81,8 +81,8 @@ otherwise go straight to any client that triggers one.
 `create_application(..., debug=True)` lists every registered route
 pattern on a 404 &mdash; computed once at application-build time (free
 when a route matches, free in production where `debug=False` is the
-default), the same trade-off Django's own `DEBUG` 404 page makes. Never
-exposes anything beyond your own app's route table.
+default), the same trade-off many frameworks' debug-mode 404 pages make.
+Never exposes anything beyond your own app's route table.
 
 ## Audit log
 

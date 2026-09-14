@@ -32,9 +32,11 @@ New to Mangoo? Start here.
 
 ## What Mangoo assumes you already know
 
-Mangoo borrows deliberately from two frameworks, so prior experience with either transfers directly:
+Mangoo borrows deliberately from established, well-understood conventions,
+so prior experience with a similarly-structured Python web framework
+transfers directly:
 
-- **From Django**: `manage.py`, `settings.py`, `urls.py`, migrations, and an admin site all work the way you'd expect if you've used Django.
-- **From FastAPI**: `api_route`-decorated views generate an OpenAPI schema automatically, the same way FastAPI's own path operations do.
+- **Project layout**: `manage.py`, `settings.py`, `urls.py`, migrations, and an admin site all work the way you'd expect from a conventional Python web project.
+- **API documentation**: `api_route`-decorated views generate an OpenAPI schema automatically, the same way many modern API frameworks' route decorators do.
 
-If you know neither, the [tutorial](tutorial.md) doesn't assume either &mdash; it starts from a blank project.
+If none of that is familiar yet, the [tutorial](tutorial.md) doesn't assume it &mdash; it starts from a blank project.

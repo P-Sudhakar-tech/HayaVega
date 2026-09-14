@@ -74,7 +74,7 @@ urlpatterns = [
 Serves an entire directory with correct MIME types, `ETag`/conditional
 requests, and cache-control headers &mdash; the same static-serving
 machinery [the benchmark suite](../performance.md) measures directly
-against FastAPI's and Django's own static handling.
+against other frameworks' own static handling.
 
 ## Request and Response
 

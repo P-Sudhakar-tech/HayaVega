@@ -1,8 +1,8 @@
 # REST & OpenAPI
 
 `api_route()` views generate a real OpenAPI document automatically &mdash;
-the same relationship FastAPI's own path operations have to their
-generated schema.
+the same relationship many modern API frameworks' route decorators have
+to their own generated schema.
 
 ## Basic usage
 

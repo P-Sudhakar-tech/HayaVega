@@ -1,6 +1,6 @@
 # Mangoo
 
-Mangoo is an early, runnable experiment in a Django-like project structure and FastAPI-style automatic API docs, backed by a Rust core.
+Mangoo is an early, runnable experiment in a conventional, batteries-included project structure and automatic, interactive API documentation, backed by a Rust core.
 
 **A browsable documentation site** (tutorials, topic guides, a generated
 API reference, and the published benchmark numbers) lives in
@@ -22,7 +22,7 @@ full methodology, scope, and honest caveats in
 ## What works now
 
 - `newproject` and `newapp` scaffolding (`startproject`/`startapp` still work as deprecated aliases)
-- Django-style `manage.py`, `settings.py`, and `urls.py`
+- A conventional `manage.py`, `settings.py`, and `urls.py` project layout
 - A development server and Python views
 - Both WSGI (default) and ASGI deployment, the latter for projects that need `async def` views
 - A small PyO3 native module (`mangoo_native`) for the Rust/Python boundary
@@ -88,7 +88,7 @@ benchmarking it.
 
 ## Settings
 
-Each project has a Django-familiar `project/settings.py`, but Mangoo uses its own explicit runtime sections:
+Each project has a conventional `project/settings.py`, but Mangoo uses its own explicit runtime sections:
 
 - `BASE_DIR`, `SECRET_KEY`, `DEBUG`, and `ALLOWED_HOSTS` for project identity and environment behavior.
 - `INSTALLED_APPS`, `MIDDLEWARE`, and `ROOT_URLCONF` for application composition.
@@ -99,7 +99,7 @@ For example, change the default development port in `SERVER['PORT']`, or overrid
 
 ## Databases
 
-Mangoo's database layer accepts SQLite, PostgreSQL, MySQL, and MariaDB through Django-style `DATABASES['default']` configuration. SQLite works with Python alone. For other engines, add the driver with UV before starting the project:
+Mangoo's database layer accepts SQLite, PostgreSQL, MySQL, and MariaDB through a familiar `DATABASES['default']` configuration format. SQLite works with Python alone. For other engines, add the driver with UV before starting the project:
 
 ```powershell
 uv add "psycopg[binary]"   # PostgreSQL
@@ -472,7 +472,7 @@ items.append("third")
 
 ## Declarative data entities
 
-Mangoo uses modern entity definitions and distinct query names rather than copying Django's ORM API:
+Mangoo uses modern entity definitions and its own distinct query API, designed independently rather than copying an existing ORM's names:
 
 ```python
 from mangoo import Decimal, Entity, Text

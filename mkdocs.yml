@@ -1,5 +1,5 @@
 site_name: Mangoo
-site_description: A Django-structured, FastAPI-documented, Rust-accelerated Python web framework
+site_description: A structured Python web framework with automatic, interactive API documentation and a Rust-accelerated core
 site_url: https://mangoo-framework.readthedocs.io/
 repo_url: https://github.com/P-Sudhakar-tech/mangoo-framework
 repo_name: mangoo-framework

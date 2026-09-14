@@ -68,8 +68,8 @@ required, matching this project's `unittest`-based style.
 ## Why choose WSGI vs ASGI
 
 Mangoo's own [published benchmarks](../performance.md) show ASGI winning
-or tying FastAPI on every measured scenario &mdash; but none of those
-scenarios exercise the concurrent I/O that's the actual reason to choose
-ASGI over WSGI in a real project. Choose ASGI when you have `async def`
+or tying every comparable framework measured on every scenario &mdash; but
+none of those scenarios exercise the concurrent I/O that's the actual
+reason to choose ASGI over WSGI in a real project. Choose ASGI when you have `async def`
 views doing real concurrent I/O; stay on WSGI otherwise, since it's
 simpler and remains the framework's default for a reason.

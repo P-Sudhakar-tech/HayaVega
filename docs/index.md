@@ -1,6 +1,6 @@
 ---
 title: Mangoo
-description: A Django-structured, FastAPI-documented, Rust-accelerated Python web framework.
+description: A structured Python web framework with automatic, interactive API documentation and a Rust-accelerated core.
 hide:
   - navigation
   - toc
@@ -10,7 +10,7 @@ hide:
 
 # Mangoo
 
-Django-style project structure. FastAPI-style automatic API docs. A Rust core where it actually wins the benchmark, and honestly disclosed where it doesn't.
+A conventional, batteries-included project structure. Automatic, interactive API documentation, generated from your code. A Rust core where it actually wins the benchmark, and honestly disclosed where it doesn't.
 
 [Get started :material-arrow-right:](getting-started/index.md){ .md-button }
 [View on GitHub :fontawesome-brands-github:](https://github.com/P-Sudhakar-tech/mangoo-framework){ .md-button .md-button--secondary }
@@ -27,7 +27,7 @@ Django-style project structure. FastAPI-style automatic API docs. A Rust core wh
 
     Auth (password reset, email verification, session rotation), admin, migrations, CSRF, rate limiting, and a security-review checklist all ship in the box. Every claim in these docs links to a real test.
 
--   :material-rocket-launch-outline:{ .lg .middle } **Beats FastAPI and Django on published benchmarks**
+-   :material-rocket-launch-outline:{ .lg .middle } **Wins on published, reproducible benchmarks**
 
     ---
 
