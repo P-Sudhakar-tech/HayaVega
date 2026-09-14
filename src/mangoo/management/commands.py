@@ -87,9 +87,11 @@ def _launch(args: list[str]) -> None:
     hardening = HardeningOptions.from_settings(allowed_hosts=getattr(settings, "allowed_hosts", ()), security=getattr(settings, "security", {}))
     debug = getattr(settings, "debug", False)
     server_engine = getattr(settings, "server_engine", "python")
-    serve_function = serve_rust if server_engine == "rust" else serve
     try:
-        serve_function(urls.urlpatterns, host, int(port or 8000), hardening=hardening, debug=debug)
+        if server_engine == "rust":
+            serve_rust(urls.urlpatterns, host, int(port or 8000), hardening=hardening, debug=debug, tls_cert=getattr(settings, "server_tls_cert", None), tls_key=getattr(settings, "server_tls_key", None))
+        else:
+            serve(urls.urlpatterns, host, int(port or 8000), hardening=hardening, debug=debug)
     except RustRuntimeUnavailableError as error:
         print(f"Error: {error}")
     except KeyboardInterrupt:

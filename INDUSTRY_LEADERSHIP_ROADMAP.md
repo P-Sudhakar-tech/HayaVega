@@ -1338,11 +1338,58 @@ risk. All five are fixed, covered by 6 new adversarial-request tests
 (`tests/test_rust_runtime_hardening.py`) that send deliberately malformed
 requests over raw sockets and assert safe rejection, and re-benchmarked
 afterward to confirm zero performance cost (still 1.37x-2.91x over
-`waitress`, 100% success both runs). TLS termination and HTTP/2 remain
-explicitly out of scope -- a reverse proxy's job, matching this project's
-own `gunicorn`/`waitress` production guidance. Full detail, all five
-issues explained, and the exact fix for each:
+`waitress`, 100% success both runs). Full detail, all five issues
+explained, and the exact fix for each:
 [`benchmarks/README.md`](benchmarks/README.md#hardening-pass-the-known-failure-modes-of-a-hand-written-http-server-found-and-fixed).
+
+### Optional TLS termination: delivered; HTTP/2 stays out of scope, with reasoning
+
+A direct follow-up ("Rust runtime: no TLS/HTTP2 -- go with this") asked
+for both. Scoped as two separate questions rather than one, and answered
+differently for each, disclosed before writing any code:
+
+- **HTTP/2 stays out of scope.** It is built around multiplexing many
+  streams over one connection -- fundamentally incompatible with this
+  server's synchronous thread-per-connection design without effectively
+  building a second scheduler inside it, reversing the earlier scope
+  decision that kept this server simple and well-understood in the first
+  place. Its main real-world benefit (parallel loading of many small
+  browser-requested resources on a web page) also does not transfer to a
+  backend API server the way it does to a browser client.
+- **TLS was delivered**, because unlike HTTP/2 it just wraps the same
+  existing connection -- no change to the concurrency model at all.
+  `rustls` with the `ring` crypto provider (confirmed to build cleanly on
+  this Windows environment before committing to it -- the default
+  `aws-lc-rs` provider needs a C toolchain this environment may not have).
+  `SERVER['TLS_CERT']`/`SERVER['TLS_KEY']` in settings, validated to
+  require both together and to reject silently-ignored plaintext under
+  `SERVER['ENGINE'] = 'python'`.
+- **Required a real architectural change, not just a new parameter:** the
+  existing keep-alive implementation split each connection into
+  independent read/write handles via `TcpStream::try_clone()`, which does
+  not work for TLS (a `rustls` session is sequential, single-owner state
+  that cannot be split that way). Refactored around a `Conn` enum
+  (`Plain`/`Tls`) both directions of I/O flow through via
+  `BufReader::get_mut()` for writes -- incidentally simplifying the
+  plain-HTTP path too, not just adding TLS capability alongside it
+  unchanged.
+- **Benchmarked, two runs:** modest overhead (~2% `json_echo`, ~12%
+  `db_list`, ~-1%/noise `template_render`) -- TLS handshake cost is paid
+  once per connection and amortized by keep-alive, not paid per request.
+  **Disclosed rather than smoothed over: HTTPS success rate was
+  99.7-99.97%, not a clean 100%**, both runs -- a small number of
+  client-side timeouts plausibly from handshake cost interacting with the
+  benchmark tool's own deadline, not a server hang (the correctness test
+  suite passed cleanly immediately before and after, and the server kept
+  answering requests throughout).
+- **Verified with a real TLS handshake against a real self-signed
+  certificate**, not just that the code compiles --
+  `tests/test_rust_runtime_tls.py` (5 tests, wired into the
+  `native-extension` CI job), including that a plain HTTP client hitting
+  the HTTPS port fails cleanly without taking the server down.
+
+Full numbers, the architectural change, and the HTTP/2 reasoning in full:
+[`benchmarks/README.md`](benchmarks/README.md#optional-tls-termination-real-https-modest-overhead).
 
 ## Definition of done
 

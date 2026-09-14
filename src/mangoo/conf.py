@@ -21,6 +21,8 @@ class ProjectSettings:
     server_host: str
     server_port: int
     server_engine: str
+    server_tls_cert: str | None
+    server_tls_key: str | None
     security: dict
     module_name: str = "project.settings"
 
@@ -59,6 +61,18 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
     if engine not in {"python", "rust"}:
         raise ValueError(f"{module.__name__}: SERVER['ENGINE'] must be 'python' or 'rust' -- got {engine!r}. Fix SERVER['ENGINE'] in {module.__name__}.")
 
+    tls_cert = server.get("TLS_CERT")
+    tls_key = server.get("TLS_KEY")
+    if (tls_cert is None) != (tls_key is None):
+        raise ValueError(f"{module.__name__}: SERVER['TLS_CERT'] and SERVER['TLS_KEY'] must both be set, or neither. Fix SERVER in {module.__name__}.")
+    if tls_cert is not None and engine != "rust":
+        # Silently ignoring TLS_CERT/TLS_KEY under the Python engine would
+        # be a real security footgun: a developer sets these expecting
+        # HTTPS and gets plaintext instead, with no error telling them so.
+        # mangoo.runtime's wsgiref server has no TLS support to wire this
+        # into in this version.
+        raise ValueError(f"{module.__name__}: SERVER['TLS_CERT']/SERVER['TLS_KEY'] are only supported with SERVER['ENGINE'] = 'rust' (got {engine!r}). Set SERVER['ENGINE'] = 'rust', or remove TLS_CERT/TLS_KEY, in {module.__name__}.")
+
     return ProjectSettings(
         base_dir=base_dir,
         secret_key=str(getattr(module, "SECRET_KEY", "")),
@@ -71,6 +85,8 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
         server_host=server.get("HOST", "127.0.0.1"),
         server_port=port,
         server_engine=engine,
+        server_tls_cert=tls_cert,
+        server_tls_key=tls_key,
         security=dict(getattr(module, "SECURITY", {})),
         module_name=module.__name__,
     )

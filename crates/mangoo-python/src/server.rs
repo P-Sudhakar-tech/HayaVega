@@ -22,19 +22,91 @@
 //! malformed `Content-Length`, response splitting via header injection,
 //! Slowloris (a per-request wall-clock deadline, not just a per-syscall
 //! one), and a single connection panicking permanently shrinking the
-//! worker pool. TLS termination and HTTP/2 are explicitly out of scope --
-//! a reverse proxy's job, not this server's, matching this project's own
-//! `DEPLOYMENT.md` guidance for `gunicorn`/`waitress`.
+//! worker pool.
+//!
+//! Optional TLS termination (`rustls`, the `ring` crypto provider -- no
+//! OpenSSL/system-library dependency) is supported: pass `tls_cert`/
+//! `tls_key` (PEM file paths) to `serve_wsgi` and every connection is
+//! served over HTTPS instead of plain HTTP. HTTP/2 remains explicitly out
+//! of scope -- it is built around multiplexing many streams over one
+//! connection, which does not fit this server's synchronous
+//! thread-per-connection model without effectively becoming its own
+//! scheduler, and its main real-world benefit (parallel loading of many
+//! small browser-requested resources) does not apply to a backend API
+//! server the way it does to a web page. A reverse proxy remains the
+//! right place for HTTP/2, matching this project's own `DEPLOYMENT.md`
+//! guidance for `gunicorn`/`waitress`.
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+
+/// Either a plain TCP connection or one wrapped in a TLS session. A single
+/// enum (not a generic `handle_connection<T: Read + Write>`) because a
+/// `rustls::StreamOwned` cannot be split into independent read/write
+/// handles the way `TcpStream::try_clone()` splits a plain socket -- TLS
+/// state is sequential and single-owner, so both directions of I/O for a
+/// connection must go through the same object regardless of which variant
+/// this is.
+enum Conn {
+    Plain(TcpStream),
+    Tls(Box<rustls::StreamOwned<rustls::ServerConnection, TcpStream>>),
+}
+
+impl Conn {
+    fn set_nodelay(&self, value: bool) -> io::Result<()> {
+        match self {
+            Conn::Plain(stream) => stream.set_nodelay(value),
+            Conn::Tls(stream) => stream.sock.set_nodelay(value),
+        }
+    }
+
+    fn set_read_timeout(&self, duration: Option<Duration>) -> io::Result<()> {
+        match self {
+            Conn::Plain(stream) => stream.set_read_timeout(duration),
+            Conn::Tls(stream) => stream.sock.set_read_timeout(duration),
+        }
+    }
+
+    fn peer_addr(&self) -> io::Result<std::net::SocketAddr> {
+        match self {
+            Conn::Plain(stream) => stream.peer_addr(),
+            Conn::Tls(stream) => stream.sock.peer_addr(),
+        }
+    }
+}
+
+impl Read for Conn {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Conn::Plain(stream) => stream.read(buf),
+            Conn::Tls(stream) => stream.read(buf),
+        }
+    }
+}
+
+impl Write for Conn {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Conn::Plain(stream) => stream.write(buf),
+            Conn::Tls(stream) => stream.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Conn::Plain(stream) => stream.flush(),
+            Conn::Tls(stream) => stream.flush(),
+        }
+    }
+}
 
 /// Applied to every connection, including idle time between keep-alive
 /// requests. Bounds how long a fixed-size worker thread can be pinned by a
@@ -84,7 +156,7 @@ impl ParsedRequest {
 /// per call would silently discard any bytes it read ahead into its
 /// internal buffer past the current request's boundary, corrupting the
 /// next pipelined request on a keep-alive connection.
-fn read_request(reader: &mut BufReader<TcpStream>) -> Result<Option<ParsedRequest>, String> {
+fn read_request(reader: &mut BufReader<Conn>) -> Result<Option<ParsedRequest>, String> {
     let mut request_line = String::new();
     let bytes_read = match reader.read_line(&mut request_line) {
         Ok(n) => n,
@@ -240,7 +312,7 @@ impl StartResponse {
     }
 }
 
-fn build_environ<'py>(py: Python<'py>, request: &ParsedRequest, host: &str, port: u16, remote_addr: &str) -> PyResult<Bound<'py, PyDict>> {
+fn build_environ<'py>(py: Python<'py>, request: &ParsedRequest, host: &str, port: u16, remote_addr: &str, is_https: bool) -> PyResult<Bound<'py, PyDict>> {
     let environ = PyDict::new_bound(py);
     environ.set_item("REQUEST_METHOD", &request.method)?;
     environ.set_item("SCRIPT_NAME", "")?;
@@ -278,7 +350,7 @@ fn build_environ<'py>(py: Python<'py>, request: &ParsedRequest, host: &str, port
     let sys = py.import_bound("sys")?;
     environ.set_item("wsgi.errors", sys.getattr("stderr")?)?;
     environ.set_item("wsgi.version", (1, 0))?;
-    environ.set_item("wsgi.url_scheme", "http")?;
+    environ.set_item("wsgi.url_scheme", if is_https { "https" } else { "http" })?;
     environ.set_item("wsgi.multithread", true)?;
     environ.set_item("wsgi.multiprocess", false)?;
     environ.set_item("wsgi.run_once", false)?;
@@ -295,7 +367,7 @@ fn contains_crlf(value: &str) -> bool {
     value.contains('\r') || value.contains('\n')
 }
 
-fn write_response(stream: &mut TcpStream, status: &str, headers: &[(String, String)], body: &[u8], keep_alive: bool) -> std::io::Result<()> {
+fn write_response(stream: &mut Conn, status: &str, headers: &[(String, String)], body: &[u8], keep_alive: bool) -> std::io::Result<()> {
     if contains_crlf(status) || headers.iter().any(|(name, value)| contains_crlf(name) || contains_crlf(value)) {
         return write_response(stream, "500 Internal Server Error", &[("Content-Type".to_string(), "text/plain".to_string())], b"500 Internal Server Error: a response header contained a CR or LF byte", false);
     }
@@ -334,7 +406,7 @@ fn write_response(stream: &mut TcpStream, status: &str, headers: &[(String, Stri
 /// failure mode this project already documented for the Django benchmark
 /// target in `benchmarks/README.md`), which shows up as a collapsing
 /// success rate under load rather than just lower throughput.
-fn handle_connection(mut stream: TcpStream, application: &Py<PyAny>, host: &str, port: u16) {
+fn handle_connection(stream: Conn, application: &Py<PyAny>, host: &str, port: u16, is_https: bool) {
     // Without this, Nagle's algorithm on the response write can interact
     // with the peer's delayed-ACK timer and add tens of milliseconds of
     // pure protocol latency per request -- a classic, easy-to-miss pitfall
@@ -343,24 +415,26 @@ fn handle_connection(mut stream: TcpStream, application: &Py<PyAny>, host: &str,
     let _ = stream.set_nodelay(true);
     let _ = stream.set_read_timeout(Some(CONNECTION_READ_TIMEOUT));
     let remote_addr = stream.peer_addr().map(|addr| addr.ip().to_string()).unwrap_or_default();
-    let mut reader = BufReader::new(match stream.try_clone() {
-        Ok(clone) => clone,
-        Err(_) => return,
-    });
+    // One `Conn` handles both directions: unlike a plain `TcpStream`,
+    // `Conn::Tls` cannot be split into independent read/write handles via
+    // `try_clone()` (TLS session state is sequential and single-owner), so
+    // writes go through `reader.get_mut()` instead of a second handle to
+    // the same connection.
+    let mut reader = BufReader::new(stream);
 
     loop {
         let parsed = match read_request(&mut reader) {
             Ok(Some(request)) => request,
             Ok(None) => return, // client closed the connection
             Err(message) => {
-                let _ = write_response(&mut stream, "400 Bad Request", &[("Content-Type".to_string(), "text/plain".to_string())], format!("400 Bad Request: {message}").as_bytes(), false);
+                let _ = write_response(reader.get_mut(), "400 Bad Request", &[("Content-Type".to_string(), "text/plain".to_string())], format!("400 Bad Request: {message}").as_bytes(), false);
                 return;
             }
         };
         let keep_alive = parsed.wants_keep_alive();
 
         let outcome = Python::with_gil(|py| -> PyResult<(String, Vec<(String, String)>, Vec<u8>)> {
-            let environ = build_environ(py, &parsed, host, port, &remote_addr)?;
+            let environ = build_environ(py, &parsed, host, port, &remote_addr, is_https)?;
             let captured = Arc::new(Mutex::new(None));
             let start_response = Py::new(py, StartResponse { result: Arc::clone(&captured) })?;
             let result = application.call1(py, (environ, start_response))?;
@@ -383,12 +457,12 @@ fn handle_connection(mut stream: TcpStream, application: &Py<PyAny>, host: &str,
         });
 
         let write_result = match outcome {
-            Ok((status, headers, body)) => write_response(&mut stream, &status, &headers, &body, keep_alive),
+            Ok((status, headers, body)) => write_response(reader.get_mut(), &status, &headers, &body, keep_alive),
             Err(error) => {
                 Python::with_gil(|py| {
                     error.print(py);
                 });
-                write_response(&mut stream, "500 Internal Server Error", &[("Content-Type".to_string(), "text/plain".to_string())], b"500 Internal Server Error", false)
+                write_response(reader.get_mut(), "500 Internal Server Error", &[("Content-Type".to_string(), "text/plain".to_string())], b"500 Internal Server Error", false)
             }
         };
         if write_result.is_err() || !keep_alive {
@@ -397,14 +471,40 @@ fn handle_connection(mut stream: TcpStream, application: &Py<PyAny>, host: &str,
     }
 }
 
+/// Loads a PEM certificate chain and private key from disk and builds a
+/// `rustls::ServerConfig`. Errors are the caller's (`serve_wsgi`'s)
+/// responsibility to surface clearly -- a misconfigured or missing
+/// cert/key is a startup-time mistake, not a per-connection one, so it is
+/// resolved once before the accept loop starts rather than on every
+/// connection.
+fn load_tls_config(cert_path: &str, key_path: &str) -> Result<rustls::ServerConfig, String> {
+    let cert_file = File::open(cert_path).map_err(|e| format!("could not open TLS certificate {cert_path:?}: {e}"))?;
+    let certs = rustls_pemfile::certs(&mut BufReader::new(cert_file)).collect::<Result<Vec<_>, _>>().map_err(|e| format!("could not parse TLS certificate {cert_path:?} as PEM: {e}"))?;
+    if certs.is_empty() {
+        return Err(format!("TLS certificate file {cert_path:?} contained no certificates"));
+    }
+
+    let key_file = File::open(key_path).map_err(|e| format!("could not open TLS private key {key_path:?}: {e}"))?;
+    let key = rustls_pemfile::private_key(&mut BufReader::new(key_file)).map_err(|e| format!("could not parse TLS private key {key_path:?} as PEM: {e}"))?.ok_or_else(|| format!("TLS private key file {key_path:?} contained no private key"))?;
+
+    rustls::ServerConfig::builder().with_no_client_auth().with_single_cert(certs, key).map_err(|e| format!("invalid TLS certificate/key pair ({cert_path:?}, {key_path:?}): {e}"))
+}
+
 #[pyfunction]
-#[pyo3(signature = (application, host, port, workers=8))]
-pub fn serve_wsgi(py: Python<'_>, application: Py<PyAny>, host: String, port: u16, workers: usize) -> PyResult<()> {
+#[pyo3(signature = (application, host, port, workers=8, tls_cert=None, tls_key=None))]
+pub fn serve_wsgi(py: Python<'_>, application: Py<PyAny>, host: String, port: u16, workers: usize, tls_cert: Option<String>, tls_key: Option<String>) -> PyResult<()> {
     let listener = TcpListener::bind((host.as_str(), port)).map_err(|e| PyValueError::new_err(format!("could not bind {host}:{port}: {e}")))?;
     let listener = Arc::new(listener);
     let application = Arc::new(application);
     let workers = workers.max(1);
     let shutdown = Arc::new(AtomicBool::new(false));
+
+    let tls_config = match (tls_cert, tls_key) {
+        (Some(cert_path), Some(key_path)) => Some(Arc::new(load_tls_config(&cert_path, &key_path).map_err(PyValueError::new_err)?)),
+        (None, None) => None,
+        _ => return Err(PyValueError::new_err("serve_wsgi: tls_cert and tls_key must both be provided, or neither")),
+    };
+    let is_https = tls_config.is_some();
 
     py.allow_threads(|| {
         let mut handles = Vec::with_capacity(workers);
@@ -413,10 +513,21 @@ pub fn serve_wsgi(py: Python<'_>, application: Py<PyAny>, host: String, port: u1
             let application = Arc::clone(&application);
             let host = host.clone();
             let shutdown = Arc::clone(&shutdown);
+            let tls_config = tls_config.clone();
             handles.push(thread::spawn(move || {
                 while !shutdown.load(Ordering::Relaxed) {
                     match listener.accept() {
-                        Ok((stream, _addr)) => {
+                        Ok((tcp_stream, _addr)) => {
+                            let conn = match &tls_config {
+                                Some(config) => match rustls::ServerConnection::new(Arc::clone(config)) {
+                                    Ok(session) => Conn::Tls(Box::new(rustls::StreamOwned::new(session, tcp_stream))),
+                                    Err(error) => {
+                                        eprintln!("mangoo rust runtime: TLS session setup failed: {error}");
+                                        continue;
+                                    }
+                                },
+                                None => Conn::Plain(tcp_stream),
+                            };
                             // A panic anywhere in handle_connection (an
                             // unexpected bug, not any of the error paths
                             // above, which all return normally) must not
@@ -428,7 +539,7 @@ pub fn serve_wsgi(py: Python<'_>, application: Py<PyAny>, host: String, port: u1
                             // call still releases the GIL correctly during
                             // unwinding (its Drop impl runs regardless), so
                             // catching here is safe, not just convenient.
-                            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handle_connection(stream, &application, &host, port)));
+                            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handle_connection(conn, &application, &host, port, is_https)));
                             if let Err(panic) = outcome {
                                 let message = panic.downcast_ref::<&str>().copied().or_else(|| panic.downcast_ref::<String>().map(String::as_str)).unwrap_or("<non-string panic payload>");
                                 eprintln!("mangoo rust runtime: a connection handler panicked and was recovered: {message}");

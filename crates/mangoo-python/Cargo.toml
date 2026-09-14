@@ -10,3 +10,5 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { version = "0.22", features = ["extension-module"] }
 mangoo-core = { path = "../mangoo-core" }
+rustls = { version = "0.23.44", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2.2.0"

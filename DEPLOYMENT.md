@@ -104,6 +104,33 @@ without keep-alive -- the same failure mode already documented in
 [`benchmarks/README.md`'s "A real gotcha this suite ran into"](benchmarks/README.md#a-real-gotcha-this-suite-ran-into-and-why-the-django-app-looks-the-way-it-does)
 for the Django benchmark target), in
 [`benchmarks/README.md`](benchmarks/README.md#the-rust-runtime-vs-the-python-runtime-waitress).
+A dedicated hardening pass afterward found and fixed five more real
+issues, three of them exploitable (request smuggling, response
+splitting) -- see
+[`benchmarks/README.md`'s hardening section](benchmarks/README.md#hardening-pass-the-known-failure-modes-of-a-hand-written-http-server-found-and-fixed).
+
+**Optional TLS**: `SERVER['TLS_CERT']`/`SERVER['TLS_KEY']` (PEM file
+paths) serve the application over HTTPS instead of plain HTTP, using
+`rustls` -- both settings are only valid with `SERVER['ENGINE'] = 'rust'`
+(rejected otherwise, rather than silently serving plaintext where HTTPS
+was expected). Benchmarked overhead is modest (roughly 0-12% depending on
+scenario, since the TLS handshake cost is paid once per connection and
+amortized by keep-alive, not paid per request) -- see
+[`benchmarks/README.md`'s TLS section](benchmarks/README.md#optional-tls-termination-real-https-modest-overhead)
+for the full numbers. HTTP/2 remains explicitly out of scope: it is built
+around multiplexing many streams over one connection, which does not fit
+this server's synchronous thread-per-connection model, and its main
+benefit (parallel loading of many small browser resources) does not apply
+to a backend API server the way it does to a web page. This TLS support
+is for local HTTPS development/testing, not a production-TLS-termination
+recommendation -- a real deployment still terminates TLS at a reverse
+proxy (nginx, a cloud load balancer), the same as the gunicorn/waitress
+guidance above.
+
+```python
+# project/settings.py
+SERVER = {"HOST": "127.0.0.1", "PORT": 8443, "ENGINE": "rust", "TLS_CERT": "cert.pem", "TLS_KEY": "key.pem"}
+```
 
 ## Before deployment
 

@@ -13,9 +13,24 @@ narrow one every other native component in this codebase plays (own
 socket accept, HTTP/1.1 parsing, and response writing around unchanged
 Python request-handling code via the standard WSGI contract).
 
-No HTTP keep-alive yet: every connection is closed after one response.
-This is a real, disclosed limitation of this first version, not an
-oversight -- see `crates/mangoo-python/src/server.rs`'s module docstring.
+Real HTTP/1.1 keep-alive is implemented, and the server is hardened
+against the well-known failure modes of a hand-written HTTP server
+(request smuggling, response splitting, Slowloris, a panicking connection
+permanently shrinking the worker pool) -- see
+`crates/mangoo-python/src/server.rs`'s module docstring for the full list
+and `benchmarks/README.md` for the benchmarked, disclosed result.
+
+Optional TLS termination is supported (`SERVER['TLS_CERT']`/
+`SERVER['TLS_KEY']`, PEM file paths, via `rustls`) for local HTTPS
+development and testing. HTTP/2 remains explicitly out of scope: it is
+built around multiplexing many streams over one connection, which does not
+fit this server's synchronous thread-per-connection model without
+effectively becoming its own scheduler, and its main real-world benefit
+(parallel loading of many small browser-requested resources) does not
+apply to a backend API server the way it does to a web page -- a reverse
+proxy remains the right place for HTTP/2 and for production TLS
+termination, matching this project's own `DEPLOYMENT.md` guidance for
+`gunicorn`/`waitress`.
 """
 
 from __future__ import annotations
@@ -28,9 +43,18 @@ class RustRuntimeUnavailableError(RuntimeError):
     pass
 
 
-def serve(urlpatterns, host: str = "127.0.0.1", port: int = 8000, *, hardening: HardeningOptions | None = None, debug: bool = False, workers: int = 8) -> None:
+def serve(urlpatterns, host: str = "127.0.0.1", port: int = 8000, *, hardening: HardeningOptions | None = None, debug: bool = False, workers: int = 8, tls_cert: str | None = None, tls_key: str | None = None) -> None:
     """Build the same WSGI application `mangoo.runtime.serve` would and run
     it behind the native Rust server instead of `wsgiref`.
+
+    `tls_cert`/`tls_key` (PEM file paths) serve the application over HTTPS
+    instead of plain HTTP when both are given; both must be provided
+    together (`mangoo_native.serve_wsgi` rejects one without the other with
+    a clear error rather than silently serving plaintext). The framework's
+    own `Request.is_secure`, and therefore `Hardening`'s `FORCE_HTTPS`/
+    secure-cookie logic, work correctly under TLS exactly as they do behind
+    a TLS-terminating reverse proxy -- `wsgi.url_scheme` is set to
+    `"https"` for every request served this way.
 
     Raises `RustRuntimeUnavailableError` with an actionable message if
     `mangoo_native` was not built for this install (e.g. `cargo` was not on
@@ -49,5 +73,6 @@ def serve(urlpatterns, host: str = "127.0.0.1", port: int = 8000, *, hardening: 
         raise RustRuntimeUnavailableError("SERVER['ENGINE'] is 'rust' but mangoo_native was not built for this install. Rebuild with `cargo` on PATH (`pip install -e .` re-runs the build hook), or set SERVER['ENGINE'] to 'python' to use the standard runtime.") from error
 
     application = create_application(urlpatterns, hardening=hardening, debug=debug)
-    print(f"Mangoo development server (Rust runtime, {workers} workers): http://{host}:{port}/")
-    mangoo_native.serve_wsgi(application, host, port, workers)
+    scheme = "https" if tls_cert else "http"
+    print(f"Mangoo development server (Rust runtime, {workers} workers): {scheme}://{host}:{port}/")
+    mangoo_native.serve_wsgi(application, host, port, workers, tls_cert, tls_key)

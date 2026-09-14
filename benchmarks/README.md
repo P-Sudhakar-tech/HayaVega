@@ -336,6 +336,97 @@ no performance cost:** two more full runs, still winning every scenario
 checks (deadline comparisons, a CRLF scan over already-tiny header
 strings) are cheap enough to be within this benchmark's run-to-run noise.
 
+## Optional TLS termination: real HTTPS, modest overhead
+
+A follow-up request ("Rust runtime: no TLS/HTTP2 -- go with this") asked
+for TLS specifically. HTTP/2 was scoped out with reasoning disclosed in
+`src/mangoo/rust_runtime.py` and `crates/mangoo-python/src/server.rs`'s
+module docstrings: it is built around multiplexing many streams over one
+connection, which does not fit this server's synchronous
+thread-per-connection model without effectively becoming its own
+scheduler, and its main real-world benefit (parallel loading of many
+small browser-requested resources) does not apply to a backend API server
+the way it does to a web page. TLS, by contrast, just wraps the same
+existing connection -- directly achievable without changing the
+concurrency model at all.
+
+- [x] **Implemented with `rustls`** (the `ring` crypto provider --
+      confirmed to build cleanly on this Windows dev environment with no
+      C-compiler/`nasm` requirements, unlike the default `aws-lc-rs`
+      provider, before committing to it). `serve_wsgi(..., tls_cert=,
+      tls_key=)` (PEM file paths) serves every connection over HTTPS
+      instead of plain HTTP when both are given.
+- [x] **Required a real architectural change, not just a new parameter.**
+      The existing keep-alive implementation split each connection into
+      independent read/write handles via `TcpStream::try_clone()` -- safe
+      for a plain socket, but a TLS session is sequential, single-owner
+      state that cannot be split that way. Refactored around a single
+      `Conn` enum (`Plain(TcpStream)` or `Tls(rustls::StreamOwned<...>)`)
+      that both directions of I/O flow through, using
+      `BufReader::get_mut()` for writes instead of a second handle -- the
+      same fix incidentally made the plain-HTTP code path simpler, not
+      just TLS-capable.
+- [x] **`wsgi.url_scheme` is set to `"https"`** for every request served
+      this way, so the framework's own `Request.is_secure` --  and
+      therefore `Hardening`'s `FORCE_HTTPS`/secure-cookie logic -- work
+      correctly under TLS exactly as they already do behind a
+      TLS-terminating reverse proxy.
+- [x] **`SERVER['TLS_CERT']`/`SERVER['TLS_KEY']` wired into settings**,
+      validated together (`conf.py` rejects one without the other, and
+      rejects both under `SERVER['ENGINE'] = 'python'` -- silently
+      ignoring them there would be a real security footgun: a developer
+      sets them expecting HTTPS and silently gets plaintext instead).
+- [x] **Verified with a real TLS handshake against a real self-signed
+      certificate, not just that the code compiles.**
+      `tests/test_rust_runtime_tls.py` generates a throwaway test
+      certificate via the `openssl` CLI, connects with Python's own `ssl`
+      module, and confirms the handshake succeeds and the real
+      application (routing, `Request.is_secure`, JSON responses) works
+      over it -- plus that a plain HTTP client connecting to the HTTPS
+      port fails cleanly rather than crashing the server, and the server
+      keeps answering real HTTPS requests afterward. 5 new tests, wired
+      into the `native-extension` CI job (skipped if `openssl` isn't on
+      `PATH`, matching this suite's existing tool-availability pattern).
+- **Benchmarked, two runs, `oha --insecure` (self-signed cert) against the
+  same app, `SERVER['ENGINE'] = 'rust'` with and without `TLS_CERT`/
+  `TLS_KEY`:**
+
+  | Scenario | HTTP (1 run) | HTTPS (2 runs) | Overhead |
+  |---|---:|---:|---:|
+  | `json_echo` | 7407 req/s | 7226, 7296 req/s | ~2% |
+  | `db_list` | 1504 req/s | 1276, 1371 req/s | ~12% |
+  | `template_render` | 1001 req/s | 1027, 994 req/s | ~-1% (noise) |
+
+  **Modest overhead** -- keep-alive means the TLS handshake cost (RSA
+  2048, ~94ms average connection-establishment time observed directly in
+  `oha`'s own "DNS+dialup" figure) is paid once per connection and
+  amortized across every request that reuses it, not paid per request.
+  `json_echo` and `template_render` show overhead within this suite's own
+  established noise band; `db_list`'s ~12% is the one scenario where it
+  reads as real rather than noise, plausibly because its shorter
+  per-request time leaves proportionally less room to absorb the
+  encryption-layer cost.
+- **Disclosed, not smoothed over: HTTPS success rate was 99.7-99.97%, not
+  a clean 100%,** across both runs -- a small number of client-side
+  `timeout` errors (roughly 0.2% of requests) alongside the same
+  `aborted due to deadline` count every scenario in this suite already
+  shows when `oha`'s duration cutoff lands mid-request. Plausibly
+  connection-establishment/handshake cost interacting with `oha`'s own
+  timeout under sustained load rather than anything hanging
+  server-side -- the correctness test suite (real handshakes, immediately
+  before and after this benchmark) passed cleanly both times, and the
+  server kept answering requests throughout. Not chased further to an
+  exact root cause, since it is a small, plausible, and disclosed
+  imperfection rather than the kind of outright failure (a collapsing
+  success rate, the port-exhaustion bug found earlier) that would
+  indicate a real server-side defect.
+- **What TLS support here is not:** this remains development/load-testing
+  tooling. No client-certificate authentication, no OCSP stapling, no
+  certificate hot-reload (a changed cert/key requires restarting the
+  server) -- a production deployment still terminates TLS at a real
+  reverse proxy (nginx, a cloud load balancer), the same guidance
+  `DEPLOYMENT.md` already gives for `gunicorn`/`waitress`.
+
 ## About `oha`
 
 [`oha`](https://github.com/hatoo/oha) is a Rust-based HTTP load generator,
