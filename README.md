@@ -2,6 +2,13 @@
 
 Mangoo is an early, runnable experiment in a Django-like project structure and FastAPI-style automatic API docs, backed by a Rust core.
 
+**A browsable documentation site** (tutorials, topic guides, a generated
+API reference, and the published benchmark numbers) lives in
+[`docs/`](docs/index.md) -- build it locally with `mkdocs serve` (after
+`pip install -e ".[docs]"`), or read the source directly in that
+directory. This README stays the first thing a repository visitor sees;
+the docs site is the deeper reference it points to.
+
 See [UPCOMING_IMPROVEMENT_ROADMAP.md](UPCOMING_IMPROVEMENT_ROADMAP.md) for
 the near-term plan and [INDUSTRY_LEADERSHIP_ROADMAP.md](INDUSTRY_LEADERSHIP_ROADMAP.md)
 for the longer-range one: performance benchmarks against FastAPI/Django/

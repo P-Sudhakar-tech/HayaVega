@@ -1,0 +1,104 @@
+---
+title: Mangoo
+description: A Django-structured, FastAPI-documented, Rust-accelerated Python web framework.
+hide:
+  - navigation
+  - toc
+---
+
+<div class="mangoo-hero" markdown>
+
+# Mangoo
+
+Django-style project structure. FastAPI-style automatic API docs. A Rust core where it actually wins the benchmark, and honestly disclosed where it doesn't.
+
+[Get started :material-arrow-right:](getting-started/index.md){ .md-button }
+[View on GitHub :fontawesome-brands-github:](https://github.com/P-Sudhakar-tech/mangoo-framework){ .md-button .md-button--secondary }
+
+</div>
+
+## Why Mangoo
+
+<div class="grid cards" markdown>
+
+-   :material-shield-check:{ .lg .middle } **Batteries included, honestly documented**
+
+    ---
+
+    Auth (password reset, email verification, session rotation), admin, migrations, CSRF, rate limiting, and a security-review checklist all ship in the box. Every claim in these docs links to a real test.
+
+-   :material-rocket-launch-outline:{ .lg .middle } **Beats FastAPI and Django on published benchmarks**
+
+    ---
+
+    Real `oha` load tests, reproducible methodology, losses disclosed alongside wins. See the [performance page](performance.md) for the numbers, not adjectives.
+
+-   :material-language-rust:{ .lg .middle } **Rust where it measurably helps**
+
+    ---
+
+    A native Rust WSGI server (1.4&ndash;2.7&times; faster than `waitress`), TLS via `rustls`, and Signals' worker-pool dispatcher &mdash; each one benchmarked before shipping, including the ideas that *didn't* pan out.
+
+-   :material-api:{ .lg .middle } **REST, GraphQL, and ASGI &mdash; one auth system**
+
+    ---
+
+    `api_route` generates OpenAPI/Swagger automatically. A hand-written GraphQL engine with depth limits and introspection control. `async def` views under ASGI with zero migration for existing sync code.
+
+-   :material-database-outline:{ .lg .middle } **A real migration system**
+
+    ---
+
+    Transactional, checksummed migrations with schema-diff detection, not a toy. SQLite, PostgreSQL, and MySQL/MariaDB all covered by CI.
+
+-   :material-flask-outline:{ .lg .middle } **Built to be tested**
+
+    ---
+
+    `TestClient` and `AsyncTestClient` drive your app in-process with no real server needed &mdash; the same tooling this project's own 415+ tests run on.
+
+</div>
+
+## See it in thirty seconds
+
+```bash
+pip install -e .
+mangoo-admin newproject mysite
+cd mysite
+python manage.py newapp blog
+python manage.py launch
+```
+
+```python title="project/urls.py"
+from mangoo import api_route, path
+
+
+def hello(request):
+    return {"message": "Hello from Mangoo"}
+
+
+urlpatterns = [
+    api_route("api/hello", hello, methods=("GET",)),
+]
+```
+
+Open `http://127.0.0.1:8000/openapi.json` and the endpoint is already documented &mdash; no extra decorator, no separate spec file.
+
+[Read the full quickstart :material-arrow-right:](getting-started/quickstart.md){ .md-button }
+
+## What's actually in here
+
+| | |
+|---|---|
+| **Routing & views** | [Routing](topics/routing.md) |
+| **Data** | [Models & migrations](topics/models.md) |
+| **Auth & access** | [Authentication](topics/auth.md) &middot; [Admin](topics/admin.md) |
+| **Rendering** | [Templates](topics/templates.md) |
+| **APIs** | [REST & OpenAPI](topics/rest-api.md) &middot; [GraphQL](topics/graphql.md) |
+| **Concurrency** | [ASGI](topics/asgi.md) &middot; [Rust runtime](topics/rust-runtime.md) |
+| **Events** | [Signals](topics/signals.md) |
+| **Quality** | [Testing](topics/testing.md) &middot; [Security](topics/security.md) |
+| **Shipping it** | [Deployment](topics/deployment.md) |
+
+!!! tip "This site is new"
+    This documentation site is a fresh build, not a reformatted copy of the project's existing `README.md`/`DEPLOYMENT.md`. Those files still exist at the repository root and stay accurate &mdash; this site is the deeper, browsable reference they now point to.

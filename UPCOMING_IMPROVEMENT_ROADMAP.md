@@ -17,7 +17,7 @@ This roadmap converts the current prototype into a safer, more deployable framew
 | P2 | Native runtime | **In progress:** pre-existing pyo3 API mismatches that blocked every native build fixed; a `hatchling` build hook now builds and bundles `mangoo_native` automatically as part of a normal `pip install`/`pip install -e .`, with no separate manual step and no project-name collision risk; Signals' dispatcher is the first concurrency primitive on it. Request routing, JSON serialization, authentication operations, and database execution remain Python-only |
 | P2 | Mangoo Signals | **Delivered:** opt-in in-process event bus with always-async delivery (no sync/async choice for callers), a Rust-native worker-pool dispatcher (`mangoo_native.SignalDispatcher`) with a behavior-compatible Python `ThreadPoolExecutor` fallback, sensitive-key rejection, and framework lifecycle wiring (request, auth, admin, migrations) all shipped; only remaining gap is that no built-in app wires a bus in by default. Shipped as "Pulse" originally -- `mangoo.addons.pulse`/`pulse=` still work as deprecated aliases (see Week 12) |
 | P2 | Fullstack UI framework | **Delivered (Week 9/11) -> reverted (Week 14) -> rebuilt, re-scoped (Week 15):** the original Stage 1 (hypermedia) + Stage 2 (client-side signals) were removed entirely in favor of pure server-rendered HTML, then Stage 1 alone was rebuilt with a leaner `mangoo-ui.js` and a benchmarked Rust option for fragment rendering -- deliberately without Stage 2's signals layer this time, keeping the framework to one hypermedia model rather than two rendering approaches |
-| P2 | Documentation website | **Planned (Week 16), not started:** a real, versioned documentation website (tutorial, topic guides, generated API reference, full-text search, a Django-style version switcher tied to release tags) to replace root-level Markdown as the framework's primary documentation surface |
+| P2 | Documentation website | **Core site delivered (Week 16):** MkDocs + Material, a real information architecture (tutorial, 13 topic guides, generated API reference, full-text search), CI-gated builds, cross-linked from `README.md`. The version switcher and publish step remain, both blocked on external events (a first tagged release; explicit go-live sign-off) rather than engineering work |
 | P2 | gRPC support | **Planned (Week 17), not started:** a third request surface alongside REST and GraphQL, via `grpcio`/`grpclib` running as its own HTTP/2 server (not a retrofit of the custom Rust runtime, which deliberately left HTTP/2 out of scope), reusing existing auth and Signals wiring |
 
 ## Future-readiness estimate (planning baseline, refreshed August 20, 2026)
@@ -489,15 +489,14 @@ verified to produce a working `mangoo_native.render_fragment_items`.
 
 ## Week 16: a real documentation website, versioned like Django's
 
-**Status: planned, not started.** Mangoo's documentation today lives entirely
-in root-level Markdown files (`README.md`, `DEPLOYMENT.md`,
+**Status: core site delivered Sep 2026; version switcher and publishing
+deliberately not yet done (see below).** Mangoo's documentation previously
+lived entirely in root-level Markdown files (`README.md`, `DEPLOYMENT.md`,
 `BUILD_FROM_SCRATCH.md`, this roadmap) plus generated Swagger/OpenAPI for an
-individual application's own API. There is no browsable documentation
-*website* for the framework itself, and no way for a reader to view docs for
-a specific past release the way
-[docs.djangoproject.com](https://docs.djangoproject.com/) or
-[fastapi.tiangolo.com](https://fastapi.tiangolo.com/) let a reader pick
-"these are the docs for the version I actually have installed."
+individual application's own API -- those files are unchanged and remain
+accurate (see "What was kept as-is" below); a fresh `docs/` site now sits
+alongside them as the deep, browsable reference `README.md` points to, not
+a reformatted copy of those files' structure or content.
 
 ### Goal
 
@@ -522,58 +521,71 @@ already living in this repo, with:
 
 ### Deliverables
 
-- [ ] Pick and stand up a static-site generator that supports versioned
-      docs out of the box rather than requiring a hand-rolled version
-      switcher: evaluate Sphinx (`sphinx-multiversion`/`sphinx-rtd-theme`,
-      the actual tooling Django's own docs site is built with) against
-      MkDocs (`mkdocs-material` + `mike` for versioning) before choosing --
-      per this project's own standing principle of benchmarking/evaluating
-      before committing, not picking one on assumption.
-- [ ] Restructure existing content into a proper source tree (e.g. `docs/`)
-      with a real navigation hierarchy: quickstart, tutorial, topic guides
-      (one per subsystem: routing, models/migrations, auth, admin,
-      templates, GraphQL, REST/OpenAPI, ASGI, Signals, testing, CI,
-      deployment, security), and a reference section -- migrating
-      `README.md`/`DEPLOYMENT.md`/`BUILD_FROM_SCRATCH.md`'s content into it
-      rather than duplicating it in two places.
-- [ ] Generate API reference pages from the package's existing docstrings
-      and type hints (already enforced by the Week 13 mypy/`py.typed` work)
-      rather than hand-writing and re-drifting a second copy of the public
-      API surface.
-- [ ] Wire the version switcher to this project's actual release history
-      (git tags once releases exist) so each published version's docs stay
-      reachable and frozen after a newer version ships -- the specific
-      behavior the Django example demonstrates.
-- [ ] Add a CI job that builds the docs site on every push/PR (catching
-      broken links/build errors before merge, the same "required CI gate"
-      pattern already used for tests/lint/typecheck) and a separate,
-      explicit publish step (GitHub Pages or an equivalent static host) --
-      publishing itself needs its own sign-off before wiring, since it's a
-      user-visible, externally-reachable change, not a local build.
-- [ ] Cross-link from `README.md` to the new site once it exists, without
-      deleting `README.md`'s own content -- the repo README stays the
-      first thing a GitHub visitor sees; the docs site is the deep-reference
-      destination it points to, the same relationship Django's own
-      `README.rst` has with `docs.djangoproject.com`.
+- [x] **Generator chosen: MkDocs + `mkdocs-material`, not Sphinx.** Decided
+      on fit for the explicit "very beautifully UI" requirement this round
+      -- Material is the same theme FastAPI's own documentation runs on,
+      giving a modern, heavily-refined default (dark/light mode, instant
+      navigation, search-as-you-type) without hand-building a design system
+      from scratch, and `mike` (installed alongside it) is the same
+      versioning plugin the deliverable below still needs. Sphinx's own
+      ecosystem (`sphinx-multiversion`/`sphinx-rtd-theme`, what Django's
+      docs actually run on) was the documented alternative; not chosen
+      because Material's out-of-the-box visual polish more directly serves
+      this round's stated priority than Sphinx's more document-oriented
+      default theme would without significant custom theming work.
+- [x] **A real information architecture built**, not one long page:
+      `docs/getting-started/` (installation, quickstart, a full tutorial
+      building a real model/migration/view/test), `docs/topics/` (routing,
+      models, auth, admin, templates, REST, GraphQL, ASGI, the Rust
+      runtime, Signals, testing, security, deployment -- one page each),
+      a dedicated `docs/performance.md`, and `docs/reference/`.
+- [x] **A generated API reference**, not hand-maintained: `mkdocstrings`
+      renders real signatures, types, and docstrings directly from the
+      package source (`docs/reference/api.md`) -- the same docstrings and
+      type hints the Week 13 mypy/`py.typed` work already keeps honest, so
+      this page cannot drift from the actual public API the way a
+      hand-written second copy would.
+- [x] **A CI job that builds the site on every push/PR**
+      (`.github/workflows/ci.yml`'s `docs` job, `mkdocs build --strict` --
+      fails the build on any warning, including a broken internal link),
+      matching the required-CI-gate pattern `lint`/`typecheck` already use.
+- [x] **Cross-linked from `README.md`** without deleting or restructuring
+      `README.md`'s own content -- it stays the first thing a GitHub
+      visitor sees; `docs/` is the deep-reference destination it now
+      points to.
+- [ ] **Version switcher wired to release history** -- genuinely not done,
+      and correctly so: `mike` (installed, ready to use) versions docs
+      against git tags, and this project has not cut a tagged release yet.
+      Wiring a version switcher with only one version to switch between
+      would be premature scaffolding; revisit once a first tagged release
+      exists.
+- [ ] **Explicit publish step** (GitHub Pages or equivalent) -- not wired,
+      deliberately: this needs its own sign-off before going live, since
+      publishing a site is a user-visible, externally-reachable change,
+      not a local build. The CI `docs` job proves the site builds
+      correctly; it does not publish anywhere.
 
 ### Acceptance criteria
 
-- A reader can select a specific past Mangoo version and see documentation
-  that matches that version's actual behavior, not the latest tip.
-- Every topic guide links to the real test(s) or example app
-  (`example_site/`, `benchmarks/`) demonstrating the behavior it describes,
-  matching this project's existing no-unverifiable-claims standard.
-- The docs site builds in CI on every push/PR and fails the build on a
-  broken internal link or a build error.
-- Full-text search returns relevant pages for a plausible query (e.g.
-  "migrations", "CSRF", "ASGI").
+- [ ] A reader can select a specific past Mangoo version and see
+      documentation that matches that version's actual behavior -- blocked
+      on the version-switcher deliverable above, itself blocked on a first
+      tagged release existing.
+- [x] Every topic guide links to the real test(s), module, or example app
+      demonstrating the behavior it describes (e.g. `topics/rust-runtime.md`
+      -> `tests/test_rust_runtime_hardening.py`; `topics/models.md` ->
+      the actual `Selection`/`Collection` API), matching this project's
+      existing no-unverifiable-claims standard.
+- [x] The docs site builds in CI on every push/PR and fails the build on a
+      broken internal link or a build error (`mkdocs build --strict`).
+- [x] Full-text search works (Material's built-in `search` plugin, enabled).
 
 ### Sequencing note
 
-This is new scope, not yet estimated in the future-readiness table below --
-add an effort estimate once the generator choice (first deliverable above)
-is made, since Sphinx-with-multiversion and MkDocs-with-mike carry
-meaningfully different setup costs.
+Effort for the remaining two deliverables (version switcher, publish step)
+is genuinely gated on external events (a first tagged release; an explicit
+decision to go live publicly) rather than remaining engineering work --
+both are small once their blocking precondition is met.
 
 ## Week 17: gRPC support
 

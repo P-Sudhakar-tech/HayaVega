@@ -1,0 +1,144 @@
+/* Mangoo docs -- visual polish on top of Material for MkDocs */
+
+/* Defensive: nothing in this file should ever force horizontal page
+   scroll on a narrow viewport -- internal scrollable elements (code
+   blocks, tables) keep their own overflow-x, this only guards the page
+   itself. */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+:root {
+  --md-primary-fg-color: #ff6f3c;
+  --md-primary-fg-color--light: #ff8a5c;
+  --md-primary-fg-color--dark: #e55a2b;
+  --md-accent-fg-color: #ff8a3c;
+  --mangoo-gradient: linear-gradient(135deg, #ff6f3c 0%, #ff8a3c 45%, #ffb347 100%);
+}
+
+/* Hero banner on the landing page */
+.mangoo-hero {
+  background: var(--mangoo-gradient);
+  border-radius: 16px;
+  padding: 3.2rem 2.4rem;
+  margin: 0 0 2.4rem;
+  color: #fff;
+  box-shadow: 0 12px 32px -12px rgba(229, 90, 43, 0.45);
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+@media screen and (max-width: 44em) {
+  .mangoo-hero {
+    padding: 1.8rem 1.4rem;
+  }
+  .mangoo-hero h1 {
+    font-size: 1.8rem;
+  }
+  .mangoo-hero p {
+    font-size: 1rem;
+  }
+  .mangoo-hero .md-button {
+    display: block;
+    text-align: center;
+    margin: 0 0 0.6rem;
+  }
+}
+.mangoo-hero h1 {
+  color: #fff;
+  font-size: 2.4rem;
+  margin: 0 0 0.6rem;
+  font-weight: 700;
+}
+.mangoo-hero p {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 1.15rem;
+  max-width: 640px;
+  margin: 0 0 1.4rem;
+}
+.mangoo-hero .md-button {
+  background: #fff;
+  color: #e55a2b;
+  border: none;
+  font-weight: 600;
+}
+.mangoo-hero .md-button:hover {
+  background: #fff8f5;
+  color: #c9491f;
+}
+.mangoo-hero .md-button.md-button--secondary {
+  background: transparent;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+}
+.mangoo-hero .md-button.md-button--secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #fff;
+}
+
+/* Feature grid cards -- a step beyond the stock grid card look */
+.grid.cards > ul > li {
+  border-radius: 12px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.grid.cards > ul > li:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.25);
+  border-color: var(--md-primary-fg-color);
+}
+[data-md-color-scheme="slate"] .grid.cards > ul > li:hover {
+  box-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.55);
+}
+
+/* Benchmark stat tiles on the performance page */
+.mangoo-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 1rem;
+  margin: 1.6rem 0 0.8rem;
+}
+.mangoo-stat {
+  background: var(--md-code-bg-color);
+  border-radius: 10px;
+  padding: 1.1rem 1.3rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+.mangoo-stat .value {
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: var(--md-primary-fg-color);
+  display: block;
+  line-height: 1.2;
+}
+.mangoo-stat .label {
+  font-size: 0.74rem;
+  color: var(--md-default-fg-color--light);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Slightly warmer admonition accent to match the brand */
+.md-typeset .admonition.tip,
+.md-typeset .admonition.example {
+  border-color: var(--md-primary-fg-color);
+}
+.md-typeset .tip > .admonition-title,
+.md-typeset .example > .admonition-title {
+  background-color: rgba(255, 111, 60, 0.1);
+}
+.md-typeset .tip > .admonition-title::before,
+.md-typeset .example > .admonition-title::before {
+  background-color: var(--md-primary-fg-color);
+}
+
+/* Code blocks: a touch more breathing room */
+.md-typeset pre > code {
+  font-size: 0.82rem;
+}
+
+/* Logo mark in the nav */
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  height: 1.4rem;
+}

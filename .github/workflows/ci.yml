@@ -34,6 +34,20 @@ jobs:
       - name: Check type hints
         run: mypy
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Mangoo with docs dependencies (pure-Python fallback, no Rust build)
+        run: pip install -e ".[dev,docs]"
+        env:
+          MANGOO_SKIP_NATIVE_BUILD: "1"
+      - name: Build the documentation site (fails on any warning, including broken links)
+        run: mkdocs build --strict
+
   test:
     runs-on: ubuntu-latest
     strategy:

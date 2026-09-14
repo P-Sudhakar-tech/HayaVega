@@ -24,3 +24,6 @@ htmlcov/
 
 # Personal editor config, not shared project configuration.
 /.vscode/
+
+# MkDocs build output; docs/ (the source) is versioned, this is not.
+/site/

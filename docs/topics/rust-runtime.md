@@ -1,0 +1,78 @@
+# Rust runtime
+
+An opt-in, in-built, native WSGI server &mdash; `mangoo_native.serve_wsgi`,
+written in Rust &mdash; selected entirely via settings, no separate tool to
+install or run.
+
+## Enabling it
+
+```python title="project/settings.py"
+SERVER = {"HOST": "127.0.0.1", "PORT": 8000, "ENGINE": "rust"}  # default: "python"
+```
+
+```bash
+python manage.py launch
+```
+
+If `mangoo_native` wasn't built for this install, `mango launch` reports
+a clear, actionable error rather than silently falling back to the
+default `wsgiref` server under a different name.
+
+## Why it's fast
+
+Benchmarked at **1.4&ndash;2.9&times; faster than `waitress`** across
+every published scenario (`json_echo`, `db_list`, `template_render`,
+`static_file`) with a 100% success rate &mdash; see
+[Performance](../performance.md) for the numbers, both bugs found while
+getting there (`TCP_NODELAY`, and a Windows ephemeral-port-exhaustion
+failure mode without keep-alive), and the follow-up hardening pass
+(request smuggling, response splitting, Slowloris, and panic-isolation
+fixes, verified to cost zero measured performance).
+
+## Scope, disclosed rather than oversold
+
+This is a **synchronous, fixed-thread-pool** server (`workers=`, default
+8) &mdash; the same concurrency model `waitress` already uses, not a
+`tokio`/`hyper` async runtime. CPython's GIL means only one thread ever
+executes Python view code at a time regardless of the I/O layer, so
+async I/O would not let more Python code run concurrently than a thread
+pool already does here. Rust's role is the same narrow one every other
+native component in this codebase plays: own socket accept, HTTP/1.1
+parsing (including real keep-alive), and response writing around
+unchanged Python request-handling code via the standard WSGI contract.
+
+## TLS
+
+```python title="project/settings.py"
+SERVER = {"HOST": "127.0.0.1", "PORT": 8443, "ENGINE": "rust", "TLS_CERT": "cert.pem", "TLS_KEY": "key.pem"}
+```
+
+Uses `rustls` (the `ring` crypto provider). Both settings must be
+provided together, and are only accepted with `SERVER['ENGINE'] = 'rust'`
+&mdash; rejected under the Python engine rather than silently ignored,
+since that would otherwise be a real security footgun (expecting HTTPS,
+silently getting plaintext). Overhead is modest (roughly 0&ndash;12%
+depending on scenario, since the TLS handshake cost is paid once per
+connection and amortized by keep-alive). For local HTTPS development and
+testing &mdash; a real production deployment still terminates TLS at a
+reverse proxy, same as the `gunicorn`/`waitress` guidance in
+[Deployment](deployment.md).
+
+## HTTP/2: deliberately out of scope
+
+HTTP/2 is built around multiplexing many streams over one connection &mdash;
+fundamentally incompatible with this server's synchronous
+thread-per-connection design without effectively building a second
+scheduler inside it. Its main real-world benefit (parallel loading of
+many small browser-requested resources) also doesn't transfer to a
+backend API server the way it does to a browser client. A reverse proxy
+remains the right place for HTTP/2, same as for TLS termination in a
+real deployment.
+
+## What this version doesn't do
+
+No client-certificate authentication, no OCSP stapling, no certificate
+hot-reload (a changed cert/key needs a restart). This remains
+development/load-testing tooling, not a claim that it replaces
+`gunicorn`/`waitress` for production &mdash; see
+[Deployment](deployment.md) for the production guidance.
