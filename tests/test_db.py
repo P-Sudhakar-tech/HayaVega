@@ -7,10 +7,15 @@ from pathlib import Path
 from mangoo.db import (
     DatabaseConfigurationError,
     close_pooled_connections,
+    close_pooled_readonly_connections,
     connect,
+    connect_readonly,
     connection_pooling_enabled,
     disable_connection_pooling,
+    disable_readonly_connection_pooling,
     enable_connection_pooling,
+    enable_readonly_connection_pooling,
+    readonly_connection_pooling_enabled,
 )
 
 
@@ -110,5 +115,70 @@ class ConnectionPoolingTests(unittest.TestCase):
         connection.close()
         disable_connection_pooling()
         self.assertFalse(connection_pooling_enabled())
+        with self.assertRaises(sqlite3.ProgrammingError):
+            raw.execute("SELECT 1")
+
+
+class ReadonlyConnectionPoolingTests(unittest.TestCase):
+    """Independent of ConnectionPoolingTests: enable_readonly_connection_pooling()
+    only affects connect_readonly(), never connect()."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.database = {"ENGINE": "sqlite3", "NAME": Path(self.directory.name) / "readonly_pool.sqlite3"}
+        connect(self.database).close()  # create the file before pooling is ever enabled
+        self.addCleanup(disable_readonly_connection_pooling)
+
+    def test_readonly_pooling_is_disabled_by_default(self):
+        self.assertFalse(readonly_connection_pooling_enabled())
+        first = connect_readonly(self.database)
+        second = connect_readonly(self.database)
+        self.assertIsNot(first.raw, second.raw)
+        first.close()
+        second.close()
+
+    def test_enabled_readonly_pooling_reuses_the_same_connection_on_one_thread(self):
+        enable_readonly_connection_pooling()
+        first = connect_readonly(self.database)
+        first.close()
+        second = connect_readonly(self.database)
+        self.assertIs(first.raw, second.raw)
+        second.close()
+
+    def test_readonly_pooling_does_not_enable_write_pooling(self):
+        enable_readonly_connection_pooling()
+        self.assertFalse(connection_pooling_enabled())
+        first = connect(self.database)
+        second = connect(self.database)
+        self.assertIsNot(first.raw, second.raw)
+        first.close()
+        second.close()
+
+    def test_pooling_is_thread_local(self):
+        enable_readonly_connection_pooling()
+        main_connection = connect_readonly(self.database)
+        other_thread_raw = []
+
+        def worker():
+            connection = connect_readonly(self.database)
+            other_thread_raw.append(connection.raw)
+            connection.close()
+            close_pooled_readonly_connections()
+
+        thread = threading.Thread(target=worker)
+        thread.start()
+        thread.join()
+
+        self.assertIsNot(main_connection.raw, other_thread_raw[0])
+        main_connection.close()
+
+    def test_disable_readonly_connection_pooling_closes_pooled_connections(self):
+        enable_readonly_connection_pooling()
+        connection = connect_readonly(self.database)
+        raw = connection.raw
+        connection.close()
+        disable_readonly_connection_pooling()
+        self.assertFalse(readonly_connection_pooling_enabled())
         with self.assertRaises(sqlite3.ProgrammingError):
             raw.execute("SELECT 1")

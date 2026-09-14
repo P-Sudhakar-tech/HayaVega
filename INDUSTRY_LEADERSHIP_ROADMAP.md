@@ -798,16 +798,131 @@ never needs to do.
   benchmark isn't sensitive enough to see it -- consistent with this
   document's standard of shipping a proven-real, low-risk improvement on its
   own merits rather than only on whether one specific benchmark moves.
-- **The WSGI `template_render` gap to FastAPI (~11%) remains open.** Every
-  idea tried against it so far -- connection pooling, the read-only
-  connection above -- has run into the same wall: the per-request SQLite
-  connection/query cost so dominates total request time on this environment
-  that neither a connection-reuse strategy nor a lock-bookkeeping reduction
-  registers at the HTTP level. Closing it further would need either a
-  change to the *environment* (a faster filesystem/lock path, which is
-  outside this project's control) or accepting a different request-handling
-  model entirely (e.g. batching several logical reads behind one connection
-  open per request rather than per query -- not attempted, not scoped).
+- **The WSGI `template_render` gap to FastAPI (~11%) remains open** as far
+  as any single targeted fix goes -- see the re-measurement directly below,
+  which found the gap itself is no longer reproducible, for a different
+  reason than any one fix closing it.
+
+### Re-measuring the WSGI `template_render` gap: no longer reproducible, and why that's not the same as "fixed"
+
+Asked directly to work the `template_render` gap further, the first step
+was re-measuring it before trying anything new -- the last few fixes in
+this document (`values()` row hydration, `Collection.prepare()` caching,
+the compiled-template-engine work, read-only connections above) had each
+shipped on their own isolated merits despite showing "no measurable
+HTTP-level movement" individually, so it was worth checking whether they
+had quietly added up, or whether the ~11% figure even still held.
+
+- **Four full `oha -z 10s -c 30` runs of the published suite, no code
+  changed between them:**
+
+  | Run | Mangoo (WSGI) req/s | FastAPI req/s | Winner (margin) |
+  |---|---:|---:|---:|
+  | 1 | 721 | 722 | FastAPI (0.1%) |
+  | 2 | 736 | 626 | Mangoo (17.6%) |
+  | 3 | 670 | 761 | FastAPI (13.6%) |
+  | 4 | 751 | 760 | FastAPI (1.2%) |
+  | **Average** | **719.5** | **717.25** | **statistical tie (0.3%)** |
+
+- **The historically documented, persistent ~11% FastAPI lead is not
+  reproducible today: the average across four fresh runs is a dead heat**,
+  with individual runs swinging by as much as 17% in either direction
+  around that average -- run-to-run noise on this specific scenario is
+  now large enough that a single run (as several earlier snapshots in
+  this document were) is not a reliable read on which framework is
+  actually ahead.
+- **This is disclosed as a re-measurement, not claimed as a new fix.** No
+  code changed between these four runs -- this is the *existing* codebase
+  (already including every prior fix in this document) measured four times
+  in a row. The most likely explanation is the accumulated effect of
+  several earlier "no measurable HTTP-level movement" fixes -- each one
+  individually too small to see against the ~35-45ms per-request SQLite
+  floor, but a handful of them together apparently were enough to erode a
+  gap that used to read consistently as ~11% in single-run snapshots.
+  Environment differences between sessions (this machine's own load at
+  measurement time) cannot be ruled out either, and are the more likely
+  explanation for *why the noise itself is this large*, per this
+  document's own standing "environment ceiling" finding.
+- **Practical conclusion: stop treating single-run `template_render`
+  numbers as a reliable signal for this specific scenario.** Any future
+  claim about this gap -- in either direction -- needs multiple runs
+  averaged, exactly as done here, not the single-run figures this document
+  used in earlier sessions. The roadmap item is not "closed" in the sense
+  of a fix shipped against it this session; it is closed in the sense that
+  the gap it was tracking no longer measurably exists, given today's noise
+  level.
+
+### Pooling read-only connections specifically: a real isolated win, no HTTP-level win either -- disclosed, not shipped as default
+
+Asked whether anything could push WSGI faster still -- specifically
+whether a Rust template engine could help (already ruled out, see "Does a
+general native template engine survive generalization? No." above) -- the
+next concrete idea was connection pooling's own regression: it was
+attributed to many threads holding a **read-write** connection open under
+contention. A read-only connection takes no locks at all, so pooling
+*those* specifically was hypothesized not to carry the same cost.
+
+- [x] **Verified the hypothesis in isolation first, per this document's own
+      standing principle.** A 16-thread microbenchmark compared a fresh
+      read-only connection per call, a pooled read-only connection (one
+      per thread, reused), a fresh read-write connection per call, and a
+      pooled read-write connection (included as a same-run sanity check,
+      to confirm it still reproduces the known regression on this exact
+      run). **Result: pooled read-only connections won clearly, by
+      ~27-43% over every other option across two runs**, while pooled
+      read-write connections landed right where the known regression
+      predicted -- no faster than a fresh read-write connection. The
+      hypothesis held at this layer.
+- [x] **Shipped as `mangoo.db.enable_readonly_connection_pooling()`**,
+      independent of `enable_connection_pooling()` -- it only changes
+      `connect_readonly()` (and therefore `Selection.fetch()`/`values()`/
+      `total()`); the write path is completely unaffected and stays
+      governed by the existing flag alone. 5 new tests in `tests/test_db.py`
+      (`ReadonlyConnectionPoolingTests`) mirror the existing pooling test
+      shape: default-off, same-thread reuse, thread-locality, and that
+      enabling one flag never enables the other. All 394 tests, `ruff`,
+      and `mypy` stay clean.
+- **Measured at the HTTP level before enabling it anywhere -- and it did
+  not hold up.** Four paired `oha -z 10s -c 30` runs against
+  `benchmarks/mangoo_app/app.py` under real `waitress`, with and without
+  this enabled:
+
+  | Scenario | Read-only pooling enabled (4 runs) | Unpooled baseline (4 runs) |
+  |---|---:|---:|
+  | `db_list` | 826, 916, 762, 739 (avg 811) | 900, 788, 762, 908 (avg 840) |
+  | `template_render` | 718, 794, 670, 649 (avg 708) | 836, 723, 677, 705 (avg 735) |
+
+  **Both averages landed slightly *below* the unpooled baseline** (~3.5-4%)
+  -- within this scenario's established run-to-run noise band (up to
+  ~17%, per the re-measurement above), so this reads as no real
+  difference rather than a real regression, but it is clearly not the
+  27-43% win the isolated microbenchmark predicted.
+- **Why, and it is the same answer every connection-layer optimization in
+  this document has reached:** the isolated benchmark measures a
+  sub-millisecond connection-open saving in perfect isolation; a real
+  request pays that saving against a total cost of ~35-45ms, dominated by
+  `sqlite3.connect()`+`.execute()`'s own cost and general WSGI/waitress
+  request-handling overhead. A sub-millisecond saving is proportionally
+  invisible against that floor -- consistent with the `Collection.prepare()`
+  fix, the plain read-only-connection fix, and now this one.
+- **Decision: shipped as a real, tested, documented capability -- not
+  wired into `benchmarks/mangoo_app/app.py` by default, and not
+  recommended as a default for this workload shape.** It is not reverted,
+  because the underlying mechanism is correct and the isolated win is
+  real; a different deployment (a busier database, a slower filesystem,
+  more connection-open overhead relative to total request time than this
+  environment has) could plausibly still benefit. The docstring states
+  this exact disclosed result and tells the caller to benchmark their own
+  deployment, matching the standard every other tunable in this module is
+  held to.
+- **This closes out the concrete ideas this document had for the WSGI
+  connection-layer cost specifically.** Between this, plain read-only
+  connections, and read-write pooling, every angle on "hold or skip a
+  connection differently" has now been tried and none produced a durable
+  HTTP-level win on this environment -- consistent with the "environment
+  ceiling" finding that the real cost is `sqlite3.connect()`+`.execute()`
+  itself (and general request-handling overhead), not which connection
+  strategy wraps it.
 
 ### ASGI's own concurrency ceiling: a real, large, reproducible fix -- and a benchmark that didn't hold up, disclosed rather than hidden
 
@@ -1074,19 +1189,30 @@ runs). The isolated microbenchmark written to support it did not hold up
 under repetition and is disclosed as unreliable rather than cited as
 evidence -- the HTTP-level before/after comparison is what actually backs
 this one (see "ASGI's own concurrency ceiling" above).
+~~The WSGI `template_render` gap to FastAPI~~ -- re-measured (four full
+runs, no code changed) rather than chased with another targeted fix; the
+historically documented ~11% FastAPI lead is no longer reproducible, averaging
+to a statistical tie with run-to-run noise as large as 17% in either
+direction (see "Re-measuring the WSGI `template_render` gap" above). Not
+claimed as a fix shipped this session -- the accumulated effect of several
+earlier "no measurable HTTP-level movement" fixes is the most likely
+explanation for why a gap that used to read consistently as ~11% no longer
+does.
+~~Pooling read-only connections specifically (`mangoo.db.enable_readonly_connection_pooling()`)~~
+-- asked directly whether anything could push WSGI faster still after a
+Rust template engine was ruled out again; delivered as a real, tested,
+documented capability with a real 27-43% isolated win, but four paired
+HTTP-level runs found no durable benefit (within noise, if anything
+slightly below baseline) -- not wired in as a default, kept available for
+deployments with a different cost shape (see "Pooling read-only
+connections specifically" above).
 Remaining, deliberately unscheduled: a custom async/Rust HTTP runtime --
 ASGI support's benchmark data did not surface a bottleneck that would
 justify planning it (now that the executor-sizing ceiling above is fixed,
 this should be re-examined against fresh data before being ruled out
-again); the WSGI `template_render` gap itself -- connection
-pooling and read-only connections were the two concrete ideas this document
-had for it, and neither moved the HTTP-level number, so closing it further
-would need either an environment-level change (outside this project's
-control) or a different request-handling model (e.g. one connection open
-per request instead of per query -- not attempted, not scoped); a Tortoise
-ORM benchmark comparison -- new scope (an async-driver comparison app),
-requested but not started; dependency scanning and release automation
-(`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8c).
+again); a Tortoise ORM benchmark comparison -- new scope (an async-driver
+comparison app), requested but not started; dependency scanning and
+release automation (`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8c).
 
 ## Definition of done
 

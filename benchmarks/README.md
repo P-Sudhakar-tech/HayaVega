@@ -665,3 +665,34 @@ for again on tomorrow's planned template-compilation work, not a new one.
   conservative (worse-than-typical-production) figure, disclosed rather
   than tuned away, since tuning it would mean applying an optimization to
   only one of the three frameworks.
+
+## Update: the WSGI `template_render` gap to FastAPI is no longer reproducible
+
+Every narrative section above (Python-side context fixes, the compiled
+template engine, read-only connections) chased this gap while it
+consistently measured around ~11-25% in favor of FastAPI in single-run
+snapshots. Asked directly to work it further, the first step was
+re-measuring it, since several of those fixes had shipped on their own
+merits despite showing no visible HTTP-level movement individually.
+
+Four full `oha -z 10s -c 30` runs of the published suite, back to back, no
+code changed between them:
+
+| Run | Mangoo (WSGI) req/s | FastAPI req/s |
+|---|---:|---:|
+| 1 | 721 | 722 |
+| 2 | 736 | 626 |
+| 3 | 670 | 761 |
+| 4 | 751 | 760 |
+| **Average** | **719.5** | **717.25** |
+
+**The gap averages to a statistical tie (0.3%), with individual runs
+swinging up to 17% in either direction.** This is not claimed as a new fix
+-- nothing changed between these four runs -- most likely the accumulated
+effect of several earlier "no measurable HTTP-level movement" fixes adding
+up over time, plus this scenario's run-to-run noise (see "Honest
+limitations" above) being large enough that any single past snapshot,
+including the ones earlier in this document, was never a fully reliable
+read on which framework was actually ahead. Anyone citing a `template_render`
+number from this suite going forward should average several runs, not
+quote one.

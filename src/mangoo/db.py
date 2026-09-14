@@ -191,8 +191,92 @@ def connect(database: str | Path | dict) -> Connection:
     return _open(config)
 
 
+_readonly_pool_enabled = False
+_readonly_pool_local = threading.local()
+
+
+def enable_readonly_connection_pooling() -> None:
+    """Reuse one read-only connection per (thread, database config) instead
+    of opening a fresh one on every `connect_readonly()` call.
+
+    Independent of `enable_connection_pooling()` -- that function pools
+    read-write connections and, measured against this project's own
+    `benchmarks/`, regresses the WSGI path by ~10-15% (many threads holding
+    a *read-write* connection open contends under SQLite on this
+    environment; see its own docstring for the full result). A read-only
+    connection takes no reserved/pending locks at all, so holding one open
+    per thread was hypothesized not to reproduce that contention -- and
+    an isolated 16-thread microbenchmark confirmed the hypothesis at that
+    layer: pooling read-only connections beat both a fresh read-only
+    connection per call and a pooled *read-write* connection (which
+    reproduced the known regression, as a same-run sanity check) by
+    ~27-43% across two runs. Only affects `connect_readonly()` -- the write
+    path (`connect()`, and therefore `Collection.append()`/
+    `Selection.revise()`/`erase()`) is completely unaffected by this flag
+    and stays governed by `enable_connection_pooling()` alone.
+
+    **That isolated win did not survive to the HTTP level -- measured, not
+    assumed.** Four paired `oha -z 10s -c 30` runs against
+    `benchmarks/mangoo_app/app.py` under real `waitress`, with and without
+    this enabled: `db_list` averaged 811 req/s pooled vs. 840 req/s
+    unpooled; `template_render` averaged 708 req/s pooled vs. 735 req/s
+    unpooled -- both within this scenario's established run-to-run noise
+    band (up to ~17%, see `INDUSTRY_LEADERSHIP_ROADMAP.md`'s
+    `template_render` re-measurement), so neither a real win nor a real
+    loss, not the substantial win the isolated microbenchmark predicted.
+    `benchmarks/mangoo_app/app.py` (WSGI) deliberately leaves this
+    disabled for exactly that reason: the sub-millisecond connection-layer
+    saving this recovers is proportionally invisible against a request
+    whose own `sqlite3.connect()`+`.execute()` already costs ~35-45ms
+    end to end on this environment -- the same "environment ceiling"
+    finding every other connection-layer optimization in this document has
+    run into. Kept available and tested (not reverted) since it is a real,
+    correct capability that may still help a different deployment's
+    workload shape; just not proven to help this one.
+
+    **Benchmark your own deployment before enabling -- disclosed exactly
+    like every other tunable in this module.** A pooled read-only SQLite
+    connection reads a point-in-time snapshot of the schema and any
+    long-lived cached state the driver keeps; this framework's own
+    `Collection.prepare()` cache already assumes a table's schema never
+    changes without a migration, so this carries no additional risk beyond
+    what `enable_connection_pooling()` already documents for MySQL/
+    PostgreSQL connections going stale after a long idle period.
+    """
+    global _readonly_pool_enabled
+    _readonly_pool_enabled = True
+
+
+def disable_readonly_connection_pooling() -> None:
+    """Turn read-only pooling back off and close every connection this thread pooled."""
+    global _readonly_pool_enabled
+    _readonly_pool_enabled = False
+    close_pooled_readonly_connections()
+
+
+def readonly_connection_pooling_enabled() -> bool:
+    return _readonly_pool_enabled
+
+
+def close_pooled_readonly_connections() -> None:
+    """Close every read-only connection pooled on the *current* thread.
+
+    Mirrors `close_pooled_connections()`, kept as a separate pool so
+    enabling/disabling read-only pooling never touches the write-path pool.
+    """
+    pool = getattr(_readonly_pool_local, "connections", None)
+    if not pool:
+        return
+    for connection in pool.values():
+        try:
+            connection.raw.close()
+        except Exception:
+            pass
+    pool.clear()
+
+
 def connect_readonly(database: str | Path | dict) -> Connection:
-    """Open a connection scoped to reads only, never pooled.
+    """Open a connection scoped to reads only.
 
     For SQLite, this opens the file with the `mode=ro` URI parameter instead
     of a plain read-write connection. Measured (`benchmarks/
@@ -202,12 +286,15 @@ def connect_readonly(database: str | Path | dict) -> Connection:
     16-thread contention, on Windows -- a read-only open skips the
     reserved/pending-lock bookkeeping SQLite otherwise does on every
     statement to guard against a writer, which a connection that will only
-    ever `SELECT` never needs. This is a different mechanism from
-    `enable_connection_pooling()`, and does not carry that feature's
-    downside: a connection opened here is still opened and closed fresh on
-    every call (never held open across requests), so it does not reproduce
-    the many-threads-holding-a-connection-open contention that made pooling
-    regress the WSGI path.
+    ever `SELECT` never needs.
+
+    Never pooled by default -- opened and closed fresh on every call, which
+    does not reproduce the many-threads-holding-a-connection-open
+    contention that made pooling regress the WSGI path under
+    `enable_connection_pooling()`. Pass through `enable_readonly_connection_pooling()`
+    to additionally reuse one read-only connection per thread; see that
+    function's docstring for why pooling *read-only* connections was found
+    not to carry the write-pooling regression.
 
     Only used internally by `Selection.fetch()`/`values()`/`total()` --
     pure-read call sites that never call `.commit()`. `Collection.append()`/
@@ -226,10 +313,27 @@ def connect_readonly(database: str | Path | dict) -> Connection:
     engine = str(config.get("ENGINE", "sqlite3")).lower()
     if engine not in {"sqlite", "sqlite3"}:
         return connect(database)
+    if _readonly_pool_enabled:
+        pool = _readonly_pool_local.__dict__.setdefault("connections", {})
+        key = _pool_key(config)
+        cached = pool.get(key)
+        if cached is not None:
+            return cached
+        connection = _open_readonly(config)
+        if connection is None:
+            return connect(database)
+        connection.pooled = True
+        pool[key] = connection
+        return connection
+    connection = _open_readonly(config)
+    return connection if connection is not None else connect(database)
+
+
+def _open_readonly(config: dict) -> Connection | None:
     try:
         raw = sqlite3.connect(f"file:{config['NAME']}?mode=ro", uri=True)
     except sqlite3.OperationalError:
-        return connect(database)
+        return None
     raw.row_factory = sqlite3.Row
     return Connection(raw, "sqlite3")
 
