@@ -95,6 +95,5 @@ and [Admin](admin.md).
 
 A living checklist covering sessions, CSRF, CORS, proxy trust, headers,
 and rate limits, each item linked to a real test or a documented
-operational control &mdash; see
-[`SECURITY_REVIEW_CHECKLIST.md`](https://github.com/P-Sudhakar-tech/mangoo-framework/blob/main/SECURITY_REVIEW_CHECKLIST.md)
-in the repository.
+operational control &mdash; see `SECURITY_REVIEW_CHECKLIST.md` in the
+repository.

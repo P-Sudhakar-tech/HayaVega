@@ -2,8 +2,7 @@
 
 Every claim on this page is falsifiable on purpose: judged by published,
 reproducible benchmark numbers, never adjectives. Full methodology and
-every honest caveat live in
-[`benchmarks/README.md`](https://github.com/P-Sudhakar-tech/mangoo-framework/blob/main/benchmarks/README.md);
+every honest caveat live in `benchmarks/README.md` in the repository;
 this page summarizes the headline results.
 
 **Methodology:** [`oha`](https://github.com/hatoo/oha), 10s duration, 30
@@ -30,9 +29,9 @@ server.
 | `template_render` | **799** | 763 | 688 | 332 |
 | `static_file` | **1384** | 1108 | 646 | 921 |
 
-_req/s, higher is better. Single-machine, single-run &mdash; see the
-[full results file](https://github.com/P-Sudhakar-tech/mangoo-framework/blob/main/benchmarks/results/RESULTS.md)
-for p50/p90/p99 and success rate on every row._
+_req/s, higher is better. Single-machine, single-run &mdash; see
+`benchmarks/results/RESULTS.md` in the repository for p50/p90/p99 and
+success rate on every row._
 
 Mangoo leads every published scenario on both transports.
 
@@ -97,5 +96,5 @@ This project's standing rule: publish what loses, not only what wins.
   framework's code can be blamed for or beat through code changes alone.
 
 Full numbers, every benchmark script, and the complete narrative of what
-was tried (including the dead ends) live in
-[`benchmarks/README.md`](https://github.com/P-Sudhakar-tech/mangoo-framework/blob/main/benchmarks/README.md).
+was tried (including the dead ends) live in `benchmarks/README.md` in
+the repository.

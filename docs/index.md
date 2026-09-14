@@ -13,7 +13,6 @@ hide:
 A conventional, batteries-included project structure. Automatic, interactive API documentation, generated from your code. A Rust core where it actually wins the benchmark, and honestly disclosed where it doesn't.
 
 [Get started :material-arrow-right:](getting-started/index.md){ .md-button }
-[View on GitHub :fontawesome-brands-github:](https://github.com/P-Sudhakar-tech/mangoo-framework){ .md-button .md-button--secondary }
 
 </div>
 

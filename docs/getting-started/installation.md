@@ -7,10 +7,9 @@
 
 ## Install from source
 
-Mangoo isn't published to PyPI yet &mdash; install it directly from a checkout:
+Mangoo isn't published to PyPI yet &mdash; install it directly from a local checkout of the repository:
 
 ```bash
-git clone https://github.com/P-Sudhakar-tech/mangoo-framework.git
 cd mangoo-framework
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
@@ -54,7 +53,6 @@ mypy
 ```
 
 See [Testing](../topics/testing.md) for how the test suite itself is
-organized, and [CONTRIBUTING](https://github.com/P-Sudhakar-tech/mangoo-framework)
-for the project's development workflow.
+organized.
 
 Next: [Quickstart](quickstart.md).
