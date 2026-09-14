@@ -63,6 +63,22 @@ worker guidance and
 [`benchmarks/README.md`](benchmarks/README.md#asgi-vs-fastapi) for how it
 measures against FastAPI on the same server.
 
+## Rust development runtime
+
+`SERVER['ENGINE'] = 'rust'` in settings switches `mango launch` from the
+default `wsgiref` dev server to `mangoo_native`'s own WSGI-compatible
+HTTP/1.1 server -- a synchronous, fixed-thread-pool design (the same
+concurrency model `waitress` uses; CPython's GIL means async I/O would not
+let more Python view code run concurrently), benchmarked at 1.41x-2.68x
+faster than `waitress` across every published scenario, with real HTTP/1.1
+keep-alive. Development/load-testing tooling, not a production-server
+recommendation of its own -- see
+[DEPLOYMENT.md](DEPLOYMENT.md#rust-runtime-an-opt-in-settings-driven-native-wsgi-server)
+and
+[`benchmarks/README.md`](benchmarks/README.md#the-rust-runtime-vs-the-python-runtime-waitress)
+for the full, disclosed result including two real bugs found while
+benchmarking it.
+
 ## Settings
 
 Each project has a Django-familiar `project/settings.py`, but Mangoo uses its own explicit runtime sections:

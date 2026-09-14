@@ -44,3 +44,22 @@ class SettingsTests(unittest.TestCase):
         module.SERVER = {"PORT": 70000}
         with self.assertRaisesRegex(ValueError, "PORT"):
             load_settings_from_module(module)
+
+    def test_server_engine_defaults_to_python(self):
+        module = ModuleType("project.settings")
+        module.DATABASES = {"default": {"ENGINE": "sqlite3", "NAME": "mangoo.sqlite3"}}
+        module.SERVER = {}
+        self.assertEqual(load_settings_from_module(module).server_engine, "python")
+
+    def test_server_engine_accepts_rust(self):
+        module = ModuleType("project.settings")
+        module.DATABASES = {"default": {"ENGINE": "sqlite3", "NAME": "mangoo.sqlite3"}}
+        module.SERVER = {"ENGINE": "rust"}
+        self.assertEqual(load_settings_from_module(module).server_engine, "rust")
+
+    def test_rejects_invalid_server_engine(self):
+        module = ModuleType("project.settings")
+        module.DATABASES = {"default": {"ENGINE": "sqlite3", "NAME": "mangoo.sqlite3"}}
+        module.SERVER = {"ENGINE": "nodejs"}
+        with self.assertRaisesRegex(ValueError, "ENGINE"):
+            load_settings_from_module(module)

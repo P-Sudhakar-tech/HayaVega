@@ -13,6 +13,8 @@ from mangoo.migrations import generate as generate_migration
 from mangoo.migrations import status as lookup_migration_status
 from mangoo.production import ProductionConfigurationError, validate_production
 from mangoo.runtime import serve
+from mangoo.rust_runtime import RustRuntimeUnavailableError
+from mangoo.rust_runtime import serve as serve_rust
 
 HELP_TEXT = "Commands: launch [port] [--noreload], newapp <name>, createadmin, enable2fa <username>, newmigration <app>, applymigrations, migrationstatus, diagnose"
 
@@ -82,8 +84,14 @@ def _launch(args: list[str]) -> None:
         host, _, port = address.partition(":")
     else:
         host, port = "127.0.0.1", address
+    hardening = HardeningOptions.from_settings(allowed_hosts=getattr(settings, "allowed_hosts", ()), security=getattr(settings, "security", {}))
+    debug = getattr(settings, "debug", False)
+    server_engine = getattr(settings, "server_engine", "python")
+    serve_function = serve_rust if server_engine == "rust" else serve
     try:
-        serve(urls.urlpatterns, host, int(port or 8000), hardening=HardeningOptions.from_settings(allowed_hosts=getattr(settings, "allowed_hosts", ()), security=getattr(settings, "security", {})), debug=getattr(settings, "debug", False))
+        serve_function(urls.urlpatterns, host, int(port or 8000), hardening=hardening, debug=debug)
+    except RustRuntimeUnavailableError as error:
+        print(f"Error: {error}")
     except KeyboardInterrupt:
         print("\nMangoo development server stopped.")
 

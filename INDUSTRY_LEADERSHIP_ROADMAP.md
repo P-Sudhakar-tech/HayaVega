@@ -1206,13 +1206,124 @@ HTTP-level runs found no durable benefit (within noise, if anything
 slightly below baseline) -- not wired in as a default, kept available for
 deployments with a different cost shape (see "Pooling read-only
 connections specifically" above).
-Remaining, deliberately unscheduled: a custom async/Rust HTTP runtime --
-ASGI support's benchmark data did not surface a bottleneck that would
-justify planning it (now that the executor-sizing ceiling above is fixed,
-this should be re-examined against fresh data before being ruled out
-again); a Tortoise ORM benchmark comparison -- new scope (an async-driver
-comparison app), requested but not started; dependency scanning and
-release automation (`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8c).
+Remaining, deliberately unscheduled: a Tortoise ORM benchmark comparison --
+new scope (an async-driver comparison app), requested but not started;
+dependency scanning and release automation
+(`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8c).
+
+### The custom Rust HTTP runtime: delivered, with a disclosed scope-down and two real bugs found while benchmarking it
+
+This document's own earlier text called a custom async/Rust HTTP runtime
+"the largest possible swing," flagged it in `UPCOMING_IMPROVEMENT_ROADMAP.md`
+as "a multi-week foundational rewrite, needs its own dedicated planning and
+explicit sign-off before starting," and repeatedly noted ASGI's benchmark
+data hadn't surfaced a bottleneck that would justify scoping it. Asked
+directly to build it -- in-built to the framework, driven by a settings.py
+flag rather than a separate tool -- that planning happened as part of
+building it, with the scope decision made explicit before any code was
+written rather than discovered partway through.
+
+**Scope decision: synchronous thread pool, not async `tokio`/`hyper`.**
+CPython's GIL means only one thread ever executes Python view code at a
+time no matter how the socket-accept/HTTP-parsing layer is built. An async
+I/O multiplexer would let far more *idle* connections be held cheaply, but
+would not let more Python view code run *concurrently* than a bounded
+thread pool already does -- the exact same reasoning this document already
+used for `max_sync_workers` in `mangoo.asgi`. A synchronous, fixed-size
+thread pool (matching `waitress`'s own concurrency model) avoids a large
+new dependency surface and the real risk of subtle async/GIL interaction
+bugs, for no proven concurrency benefit given the GIL constraint on this
+specific workload shape.
+
+- [x] **Built `mangoo_native.serve_wsgi()`**
+      (`crates/mangoo-python/src/server.rs`): a hand-written HTTP/1.1
+      parser (request line, headers, `Content-Length`-framed body; no
+      chunked transfer-encoding in this version, disclosed) and a fixed
+      thread pool (`workers=`, default 8) that each call
+      `TcpListener::accept()` directly (safe to share across threads
+      without an explicit `Mutex`), build a real WSGI `environ` dict, call
+      the *unchanged* Python `application(environ, start_response)`
+      exactly as `wsgiref`/`waitress` do, and write the response back.
+      Rust's role is identical to every other native component in this
+      codebase: own a narrow, bounded piece of work around unchanged
+      Python code, not replace the framework's own request-handling logic.
+- [x] **Wired in as `mangoo.rust_runtime`**, selected by
+      `SERVER['ENGINE'] = 'rust'` in a project's settings module (default
+      `'python'`, i.e. today's behavior, completely unchanged) -- exactly
+      the "settings.py, flag-based" requirement asked for.
+      `management/commands.py`'s `_launch()` dispatches to
+      `mangoo.rust_runtime.serve()` instead of `mangoo.runtime.serve()`
+      when configured, reporting `RustRuntimeUnavailableError` plainly
+      (not a silent fallback) if `mangoo_native` was not built for this
+      install -- the same "actionable error, not a masked failure"
+      standard this document's error-message-quality-bar work already set.
+- [x] **Found and fixed two real bugs while benchmarking, not shipped
+      blind, per this document's own standing principle of benchmarking
+      before calling anything done:**
+  1. **No `TCP_NODELAY`.** The first working version lost `db_list` to
+     `waitress` by 4x (0.25x ratio) with an 846ms p99 -- implausible for a
+     transport-layer difference alone. Root cause: Nagle's algorithm on
+     the response write interacting with the peer's delayed-ACK timer,
+     the single most common latency pitfall in hand-written TCP servers.
+     `stream.set_nodelay(true)` fixed it outright.
+  2. **No HTTP keep-alive.** Even after that fix, a second full run (no
+     code changed) collapsed to a 6.2% success rate on `db_list` -- an
+     outright failure, not a slowdown. This is the *exact same* root
+     cause this document already diagnosed for the Django benchmark
+     target (see "A real gotcha this suite ran into" in
+     `benchmarks/README.md`): opening and closing a new TCP connection
+     per request under sustained concurrent load exhausts Windows' small
+     default ephemeral-port range within seconds. Fixed by implementing
+     real HTTP/1.1 keep-alive: a `BufReader` that lives for the whole
+     connection (not recreated per request, which would silently discard
+     pipelined bytes read ahead into its buffer), `Connection: keep-alive`
+     by default with an honored explicit `Connection: close`, and a
+     30-second idle-connection read timeout so one slow or abandoned
+     client can't pin a worker thread forever and shrink the effective
+     pool.
+- [x] **Benchmarked before calling it done, two full runs, per this
+      document's own principle** (`benchmarks/rust_runtime_vs_wsgi.py`,
+      `oha -z 10s -c 30`, same app/routes/seeded data as the published
+      cross-framework suite, only the server differing):
+
+  | Scenario | Rust runtime (2 runs) | waitress (2 runs) | Ratio |
+  |---|---:|---:|---:|
+  | `json_echo` | 7570, 8350 req/s | 2822, 3607 req/s | 2.68x, 2.32x |
+  | `db_list` | 1437, 1503 req/s | 772, 837 req/s | 1.86x, 1.80x |
+  | `template_render` | 969, 1156 req/s | 689, 731 req/s | 1.41x, 1.58x |
+  | `static_file` | 1510, 1908 req/s | 1047, 1195 req/s | 1.44x, 1.60x |
+
+  **A real, substantial win on every scenario in both runs (1.41x-2.68x),
+  with a 100% success rate both times** -- unlike every connection-pooling
+  idea tried earlier in this document for the WSGI `template_render` gap,
+  this genuinely shows up at the HTTP level. The likely reason: those
+  earlier ideas targeted the SQLite connection cost specifically, a small
+  slice of total request time; this targets the HTTP request/response
+  handling layer itself, which every single request pays regardless of
+  what the view does, so it isn't competing against a dominant unrelated
+  cost the way a connection-layer change was.
+- [x] **Tested for correctness, not just speed -- "with and without" as
+      asked.** `tests/test_rust_runtime.py` runs the real framework's
+      `create_application()` output through both the existing, trusted
+      `TestClient` (the "without") and a real socket connection to the
+      Rust server (the "with"), asserting byte-identical status codes and
+      response bodies for a DB-backed route, a plain route, a 404, and
+      query-string parsing. `tests/test_conf.py` and
+      `tests/test_management.py` cover `SERVER['ENGINE']` validation and
+      `_launch()`'s dispatch, including the unavailable-native-extension
+      error path. Wired into the `native-extension` CI job (the one job
+      that actually builds `mangoo_native`). 404 total tests, `ruff`,
+      `ruff format`, and `mypy` all stay clean; `cargo test -p mangoo-core`
+      (14 tests, untouched by this work) still passes.
+- **What this is not, disclosed plainly:** HTTP/2, TLS termination, and
+  pipelining beyond simple sequential keep-alive are out of scope for this
+  version. This is development/load-testing tooling
+  (`mango launch`'s `SERVER['ENGINE'] = 'rust'`), not a production-server
+  claim -- `DEPLOYMENT.md`'s gunicorn/waitress guidance for real deployment
+  is completely unchanged.
+
+Full numbers, both bugs, and the scope-decision reasoning:
+[`benchmarks/README.md`](benchmarks/README.md#the-rust-runtime-vs-the-python-runtime-waitress).
 
 ## Definition of done
 

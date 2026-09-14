@@ -7,6 +7,8 @@ use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+mod server;
+
 #[pyfunction]
 fn normalize_path(path: &str) -> String {
     mangoo_core::normalize_path(path)
@@ -306,5 +308,6 @@ fn mangoo_native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyCompiledNativeTemplate>()?;
     module.add_class::<PyMangoList>()?;
     module.add_class::<PySignalDispatcher>()?;
+    server::register(module)?;
     Ok(())
 }

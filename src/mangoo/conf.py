@@ -20,6 +20,7 @@ class ProjectSettings:
     database: dict
     server_host: str
     server_port: int
+    server_engine: str
     security: dict
     module_name: str = "project.settings"
 
@@ -54,6 +55,9 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
     port = server.get("PORT", 8000)
     if not isinstance(port, int) or not 1 <= port <= 65535:
         raise ValueError(f"{module.__name__}: SERVER['PORT'] must be an integer between 1 and 65535 -- got {port!r}. Fix SERVER['PORT'] in {module.__name__}.")
+    engine = server.get("ENGINE", "python")
+    if engine not in {"python", "rust"}:
+        raise ValueError(f"{module.__name__}: SERVER['ENGINE'] must be 'python' or 'rust' -- got {engine!r}. Fix SERVER['ENGINE'] in {module.__name__}.")
 
     return ProjectSettings(
         base_dir=base_dir,
@@ -66,6 +70,7 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
         database=database,
         server_host=server.get("HOST", "127.0.0.1"),
         server_port=port,
+        server_engine=engine,
         security=dict(getattr(module, "SECURITY", {})),
         module_name=module.__name__,
     )

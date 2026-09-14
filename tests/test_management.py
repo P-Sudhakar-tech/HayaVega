@@ -8,6 +8,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 from mangoo.management.commands import HELP_TEXT, _createadmin, execute_from_command_line
+from mangoo.rust_runtime import RustRuntimeUnavailableError
 
 
 class ManagementTests(unittest.TestCase):
@@ -34,6 +35,41 @@ class ManagementTests(unittest.TestCase):
         _, host, port = serve.call_args.args
         self.assertEqual(host, "127.0.0.1")
         self.assertEqual(port, 8001)
+
+    @patch("mangoo.management.commands.serve")
+    @patch("mangoo.management.commands.load_settings")
+    def test_launch_defaults_to_the_python_runtime(self, load_settings, serve):
+        load_settings.return_value = SimpleNamespace(root_urlconf="test_project_urls", server_host="127.0.0.1", server_port=8000)
+        urls = ModuleType("test_project_urls")
+        urls.urlpatterns = []
+        with patch.dict(sys.modules, {"test_project_urls": urls}):
+            execute_from_command_line(["manage.py", "launch", "8001", "--noreload"])
+        serve.assert_called_once()
+
+    @patch("mangoo.management.commands.serve_rust")
+    @patch("mangoo.management.commands.load_settings")
+    def test_launch_dispatches_to_the_rust_runtime_when_configured(self, load_settings, serve_rust):
+        load_settings.return_value = SimpleNamespace(root_urlconf="test_project_urls", server_host="127.0.0.1", server_port=8000, server_engine="rust")
+        urls = ModuleType("test_project_urls")
+        urls.urlpatterns = []
+        with patch.dict(sys.modules, {"test_project_urls": urls}):
+            execute_from_command_line(["manage.py", "launch", "8001", "--noreload"])
+        serve_rust.assert_called_once()
+        _, host, port = serve_rust.call_args.args
+        self.assertEqual(host, "127.0.0.1")
+        self.assertEqual(port, 8001)
+
+    @patch("mangoo.management.commands.serve_rust")
+    @patch("mangoo.management.commands.load_settings")
+    def test_launch_reports_an_unavailable_rust_runtime_without_crashing(self, load_settings, serve_rust):
+        load_settings.return_value = SimpleNamespace(root_urlconf="test_project_urls", server_host="127.0.0.1", server_port=8000, server_engine="rust")
+        serve_rust.side_effect = RustRuntimeUnavailableError("mangoo_native was not built")
+        urls = ModuleType("test_project_urls")
+        urls.urlpatterns = []
+        output = io.StringIO()
+        with patch.dict(sys.modules, {"test_project_urls": urls}), redirect_stdout(output):
+            execute_from_command_line(["manage.py", "launch", "8001", "--noreload"])
+        self.assertIn("mangoo_native was not built", output.getvalue())
 
     @patch("mangoo.management.commands.load_settings")
     def test_createadmin_creates_account(self, load_settings):

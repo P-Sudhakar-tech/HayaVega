@@ -70,6 +70,41 @@ those scenarios exercise the concurrent I/O that is the actual reason to
 choose ASGI over WSGI in a real project
 with that shape of workload.
 
+### Rust runtime: an opt-in, settings-driven native WSGI server
+
+`SERVER['ENGINE'] = 'rust'` in a project's settings module switches
+`mango launch` (and `python manage.py launch`) from the default `wsgiref`
+dev server to `mangoo_native`'s own WSGI-compatible HTTP/1.1 server --
+still development tooling, not a production server recommendation of its
+own (see the gunicorn/waitress guidance above for that), but a real,
+benchmarked alternative for local development and load testing. Requires
+`mangoo_native` to have been built (`cargo` on `PATH` during
+`pip install`/`pip install -e .`, the same requirement Signals' Rust
+dispatcher already has) -- `mango launch` reports a clear, actionable
+error rather than silently falling back if it wasn't.
+
+```python
+# project/settings.py
+SERVER = {"HOST": "127.0.0.1", "PORT": 8000, "ENGINE": "rust"}  # default: "python"
+```
+
+**Scope, disclosed rather than oversold:** this is a synchronous,
+fixed-thread-pool server (`workers=` on `mangoo.rust_runtime.serve`,
+default 8) -- the same concurrency model `waitress` already uses -- not a
+`tokio`/`hyper` async runtime. CPython's GIL means only one thread ever
+executes Python view code at a time regardless of the I/O layer, so async
+I/O would not let more Python code run concurrently than a thread pool
+already does; Rust's role here is the same narrow one every other native
+component in this codebase plays (own socket accept, HTTP/1.1 parsing --
+including real keep-alive support -- and response writing around
+unchanged Python request-handling code via the standard WSGI contract).
+Full detail, including two real bugs found and fixed while benchmarking
+it (`TCP_NODELAY`, and a Windows ephemeral-port-exhaustion failure mode
+without keep-alive -- the same failure mode already documented in
+[`benchmarks/README.md`'s "A real gotcha this suite ran into"](benchmarks/README.md#a-real-gotcha-this-suite-ran-into-and-why-the-django-app-looks-the-way-it-does)
+for the Django benchmark target), in
+[`benchmarks/README.md`](benchmarks/README.md#the-rust-runtime-vs-the-python-runtime-waitress).
+
 ## Before deployment
 
 1. Set a unique `MANGOO_SECRET_KEY`; never use the scaffold default.

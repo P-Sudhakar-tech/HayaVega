@@ -165,6 +165,101 @@ aren't benchmarked here, since doing so honestly would require an
 equivalent async-I/O scenario in the FastAPI app too -- left for a future
 pass rather than benchmarked with a scenario mismatch.
 
+## The Rust runtime vs the Python runtime (waitress)
+
+The `UPCOMING_IMPROVEMENT_ROADMAP.md` item "replace the WSGI dev server
+with an async/Rust runtime" was flagged for years in this document as "a
+multi-week foundational rewrite, needs its own dedicated planning" and
+never started. Asked directly to build it, in-built and settings-driven
+(`SERVER['ENGINE'] = 'rust'`), this section is that work, plus its
+benchmark.
+
+**Scope decision, made explicit before writing any code and disclosed
+here rather than silently substituted:** the roadmap item said "async" --
+this implementation is a synchronous, fixed-thread-pool server instead
+(`mangoo_native.serve_wsgi`, `crates/mangoo-python/src/server.rs`), the
+same concurrency model `waitress` already uses. Reasoning: CPython's GIL
+means only one thread ever executes Python view code at a time regardless
+of how the socket-accept/HTTP-parsing layer is built, so a `tokio`/`hyper`
+async I/O multiplexer would not let more Python code run concurrently
+than a bounded thread pool already does -- the only thing async I/O could
+improve is connection-count scaling far past what this framework's
+realistic deployments need. Choosing the simpler, better-understood
+design avoided a large new dependency surface and the real risk of subtle
+async/GIL interaction bugs, for no proven concurrency benefit given the
+GIL constraint. Rust's role is the same narrow one every other native
+component in this codebase plays: own socket accept, HTTP/1.1 parsing,
+and response writing around unchanged Python request-handling code via
+the standard WSGI contract -- `mangoo.runtime.create_application()` is
+called exactly as it always is; only what serves it differs.
+
+**Two real bugs were found and fixed while benchmarking, not shipped
+blind:**
+
+1. **No `TCP_NODELAY`.** The first working version, benchmarked, lost
+   `db_list` by 4x (0.25x ratio) with a 846ms p99 -- far worse than
+   plausible for a socket/parsing-layer difference alone. Root cause:
+   Nagle's algorithm on the response write interacting with the peer's
+   delayed-ACK timer, adding tens of milliseconds of pure TCP protocol
+   latency per request. `stream.set_nodelay(true)` on every accepted
+   connection fixed it outright.
+2. **No HTTP keep-alive.** Even after the `TCP_NODELAY` fix, a *second*
+   full benchmark run (same code, no changes) collapsed to a 6.2% success
+   rate on `db_list` and 69.2% on `json_echo` -- not a slowdown, an
+   outright failure mode. This is the exact same root cause this document
+   already diagnosed for the Django benchmark target (see "A real gotcha
+   this suite ran into" above): opening and closing a new TCP connection
+   per request fast enough under sustained concurrent load exhausts
+   Windows' small default ephemeral-port range within seconds. Fixed by
+   implementing real HTTP/1.1 keep-alive (`Connection: keep-alive` by
+   default, honoring an explicit `Connection: close`, one shared
+   `BufReader` per connection reused across pipelined requests so no
+   pipelined bytes are silently dropped between requests, plus a 30-second
+   idle-connection read timeout so a client that opens a connection and
+   sends nothing further can't pin a worker thread forever and shrink the
+   effective pool). This was not an optional performance nicety for this
+   implementation -- without it, the server was measurably unreliable
+   under the exact load this benchmark suite already generates.
+
+**Result, two full runs at `--duration 10s --connections 30`
+(`benchmarks/rust_runtime_vs_wsgi.py`), after both fixes:**
+
+| Scenario | Rust runtime (2 runs) | waitress (2 runs) | Ratio (2 runs) |
+|---|---:|---:|---:|
+| `json_echo` | 7570, 8350 req/s | 2822, 3607 req/s | 2.68x, 2.32x |
+| `db_list` | 1437, 1503 req/s | 772, 837 req/s | 1.86x, 1.80x |
+| `template_render` | 969, 1156 req/s | 689, 731 req/s | 1.41x, 1.58x |
+| `static_file` | 1510, 1908 req/s | 1047, 1195 req/s | 1.44x, 1.60x |
+
+**The Rust runtime wins every scenario in both runs, by a real and
+substantial margin (1.41x-2.68x), with a 100% success rate in both --**
+unlike every connection-pooling/read-only-connection idea tried earlier
+in this document, this is a genuine win that *does* show up at the HTTP
+level. The likely reason it succeeds where those didn't: those changes
+target the SQLite connection cost specifically, a small slice of total
+request time on this environment; this change targets the HTTP
+request/response handling layer itself (socket I/O, HTTP/1.1 parsing,
+header/response construction), which every single request pays regardless
+of what the view does, so a win there is not competing against a dominant
+unrelated cost the way a connection-layer optimization was.
+
+**Verified for correctness, not just speed:** `tests/test_rust_runtime.py`
+runs the real framework's `create_application()` output through both the
+existing, trusted `TestClient` and a real socket connection to the Rust
+server, asserting identical status codes and response bodies for a
+DB-backed route, a plain route, a 404, and query-string parsing -- proving
+WSGI-contract correctness (environ construction, `start_response`, header
+handling), not just that requests complete. Wired into the CI
+`native-extension` job (the same job Signals' Rust dispatcher tests run
+in), since it requires `mangoo_native` to be built.
+
+**What this version does not do, disclosed plainly:** HTTP/2, TLS
+termination, and request pipelining beyond simple sequential keep-alive
+are all out of scope. This remains development/load-testing tooling
+(`mango launch`'s `SERVER['ENGINE'] = 'rust'`), not a claim that it
+replaces `gunicorn`/`waitress` for a real production deployment -- the
+same production-server guidance in `DEPLOYMENT.md` is unchanged.
+
 ## About `oha`
 
 [`oha`](https://github.com/hatoo/oha) is a Rust-based HTTP load generator,
