@@ -18,6 +18,7 @@ This roadmap converts the current prototype into a safer, more deployable framew
 | P2 | Mangoo Signals | **Delivered:** opt-in in-process event bus with always-async delivery (no sync/async choice for callers), a Rust-native worker-pool dispatcher (`mangoo_native.SignalDispatcher`) with a behavior-compatible Python `ThreadPoolExecutor` fallback, sensitive-key rejection, and framework lifecycle wiring (request, auth, admin, migrations) all shipped; only remaining gap is that no built-in app wires a bus in by default. Shipped as "Pulse" originally -- `mangoo.addons.pulse`/`pulse=` still work as deprecated aliases (see Week 12) |
 | P2 | Fullstack UI framework | **Delivered (Week 9/11) -> reverted (Week 14) -> rebuilt, re-scoped (Week 15):** the original Stage 1 (hypermedia) + Stage 2 (client-side signals) were removed entirely in favor of pure server-rendered HTML, then Stage 1 alone was rebuilt with a leaner `mangoo-ui.js` and a benchmarked Rust option for fragment rendering -- deliberately without Stage 2's signals layer this time, keeping the framework to one hypermedia model rather than two rendering approaches |
 | P2 | Documentation website | **Planned (Week 16), not started:** a real, versioned documentation website (tutorial, topic guides, generated API reference, full-text search, a Django-style version switcher tied to release tags) to replace root-level Markdown as the framework's primary documentation surface |
+| P2 | gRPC support | **Planned (Week 17), not started:** a third request surface alongside REST and GraphQL, via `grpcio`/`grpclib` running as its own HTTP/2 server (not a retrofit of the custom Rust runtime, which deliberately left HTTP/2 out of scope), reusing existing auth and Signals wiring |
 
 ## Future-readiness estimate (planning baseline, refreshed August 20, 2026)
 
@@ -573,6 +574,107 @@ This is new scope, not yet estimated in the future-readiness table below --
 add an effort estimate once the generator choice (first deliverable above)
 is made, since Sphinx-with-multiversion and MkDocs-with-mike carry
 meaningfully different setup costs.
+
+## Week 17: gRPC support
+
+**Status: planned, not started.** Mangoo currently offers two request
+surfaces -- REST (`api_route`, OpenAPI/Swagger) and GraphQL
+(`mangoo.graphql.Schema`/`graphql_view`) -- both served over the same
+WSGI/ASGI/Rust HTTP/1.1 transports. gRPC would be a third, for the case
+those two don't cover well: typed service-to-service calls (an internal
+microservice boundary, a mobile/desktop client generated from a `.proto`
+contract) where a REST/JSON envelope adds overhead a binary,
+strongly-typed RPC contract avoids.
+
+### Why this is a separate transport, not a mode of the existing servers
+
+gRPC requires real HTTP/2 (framed binary messages, not text HTTP/1.1) --
+the same feature this project's custom Rust runtime deliberately left out
+of scope (see `INDUSTRY_LEADERSHIP_ROADMAP.md`'s "Optional TLS
+termination... HTTP/2 stays out of scope, with reasoning"): it is built
+around multiplexing many streams over one connection, which does not fit
+that server's synchronous thread-per-connection design without
+effectively becoming its own scheduler. That reasoning does not change
+here -- gRPC support should **not** be built by retrofitting HTTP/2 into
+`mangoo_native`'s hand-written server. The realistic path is `grpcio`
+(the standard Python gRPC library, itself a mature C-core HTTP/2
+implementation) running as its own server process/thread, alongside --
+not instead of -- the existing WSGI/ASGI/Rust HTTP servers, the same way
+`mangoo.asgi` sits alongside `mangoo.runtime` today as an additive,
+opt-in transport rather than a replacement.
+
+### Goal
+
+- Define Mangoo services from `.proto` contracts using the standard
+  `grpcio-tools` codegen, not a hand-rolled schema format -- consistent
+  with GraphQL and REST both already generating their documentation
+  (OpenAPI/introspection) from code rather than a second, hand-maintained
+  spec.
+- Reuse the framework's existing auth/session primitives (`mangoo.auth`)
+  for gRPC's own metadata-based auth (interceptors), rather than a
+  parallel authentication system -- the same "one auth system, several
+  transports" pattern `mangoo.asgi` already establishes for WSGI vs. ASGI.
+- Reuse Signals (`mangoo.addons.signals`) for gRPC request lifecycle
+  events, matching how `request.started`/`request.finished` already fire
+  identically from `mangoo.runtime` and `mangoo.asgi`.
+- A `mango newproject`-scaffolded project should be able to add a gRPC
+  service with roughly the same amount of ceremony `api_route`/
+  `graphql_view` need today -- not a bolt-on that feels like a separate
+  framework.
+
+### Deliverables (not yet scoped in detail -- first pass, to be refined before work starts)
+
+- [ ] Evaluate `grpcio` vs. `grpclib` (an asyncio-native alternative) the
+      same way the documentation-website generator choice and the Rust
+      runtime's crypto provider were evaluated before committing --
+      benchmark and check platform/build requirements (a C extension
+      like `grpcio` needs wheels or a build toolchain per platform,
+      worth confirming before it becomes a hard dependency) rather than
+      picking on assumption.
+- [ ] Design how a `.proto`-defined service maps to a Mangoo view function
+      (or a new, distinct decorator/registration shape if `api_route`'s
+      shape doesn't fit RPC semantics) -- unary calls first; streaming
+      (server-streaming, client-streaming, bidirectional) explicitly
+      out of scope for a first pass unless a concrete need emerges, since
+      streaming semantics are a materially bigger design surface than
+      REST/GraphQL's request/response model.
+- [ ] Wire authentication via gRPC interceptors reusing `mangoo.auth`'s
+      session/token verification, not a parallel implementation.
+- [ ] Wire Signals events (`grpc.call_started`/`grpc.call_finished` or
+      similar) matching the existing `request.*` event naming convention.
+- [ ] Decide the process/port model: a gRPC server needs its own listening
+      port (HTTP/2, distinct from the HTTP/1.1 REST/GraphQL port) --
+      document how `mango launch` starts it (a separate command, a second
+      thread/process alongside the existing dev server, or left as a
+      separately-run process like a Celery worker would be) before
+      building the developer-facing command.
+- [ ] Benchmark against the existing REST `db_list`/`json_echo` scenarios
+      for an apples-to-oranges-but-still-informative comparison (gRPC's
+      binary protocol vs. JSON), following this project's standing
+      practice of publishing real numbers rather than asserting a
+      performance claim.
+
+### Acceptance criteria
+
+- A scaffolded project can define a `.proto` service and have Mangoo
+  generate and wire the server code with a comparably small amount of
+  glue to `api_route`/`graphql_view` today.
+- Authentication and Signals events work identically in spirit (though
+  necessarily different in mechanism) to how they already work for REST
+  and GraphQL.
+- A published, reproducible benchmark exists before any performance claim
+  is made in documentation, matching every other transport in this
+  project.
+- Full test coverage (unit tests for service registration/auth/Signals
+  wiring, an integration test hitting a real gRPC server) before this is
+  marked delivered, matching the `Definition of done` standard below.
+
+### Sequencing note
+
+Not yet estimated -- the `grpcio`-vs-`grpclib` evaluation (first
+deliverable above) needs to happen before an effort estimate is
+meaningful, the same dependency the documentation website's Sphinx-vs-
+MkDocs choice has on its own estimate.
 
 ## Later improvements
 
