@@ -17,6 +17,7 @@ This roadmap converts the current prototype into a safer, more deployable framew
 | P2 | Native runtime | **In progress:** pre-existing pyo3 API mismatches that blocked every native build fixed; a `hatchling` build hook now builds and bundles `mangoo_native` automatically as part of a normal `pip install`/`pip install -e .`, with no separate manual step and no project-name collision risk; Signals' dispatcher is the first concurrency primitive on it. Request routing, JSON serialization, authentication operations, and database execution remain Python-only |
 | P2 | Mangoo Signals | **Delivered:** opt-in in-process event bus with always-async delivery (no sync/async choice for callers), a Rust-native worker-pool dispatcher (`mangoo_native.SignalDispatcher`) with a behavior-compatible Python `ThreadPoolExecutor` fallback, sensitive-key rejection, and framework lifecycle wiring (request, auth, admin, migrations) all shipped; only remaining gap is that no built-in app wires a bus in by default. Shipped as "Pulse" originally -- `mangoo.addons.pulse`/`pulse=` still work as deprecated aliases (see Week 12) |
 | P2 | Fullstack UI framework | **Delivered (Week 9/11) -> reverted (Week 14) -> rebuilt, re-scoped (Week 15):** the original Stage 1 (hypermedia) + Stage 2 (client-side signals) were removed entirely in favor of pure server-rendered HTML, then Stage 1 alone was rebuilt with a leaner `mangoo-ui.js` and a benchmarked Rust option for fragment rendering -- deliberately without Stage 2's signals layer this time, keeping the framework to one hypermedia model rather than two rendering approaches |
+| P2 | Documentation website | **Planned (Week 16), not started:** a real, versioned documentation website (tutorial, topic guides, generated API reference, full-text search, a Django-style version switcher tied to release tags) to replace root-level Markdown as the framework's primary documentation surface |
 
 ## Future-readiness estimate (planning baseline, refreshed August 20, 2026)
 
@@ -484,6 +485,94 @@ verified to produce a working `mangoo_native.render_fragment_items`.
       unaffected -- `/posts/live`, `/posts/fragment`, and
       `/posts/fragment-native` are all separate routes from the
       benchmarked `/posts` page.
+
+## Week 16: a real documentation website, versioned like Django's
+
+**Status: planned, not started.** Mangoo's documentation today lives entirely
+in root-level Markdown files (`README.md`, `DEPLOYMENT.md`,
+`BUILD_FROM_SCRATCH.md`, this roadmap) plus generated Swagger/OpenAPI for an
+individual application's own API. There is no browsable documentation
+*website* for the framework itself, and no way for a reader to view docs for
+a specific past release the way
+[docs.djangoproject.com](https://docs.djangoproject.com/) or
+[fastapi.tiangolo.com](https://fastapi.tiangolo.com/) let a reader pick
+"these are the docs for the version I actually have installed."
+
+### Goal
+
+A static documentation site, built from Markdown/reStructuredText source
+already living in this repo, with:
+
+- A real information architecture: a getting-started tutorial, topic guides
+  (routing, models/migrations, auth, admin, templates, GraphQL, ASGI,
+  Signals, testing, deployment), and a generated API reference -- not one
+  long README.
+- **Version-based documentation**, Django's defining feature in the example
+  given: a version switcher lets a reader view the docs that match the
+  Mangoo release they have installed (e.g. `/en/1.2/`, `/en/dev/` for the
+  unreleased tip), not only the latest tip -- so upgrading the docs site
+  never silently invalidates what an older, still-supported release's users
+  are reading.
+- Full-text search across the current version's pages.
+- A style consistent with this project's existing documentation standard --
+  every claim links to a real test or a real, runnable example, matching how
+  `README.md` and the roadmap documents already operate; no unverifiable
+  marketing language.
+
+### Deliverables
+
+- [ ] Pick and stand up a static-site generator that supports versioned
+      docs out of the box rather than requiring a hand-rolled version
+      switcher: evaluate Sphinx (`sphinx-multiversion`/`sphinx-rtd-theme`,
+      the actual tooling Django's own docs site is built with) against
+      MkDocs (`mkdocs-material` + `mike` for versioning) before choosing --
+      per this project's own standing principle of benchmarking/evaluating
+      before committing, not picking one on assumption.
+- [ ] Restructure existing content into a proper source tree (e.g. `docs/`)
+      with a real navigation hierarchy: quickstart, tutorial, topic guides
+      (one per subsystem: routing, models/migrations, auth, admin,
+      templates, GraphQL, REST/OpenAPI, ASGI, Signals, testing, CI,
+      deployment, security), and a reference section -- migrating
+      `README.md`/`DEPLOYMENT.md`/`BUILD_FROM_SCRATCH.md`'s content into it
+      rather than duplicating it in two places.
+- [ ] Generate API reference pages from the package's existing docstrings
+      and type hints (already enforced by the Week 13 mypy/`py.typed` work)
+      rather than hand-writing and re-drifting a second copy of the public
+      API surface.
+- [ ] Wire the version switcher to this project's actual release history
+      (git tags once releases exist) so each published version's docs stay
+      reachable and frozen after a newer version ships -- the specific
+      behavior the Django example demonstrates.
+- [ ] Add a CI job that builds the docs site on every push/PR (catching
+      broken links/build errors before merge, the same "required CI gate"
+      pattern already used for tests/lint/typecheck) and a separate,
+      explicit publish step (GitHub Pages or an equivalent static host) --
+      publishing itself needs its own sign-off before wiring, since it's a
+      user-visible, externally-reachable change, not a local build.
+- [ ] Cross-link from `README.md` to the new site once it exists, without
+      deleting `README.md`'s own content -- the repo README stays the
+      first thing a GitHub visitor sees; the docs site is the deep-reference
+      destination it points to, the same relationship Django's own
+      `README.rst` has with `docs.djangoproject.com`.
+
+### Acceptance criteria
+
+- A reader can select a specific past Mangoo version and see documentation
+  that matches that version's actual behavior, not the latest tip.
+- Every topic guide links to the real test(s) or example app
+  (`example_site/`, `benchmarks/`) demonstrating the behavior it describes,
+  matching this project's existing no-unverifiable-claims standard.
+- The docs site builds in CI on every push/PR and fails the build on a
+  broken internal link or a build error.
+- Full-text search returns relevant pages for a plausible query (e.g.
+  "migrations", "CSRF", "ASGI").
+
+### Sequencing note
+
+This is new scope, not yet estimated in the future-readiness table below --
+add an effort estimate once the generator choice (first deliverable above)
+is made, since Sphinx-with-multiversion and MkDocs-with-mike carry
+meaningfully different setup costs.
 
 ## Later improvements
 
