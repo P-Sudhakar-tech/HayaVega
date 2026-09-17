@@ -1206,10 +1206,10 @@ HTTP-level runs found no durable benefit (within noise, if anything
 slightly below baseline) -- not wired in as a default, kept available for
 deployments with a different cost shape (see "Pooling read-only
 connections specifically" above).
-Remaining, deliberately unscheduled: a Tortoise ORM benchmark comparison --
-new scope (an async-driver comparison app), requested but not started;
-dependency scanning and release automation
-(`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8c).
+Deferred, not needed now: a Tortoise ORM (or other async-driver) benchmark
+comparison -- new scope (an async-driver comparison app); and release
+automation (`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8d, dependency
+scanning itself is delivered, see Order 8c).
 
 ### The custom Rust HTTP runtime: delivered, with a disclosed scope-down and two real bugs found while benchmarking it
 
