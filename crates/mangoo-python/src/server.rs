@@ -313,7 +313,7 @@ impl StartResponse {
 }
 
 fn build_environ<'py>(py: Python<'py>, request: &ParsedRequest, host: &str, port: u16, remote_addr: &str, is_https: bool) -> PyResult<Bound<'py, PyDict>> {
-    let environ = PyDict::new_bound(py);
+    let environ = PyDict::new(py);
     environ.set_item("REQUEST_METHOD", &request.method)?;
     environ.set_item("SCRIPT_NAME", "")?;
     environ.set_item("PATH_INFO", percent_decode(&request.path))?;
@@ -344,10 +344,10 @@ fn build_environ<'py>(py: Python<'py>, request: &ParsedRequest, host: &str, port
         environ.set_item("CONTENT_LENGTH", value)?;
     }
 
-    let io = py.import_bound("io")?;
-    let wsgi_input = io.call_method1("BytesIO", (PyBytes::new_bound(py, &request.body),))?;
+    let io = py.import("io")?;
+    let wsgi_input = io.call_method1("BytesIO", (PyBytes::new(py, &request.body),))?;
     environ.set_item("wsgi.input", wsgi_input)?;
-    let sys = py.import_bound("sys")?;
+    let sys = py.import("sys")?;
     environ.set_item("wsgi.errors", sys.getattr("stderr")?)?;
     environ.set_item("wsgi.version", (1, 0))?;
     environ.set_item("wsgi.url_scheme", if is_https { "https" } else { "http" })?;
@@ -433,7 +433,7 @@ fn handle_connection(stream: Conn, application: &Py<PyAny>, host: &str, port: u1
         };
         let keep_alive = parsed.wants_keep_alive();
 
-        let outcome = Python::with_gil(|py| -> PyResult<(String, Vec<(String, String)>, Vec<u8>)> {
+        let outcome = Python::attach(|py| -> PyResult<(String, Vec<(String, String)>, Vec<u8>)> {
             let environ = build_environ(py, &parsed, host, port, &remote_addr, is_https)?;
             let captured = Arc::new(Mutex::new(None));
             let start_response = Py::new(py, StartResponse { result: Arc::clone(&captured) })?;
@@ -442,7 +442,7 @@ fn handle_connection(stream: Conn, application: &Py<PyAny>, host: &str, port: u1
             let mut body = Vec::new();
             {
                 let bound = result.bind(py);
-                let iterator = bound.iter()?;
+                let iterator = bound.try_iter()?;
                 for item in iterator {
                     let chunk: Vec<u8> = item?.extract::<Bound<'_, PyBytes>>()?.as_bytes().to_vec();
                     body.extend_from_slice(&chunk);
@@ -459,7 +459,7 @@ fn handle_connection(stream: Conn, application: &Py<PyAny>, host: &str, port: u1
         let write_result = match outcome {
             Ok((status, headers, body)) => write_response(reader.get_mut(), &status, &headers, &body, keep_alive),
             Err(error) => {
-                Python::with_gil(|py| {
+                Python::attach(|py| {
                     error.print(py);
                 });
                 write_response(reader.get_mut(), "500 Internal Server Error", &[("Content-Type".to_string(), "text/plain".to_string())], b"500 Internal Server Error", false)
@@ -506,7 +506,7 @@ pub fn serve_wsgi(py: Python<'_>, application: Py<PyAny>, host: String, port: u1
     };
     let is_https = tls_config.is_some();
 
-    py.allow_threads(|| {
+    py.detach(|| {
         let mut handles = Vec::with_capacity(workers);
         for _ in 0..workers {
             let listener = Arc::clone(&listener);

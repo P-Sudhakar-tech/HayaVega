@@ -38,13 +38,13 @@ fn to_json_value(value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
         return Ok(JsonValue::Number(number.to_string()));
     }
     if let Ok(text) = value.extract::<String>() { return Ok(JsonValue::String(text)); }
-    if let Ok(items) = value.downcast::<PyList>() {
+    if let Ok(items) = value.cast::<PyList>() {
         return Ok(JsonValue::Array(items.iter().map(|item| to_json_value(&item)).collect::<PyResult<Vec<_>>>()?));
     }
-    if let Ok(items) = value.downcast::<PyTuple>() {
+    if let Ok(items) = value.cast::<PyTuple>() {
         return Ok(JsonValue::Array(items.iter().map(|item| to_json_value(&item)).collect::<PyResult<Vec<_>>>()?));
     }
-    if let Ok(mapping) = value.downcast::<PyDict>() {
+    if let Ok(mapping) = value.cast::<PyDict>() {
         let mut values = Vec::new();
         for (key, item) in mapping.iter() {
             values.push((key.extract::<String>()?, to_json_value(&item)?));
@@ -90,7 +90,7 @@ fn decode_request_headers(headers: Vec<(Vec<u8>, Vec<u8>)>) -> Vec<(String, Stri
 /// (not lists of ints) so the output is usable as an actual ASGI header list.
 #[pyfunction]
 fn encode_response_headers<'py>(py: Python<'py>, headers: Vec<(String, String)>) -> Vec<(Bound<'py, PyBytes>, Bound<'py, PyBytes>)> {
-    mangoo_core::encode_response_headers(&headers).into_iter().map(|(name, value)| (PyBytes::new_bound(py, &name), PyBytes::new_bound(py, &value))).collect()
+    mangoo_core::encode_response_headers(&headers).into_iter().map(|(name, value)| (PyBytes::new(py, &name), PyBytes::new(py, &value))).collect()
 }
 
 fn wire_error(message: &str) -> PyErr {
@@ -102,7 +102,7 @@ fn wire_tag<'py>(tuple: &Bound<'py, PyTuple>) -> PyResult<String> {
 }
 
 fn wire_to_expr(value: &Bound<'_, PyAny>) -> PyResult<TemplateExpr> {
-    let tuple = value.downcast::<PyTuple>().map_err(|_| wire_error("expected an expression tuple"))?;
+    let tuple = value.cast::<PyTuple>().map_err(|_| wire_error("expected an expression tuple"))?;
     match wire_tag(tuple)?.as_str() {
         "lit" => Ok(TemplateExpr::Literal(to_json_value(&tuple.get_item(1)?)?)),
         "path" => Ok(TemplateExpr::Path(tuple.get_item(1)?.extract()?)),
@@ -111,7 +111,7 @@ fn wire_to_expr(value: &Bound<'_, PyAny>) -> PyResult<TemplateExpr> {
         "bool" => {
             let op: String = tuple.get_item(1)?.extract()?;
             let operands = tuple.get_item(2)?;
-            let operands = operands.downcast::<PyTuple>().map_err(|_| wire_error("expected a tuple of boolean operands"))?;
+            let operands = operands.cast::<PyTuple>().map_err(|_| wire_error("expected a tuple of boolean operands"))?;
             Ok(TemplateExpr::BoolOp(op, operands.iter().map(|item| wire_to_expr(&item)).collect::<PyResult<Vec<_>>>()?))
         }
         other => Err(wire_error(&format!("unknown expression tag {other:?}"))),
@@ -119,17 +119,17 @@ fn wire_to_expr(value: &Bound<'_, PyAny>) -> PyResult<TemplateExpr> {
 }
 
 fn wire_to_node(value: &Bound<'_, PyAny>) -> PyResult<TemplateNode> {
-    let tuple = value.downcast::<PyTuple>().map_err(|_| wire_error("expected a node tuple"))?;
+    let tuple = value.cast::<PyTuple>().map_err(|_| wire_error("expected a node tuple"))?;
     match wire_tag(tuple)?.as_str() {
         "text" => Ok(TemplateNode::Text(tuple.get_item(1)?.extract()?)),
         "var" => Ok(TemplateNode::Variable(wire_to_expr(&tuple.get_item(1)?)?)),
         "if" => {
             let branches = tuple.get_item(1)?;
-            let branches = branches.downcast::<PyTuple>().map_err(|_| wire_error("expected a tuple of if-branches"))?;
+            let branches = branches.cast::<PyTuple>().map_err(|_| wire_error("expected a tuple of if-branches"))?;
             let branches = branches
                 .iter()
                 .map(|branch| {
-                    let branch = branch.downcast::<PyTuple>().map_err(|_| wire_error("expected an (condition, body) branch tuple"))?;
+                    let branch = branch.cast::<PyTuple>().map_err(|_| wire_error("expected an (condition, body) branch tuple"))?;
                     let condition_item = branch.get_item(0)?;
                     let condition = if condition_item.is_none() { None } else { Some(wire_to_expr(&condition_item)?) };
                     Ok((condition, wire_to_nodes(&branch.get_item(1)?)?))
@@ -143,7 +143,7 @@ fn wire_to_node(value: &Bound<'_, PyAny>) -> PyResult<TemplateNode> {
 }
 
 fn wire_to_nodes(value: &Bound<'_, PyAny>) -> PyResult<Vec<TemplateNode>> {
-    let tuple = value.downcast::<PyTuple>().map_err(|_| wire_error("expected a tuple of nodes"))?;
+    let tuple = value.cast::<PyTuple>().map_err(|_| wire_error("expected a tuple of nodes"))?;
     tuple.iter().map(|item| wire_to_node(&item)).collect()
 }
 
@@ -202,7 +202,7 @@ impl PyMangoList {
     fn new(py: Python<'_>, items: Option<Bound<'_, PyAny>>) -> PyResult<Self> {
         let _ = py;
         let values = match items {
-            Some(items) => items.iter()?.map(|item| item.map(|value| value.unbind())).collect::<PyResult<Vec<_>>>()?,
+            Some(items) => items.try_iter()?.map(|item| item.map(|value| value.unbind())).collect::<PyResult<Vec<_>>>()?,
             None => Vec::new(),
         };
         Ok(Self { values: CoreMangoList::new(values) })
@@ -223,7 +223,7 @@ impl PyMangoList {
         let position = match index { Some(value) => normalized_index(value, self.values.len())?, None if self.values.is_empty() => return Err(pyo3::exceptions::PyIndexError::new_err("pop from empty mango_list")), None => self.values.len() - 1 };
         Ok(self.values.remove(position))
     }
-    fn to_list(&self, py: Python<'_>) -> PyResult<Py<PyAny>> { Ok(PyList::new_bound(py, self.values.as_slice()).into_any().unbind()) }
+    fn to_list(&self, py: Python<'_>) -> PyResult<Py<PyAny>> { Ok(PyList::new(py, self.values.as_slice())?.into_any().unbind()) }
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> { Ok(format!("mango_list({})", self.to_list(py)?.bind(py).repr()?)) }
 }
 
@@ -234,12 +234,12 @@ struct SignalJob {
 }
 
 fn run_signal_job(job: SignalJob) {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         for subscriber in &job.subscribers {
             if let Err(error) = subscriber.call1(py, (job.event.clone_ref(py),)) {
                 // A subscriber failure must never stop later subscribers or the
                 // worker thread; log it the same way the Python fallback does.
-                if let Ok(logging) = py.import_bound("logging") {
+                if let Ok(logging) = py.import("logging") {
                     if let Ok(logger) = logging.call_method1("getLogger", ("mangoo.signals",)) {
                         let _ = logger.call_method1("error", (format!("Signal subscriber failed: {error}"),));
                     }
