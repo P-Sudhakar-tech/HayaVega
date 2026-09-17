@@ -13,7 +13,7 @@ This roadmap converts the current prototype into a safer, more deployable framew
 | P1 | Runtime and static assets | **Delivered:** binary files, MIME types, cache-control, ETags, conditional requests, and opt-in request metrics (counts, latency histogram, error rate, Prometheus export) all shipped |
 | P1 | Authentication lifecycle | **Delivered:** password reset, email verification, session listing/rotation/revoke-all, audit events for every step, and full OpenAPI descriptions for all of it all shipped |
 | P1 | API documentation | **Delivered:** `api_route` accepts `secured`/`request_schema`/`responses`; the generated OpenAPI document gets a `bearerAuth` security scheme and a shared `Error` schema; `create_application(api_title=..., api_version=...)` names and versions it; all 10 built-in auth-lifecycle endpoints fully describe themselves; the error envelope (`{"detail": string}`) and a path-prefix versioning convention are documented |
-| P2 | Developer experience | **In progress:** CI (GitHub Actions, coverage gate, ruff lint/format, mypy type checks), GraphQL maturity, template inheritance/loops/conditionals/caching/diagnostics, and admin model registration/pagination/validation/permissions/change history all delivered; dependency scanning and release automation remain |
+| P2 | Developer experience | **In progress:** CI (GitHub Actions, coverage gate, ruff lint/format, mypy type checks), GraphQL maturity, template inheritance/loops/conditionals/caching/diagnostics, admin model registration/pagination/validation/permissions/change history, and dependency scanning (`pip-audit`, `cargo audit`, Dependabot) all delivered; release automation remains |
 | P2 | Native runtime | **In progress:** pre-existing pyo3 API mismatches that blocked every native build fixed; a `hatchling` build hook now builds and bundles `mangoo_native` automatically as part of a normal `pip install`/`pip install -e .`, with no separate manual step and no project-name collision risk; Signals' dispatcher is the first concurrency primitive on it. Request routing, JSON serialization, authentication operations, and database execution remain Python-only |
 | P2 | Mangoo Signals | **Delivered:** opt-in in-process event bus with always-async delivery (no sync/async choice for callers), a Rust-native worker-pool dispatcher (`mangoo_native.SignalDispatcher`) with a behavior-compatible Python `ThreadPoolExecutor` fallback, sensitive-key rejection, and framework lifecycle wiring (request, auth, admin, migrations) all shipped; only remaining gap is that no built-in app wires a bus in by default. Shipped as "Pulse" originally -- `mangoo.addons.pulse`/`pulse=` still work as deprecated aliases (see Week 12) |
 | P2 | Fullstack UI framework | **Delivered (Week 9/11) -> reverted (Week 14) -> rebuilt, re-scoped (Week 15):** the original Stage 1 (hypermedia) + Stage 2 (client-side signals) were removed entirely in favor of pure server-rendered HTML, then Stage 1 alone was rebuilt with a leaner `mangoo-ui.js` and a benchmarked Rust option for fragment rendering -- deliberately without Stage 2's signals layer this time, keeping the framework to one hypermedia model rather than two rendering approaches |
@@ -41,7 +41,8 @@ are done first); a team working several in parallel would finish sooner.
 | 7 | ~~Fullstack UI framework, Stage 1: server-rendered components and a first-party hypermedia runtime~~ | Delivered Aug 20, 2026 | -- |
 | 8a | ~~Linting and formatting: `ruff check`/`ruff format` as a required CI job~~ | Delivered Aug 21, 2026 | -- |
 | 8b | ~~Type checks: `py.typed` + mypy as a required CI job~~ | Delivered Aug 26, 2026 | -- |
-| 8c | Developer experience remainder: dependency scanning, release automation | 1–3 working days | -- |
+| 8c | ~~Developer experience: dependency scanning (`pip-audit`, `cargo audit`, Dependabot)~~ | Delivered Sep 16, 2026 | -- |
+| 8d | Developer experience remainder: release automation | 1–2 working days | -- |
 | 9 | ~~Fullstack UI framework, Stage 2: client-side signals and `mgo-boost` routing, no Node.js/npm~~ | Delivered Aug 21, 2026 | -- |
 | -- | A Node.js/npm-based SPA framework (JSX, virtual DOM, bundler) | Not yet scoped | The originally-imagined shape of Stage 2, re-scoped to avoid introducing Node.js/npm tooling to this repo (see Week 11); revisit only with its own dedicated planning and explicit sign-off if a concrete need for JSX/VDOM/a bundler emerges |
 | -- | Run Python (not JavaScript) directly in the browser via Pyodide/PyScript (WASM) | Explicitly declined for now | Considered and rejected Aug 20, 2026: `mangoo-ui.js` already means application authors never write JavaScript -- every button/form/fragment is defined in Python, the same as a view. Pyodide/PyScript would only replace a fixed ~3.5KB generic dispatcher with a ~6-20MB WASM Python runtime and multi-second cold-start init, for no reduction in how much JavaScript an application author writes (already zero). Revisit only if a concrete need for genuine client-side Python execution (not just "no hand-written JS") emerges. |
@@ -553,24 +554,37 @@ already living in this repo, with:
       `README.md`'s own content -- it stays the first thing a GitHub
       visitor sees; `docs/` is the deep-reference destination it now
       points to.
-- [ ] **Version switcher wired to release history** -- genuinely not done,
-      and correctly so: `mike` (installed, ready to use) versions docs
-      against git tags, and this project has not cut a tagged release yet.
-      Wiring a version switcher with only one version to switch between
-      would be premature scaffolding; revisit once a first tagged release
-      exists.
-- [ ] **Explicit publish step** (GitHub Pages or equivalent) -- not wired,
-      deliberately: this needs its own sign-off before going live, since
-      publishing a site is a user-visible, externally-reachable change,
-      not a local build. The CI `docs` job proves the site builds
-      correctly; it does not publish anywhere.
+- [x] **Version switcher wired, verified locally.** `mkdocs.yml` already
+      declared `extra.version.provider: mike`; what was missing was
+      actually exercising it. `mike deploy dev latest --update-aliases`
+      builds the current docs and commits them to a **local-only**
+      `gh-pages` git branch (mike never checks that branch out in the
+      working tree, and never pushes unless told to); `mike serve` then
+      serves it with the version dropdown live. Verified: `versions.json`
+      returns the deployed version/alias, and the served page loads
+      Material's version-selector JS (`"version": {"provider": "mike"}`).
+      Documented in `README.md`. As real versions get tagged, running
+      `mike deploy <version>` again against the same local branch builds
+      up genuine version history to switch between.
+- [ ] **Explicit publish step** (GitHub Pages or equivalent) -- still not
+      wired, and for a stronger reason than before: this repository is
+      **private**. GitHub Pages either isn't available at all for a
+      private repo (GitHub Free), or, on plans where it is, the published
+      site is public by default regardless of the repo's visibility --
+      private code, public docs is a real, separate decision, not a
+      config detail. Until that's explicitly decided, docs stay local-only
+      (see `README.md`'s build/serve/version-switch commands above); the
+      CI `docs` job continues to only prove the site *builds*, never
+      deploys it anywhere.
 
 ### Acceptance criteria
 
 - [ ] A reader can select a specific past Mangoo version and see
-      documentation that matches that version's actual behavior -- blocked
-      on the version-switcher deliverable above, itself blocked on a first
-      tagged release existing.
+      documentation that matches that version's actual behavior -- the
+      mechanism works locally (verified above) but there is only one
+      version (`dev`) deployed to switch between, since no release has
+      been tagged yet; this criterion is satisfied mechanically and will
+      be satisfied in substance once a second real version exists.
 - [x] Every topic guide links to the real test(s), module, or example app
       demonstrating the behavior it describes (e.g. `topics/rust-runtime.md`
       -> `tests/test_rust_runtime_hardening.py`; `topics/models.md` ->
@@ -582,14 +596,35 @@ already living in this repo, with:
 
 ### Sequencing note
 
-Effort for the remaining two deliverables (version switcher, publish step)
-is genuinely gated on external events (a first tagged release; an explicit
-decision to go live publicly) rather than remaining engineering work --
-both are small once their blocking precondition is met.
+The version switcher is delivered and verified locally (see above). The
+one remaining deliverable, the publish step, is gated on an external
+decision (going live publicly, which this repository's private status
+makes non-trivial -- see the deliverable above) rather than remaining
+engineering work; it is small once that decision is made.
 
 ## Week 17: gRPC support
 
-**Status: planned, not started.** Mangoo currently offers two request
+**Status: deferred, no concrete need identified.** Considered and set
+aside Sep 16, 2026: Mangoo is early-stage (`0.1.0`, unreleased) and
+already covers the common request-surface needs with REST (`api_route`,
+OpenAPI/Swagger) and GraphQL. gRPC earns its place for polyglot clients
+needing a typed `.proto` contract, or tight service-to-service calls
+where JSON/REST overhead genuinely matters -- neither applies yet.
+Building it properly means a second HTTP/2 server process, a parallel
+auth/interceptor path, and real ongoing maintenance, which isn't
+justified speculatively. The `grpcio`-vs-`grpclib` evaluation below was
+completed (`grpcio` would be the choice: prebuilt wheels on every major
+platform, no build-toolchain risk, and its synchronous server model
+reuses `mangoo.auth`'s existing synchronous session verification instead
+of requiring an asyncio bridge) so that decision doesn't need repeating.
+Revisit only when a concrete need emerges (an actual microservice
+boundary or typed-client requirement), the same bar applied to the
+Node.js/npm SPA framework and Pyodide/PyScript items above.
+
+<details>
+<summary>Original scoping notes (kept for when this is revisited)</summary>
+
+Mangoo currently offers two request
 surfaces -- REST (`api_route`, OpenAPI/Swagger) and GraphQL
 (`mangoo.graphql.Schema`/`graphql_view`) -- both served over the same
 WSGI/ASGI/Rust HTTP/1.1 transports. gRPC would be a third, for the case
@@ -683,10 +718,10 @@ opt-in transport rather than a replacement.
 
 ### Sequencing note
 
-Not yet estimated -- the `grpcio`-vs-`grpclib` evaluation (first
-deliverable above) needs to happen before an effort estimate is
-meaningful, the same dependency the documentation website's Sphinx-vs-
-MkDocs choice has on its own estimate.
+Not applicable -- deferred, no concrete need identified (see the status
+note above `<details>`).
+
+</details>
 
 ## Later improvements
 
@@ -700,7 +735,8 @@ developer-experience bar (typed public API, proactive diagnostics).
 - Model-admin registration, pagination, validation, permissions, and change history are delivered (see Week 8). Remaining, if ever needed: bulk actions, list filtering/search, and inline edits -- not currently planned.
 - GraphQL arguments, mutations, nesting, validation, limits, and introspection policy are delivered (see Week 6). Remaining, if ever needed: fragments, directives, and field aliases -- not currently planned, since they add real complexity for a framework this size.
 - Packaging `mangoo_native` as part of a normal install is delivered (see Week 5 and `src/mangoo/addons/signals/README.md`). Remaining: benchmark automation and measured Rust migrations for routing, JSON serialization, authentication operations, and database execution -- schedule each only once a measured win justifies it.
-- CI matrix across supported Python versions is delivered (`.github/workflows/ci.yml`); linting and formatting are delivered (see Week 10); type checks are delivered (see Week 12); dependency scanning, release notes, and package publishing remain.
+- CI matrix across supported Python versions is delivered (`.github/workflows/ci.yml`); linting and formatting are delivered (see Week 10); type checks are delivered (see Week 12); dependency scanning is delivered (see below); release notes and package publishing remain.
+- Dependency scanning: delivered Sep 16, 2026. A required `dependency-scan` CI job runs `pip-audit` (Python dependencies, against the PyPI/OSV advisory database) and `cargo audit` (the Rust workspace, against the RustSec advisory database) on every push and pull request; `.github/dependabot.yml` opens a weekly update pull request for outdated `pip`, `cargo`, and `github-actions` dependencies. `pip-audit` verified clean locally against the current dependency set (once the runner's own `pip`/`setuptools` are upgraded first, which the job does); `cargo audit` is wired the same way CI runs it but was not run to completion locally (installing `cargo-audit` from source is slow) -- first CI run against this job is the actual verification for the Rust side.
 - A native Rust WSGI server (`SERVER['ENGINE'] = 'rust'`) is delivered -- see the future-readiness table above and `INDUSTRY_LEADERSHIP_ROADMAP.md`. It is development/load-testing tooling, not a claim of production-readiness; `DEPLOYMENT.md`'s gunicorn/waitress guidance is unchanged as the production recommendation. A production-hardened version (TLS termination, HTTP/2) remains unscoped.
 - Mangoo Signals (formerly Pulse): delivered, see Week 12. The opt-in registry provides connect/disconnect, deterministic ordering, error isolation, sensitive-key rejection, and always-async delivery through a Rust-native worker pool (Python `ThreadPoolExecutor` fallback when `mangoo_native` is not built) in `src/mangoo/addons/signals/`; `create_application`, `auth_routes`, `admin_routes`, and `migrations.apply` all accept a `signals=` argument (`pulse=` still works, deprecated) to emit request, authentication, administration, and migration events. Remaining work is optional: a generated project could wire a default bus in automatically instead of requiring each application to pass one explicitly.
 

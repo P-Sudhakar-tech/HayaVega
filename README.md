@@ -11,6 +11,27 @@ API reference, and the published benchmark numbers) lives in
 directory. This README stays the first thing a repository visitor sees;
 the docs site is the deeper reference it points to.
 
+The site isn't published anywhere (the repository is private, and
+publishing docs publicly is a separate decision from writing them) -- it's
+built and browsed entirely locally:
+
+- `mkdocs build --strict` -- builds static HTML into the gitignored
+  `site/` directory.
+- `mkdocs serve` -- live-reloading local server at
+  `http://127.0.0.1:8000`, for editing.
+- `python -m http.server --directory site 8000` -- serves an already-built
+  `site/` as plain static files, no mkdocs process running.
+
+**Version switching** works locally too, via `mike` (already a `docs`
+extra): `mike` commits each built version to a local `gh-pages` git
+branch -- it never pushes anywhere unless you explicitly run `mike ...
+--push` against a remote. To try it: `mike deploy dev latest
+--update-aliases && mike set-default latest && mike serve`, then open
+`http://127.0.0.1:8000` and use the version dropdown in the header. As
+real versions get tagged, deploy each one the same way
+(`mike deploy <version>`) to build up real version history in that local
+branch.
+
 See [UPCOMING_IMPROVEMENT_ROADMAP.md](UPCOMING_IMPROVEMENT_ROADMAP.md) for
 the near-term plan and [INDUSTRY_LEADERSHIP_ROADMAP.md](INDUSTRY_LEADERSHIP_ROADMAP.md)
 for the longer-range one: performance benchmarks against FastAPI/Django/
@@ -261,6 +282,17 @@ Two narrow `[[tool.mypy.overrides]]` blocks turn off missing-import errors
 for `mangoo_native` (the optional, self-built Rust extension) and for
 `psycopg`/`pymysql` (optional database drivers not installed in the default
 dev environment) -- everything else is checked at mypy's default strictness.
+
+Scan dependencies for known vulnerabilities with
+[pip-audit](https://github.com/pypa/pip-audit) (Python: `pip-audit`, checked
+against the PyPI/OSV advisory database) and
+[cargo-audit](https://github.com/rustsec/rustsec) (Rust: `cargo audit`,
+checked against the RustSec advisory database). Both run as a required,
+separate `dependency-scan` CI job on every push and pull request, and
+[Dependabot](https://docs.github.com/en/code-security/dependabot)
+(`.github/dependabot.yml`) opens a weekly update pull request for outdated
+`pip`, `cargo`, and GitHub Actions dependencies -- so a fix is proposed
+automatically, not just flagged.
 
 ## Mangoo Signals
 
