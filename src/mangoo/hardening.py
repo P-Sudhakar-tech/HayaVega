@@ -57,6 +57,8 @@ class HardeningOptions:
     trusted_proxy_ips: tuple[str, ...] = ()
     max_request_bytes: int = 1_048_576
     rate_limit_max_clients: int = 10_000
+    rate_limit_backend: str = "memory"
+    rate_limit_redis_url: str = ""
 
     @classmethod
     def from_settings(cls, *, allowed_hosts=(), security=None):
@@ -72,7 +74,18 @@ class HardeningOptions:
             trusted_proxy_ips=tuple(security.get("TRUSTED_PROXY_IPS", ())),
             max_request_bytes=int(security.get("MAX_REQUEST_BYTES", 1_048_576)),
             rate_limit_max_clients=int(security.get("RATE_LIMIT_MAX_CLIENTS", 10_000)),
+            rate_limit_backend=str(security.get("RATE_LIMIT_BACKEND", "memory")),
+            rate_limit_redis_url=str(security.get("REDIS_URL", "")),
         )
+
+
+class RateLimiterBackendError(RuntimeError):
+    """Raised when a configured rate-limit backend's dependency is unavailable.
+
+    Defined locally rather than imported from ``db.py``: hardening.py does not
+    currently depend on db.py, and this keeps that layering boundary intact
+    rather than coupling the two modules for one error class.
+    """
 
 
 class RateLimiter:
@@ -121,12 +134,93 @@ class RateLimiter:
             return {"tracked_clients": len(self._requests), "max_clients": self.max_clients}
 
 
+# ``RateLimiter`` is the in-process backend and the historical public name;
+# ``InProcessRateLimiter`` is an alias for callers that want to name the
+# backend explicitly now that a second (``RedisRateLimiter``) backend exists.
+# Both names refer to the exact same class, so ``from mangoo.hardening import
+# RateLimiter`` keeps working unchanged.
+InProcessRateLimiter = RateLimiter
+
+
+class RedisRateLimiter:
+    """Thread-safe*, Redis-backed fixed-window request limiter shared across processes.
+
+    (*Thread safety here comes from Redis itself, not a local lock: every
+    ``allow()`` call is a single atomic operation on the Redis server.)
+
+    Unlike :class:`RateLimiter`, which only sees requests handled by its own
+    process, this backend lets every Mangoo process that shares one Redis
+    instance enforce a single, combined limit -- the scenario
+    ``DEPLOYMENT.md`` describes for multi-instance deployments behind a load
+    balancer or reverse proxy.
+
+    Atomicity: incrementing a counter and setting its expiry are two separate
+    Redis commands. Issued as plain ``INCR`` then ``EXPIRE`` calls, two
+    concurrent requests from different processes could race between them --
+    e.g. the window's first ``INCR`` could lose its ``EXPIRE`` if the process
+    crashes or is delayed between the two calls, leaving a key that never
+    expires (or expires far later than intended), silently changing the
+    effective limit. To avoid that, both commands run inside a single Lua
+    script executed via ``EVAL``, which Redis guarantees runs atomically end
+    to end -- no other command, from any client, can interleave with it.
+
+    ``now``: the in-process backend accepts an explicit ``now`` so unit tests
+    can control window boundaries deterministically. Redis has no equivalent
+    concept -- expiry is tracked server-side via ``EXPIRE`` TTLs, not a
+    caller-supplied clock -- so ``now`` is accepted for interface
+    compatibility with :class:`RateLimiter` (some callers pass it positionally
+    or by keyword against either backend) but is otherwise ignored.
+    """
+
+    # KEYS[1] = the rate-limit key, ARGV[1] = window length in seconds.
+    # INCR and EXPIRE run inside one EVAL, so no other client can observe or
+    # act on the key between the increment and the expiry being set.
+    _LUA_INCR_AND_EXPIRE = """
+    local current = redis.call("INCR", KEYS[1])
+    if current == 1 then
+        redis.call("EXPIRE", KEYS[1], ARGV[1])
+    end
+    return current
+    """
+
+    def __init__(self, limit: int, window_seconds: int, redis_url: str = "redis://localhost:6379/0"):
+        if limit < 1 or window_seconds < 1:
+            raise ValueError("Rate limit and window must be positive integers.")
+        try:
+            import redis
+        except ImportError as error:
+            raise RateLimiterBackendError("Redis-backed rate limiting requires `uv add redis`.") from error
+        self.limit, self.window_seconds = limit, window_seconds
+        self.redis_url = redis_url
+        self._client = redis.Redis.from_url(redis_url)
+        self._script = self._client.register_script(self._LUA_INCR_AND_EXPIRE)
+
+    def allow(self, key: str, now: float | None = None) -> bool:  # `now` kept for interface compatibility, see class docstring
+        redis_key = f"mangoo:ratelimit:{key}"
+        current = self._script(keys=[redis_key], args=[self.window_seconds])
+        return int(current) <= self.limit
+
+    def stats(self) -> dict[str, int]:
+        """Return non-sensitive limiter configuration for monitoring.
+
+        Unlike the in-process backend, this does not report a live tracked-
+        client count: enumerating ``mangoo:ratelimit:*`` keys across a shared
+        Redis instance would require a ``SCAN`` sweep on every call, which is
+        needless load for a stats endpoint. ``limit``/``window_seconds`` are
+        reported instead so monitoring can still confirm the effective policy.
+        """
+        return {"limit": self.limit, "window_seconds": self.window_seconds}
+
+
 class Hardening:
     """Validate requests and decorate responses using a single policy object."""
 
     def __init__(self, options: HardeningOptions):
         self.options = options
-        self.limiter = RateLimiter(options.rate_limit, options.rate_window_seconds, options.rate_limit_max_clients)
+        if options.rate_limit_backend == "redis":
+            self.limiter: RateLimiter | RedisRateLimiter = RedisRateLimiter(options.rate_limit, options.rate_window_seconds, redis_url=options.rate_limit_redis_url)
+        else:
+            self.limiter = RateLimiter(options.rate_limit, options.rate_window_seconds, options.rate_limit_max_clients)
         try:
             self._trusted_proxy_networks = parse_trusted_proxy_networks(options.trusted_proxy_ips)
         except ValueError as error:

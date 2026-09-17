@@ -169,8 +169,14 @@ restore a backup to an isolated environment, run `migrationstatus`, and verify
 ## Operations
 
 Monitor the request ID in application logs, readiness failures, rate-limit
-events, and `mangoo_audit_events`. The built-in rate limiter is process-local;
-use a reverse proxy or Redis-backed limiter when running more than one instance.
+events, and `mangoo_audit_events`. By default the built-in rate limiter is
+process-local, so a fleet of N instances behind a load balancer independently
+enforces the configured limit N times over. To enforce one combined limit
+across every instance, opt into the Redis-backed limiter by setting
+`RATE_LIMIT_BACKEND = "redis"` and `REDIS_URL = "redis://host:6379/0"` in the
+`security` settings; this requires `uv add redis`. The default stays the
+in-process limiter -- this is opt-in and does not change behavior for
+existing deployments that don't set `RATE_LIMIT_BACKEND`.
 Request counts, latency, and error rate are available at `/metrics` when the
 application opts in with a `MetricsRegistry`; see [README.md](README.md#observability).
 Metrics are process-local like the rate limiter, so scrape every instance

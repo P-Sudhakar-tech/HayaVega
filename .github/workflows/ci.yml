@@ -172,3 +172,28 @@ jobs:
           MANGOO_TEST_MYSQL_USER: mangoo
           MANGOO_TEST_MYSQL_PASSWORD: mangoo
         run: pytest tests/test_mysql_integration.py --no-cov -v
+
+  redis-integration:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Mangoo with test and Redis dependencies
+        run: pip install -e ".[dev]" redis
+        env:
+          MANGOO_SKIP_NATIVE_BUILD: "1"
+      - name: Run the opt-in Redis rate limiter integration test
+        env:
+          MANGOO_TEST_REDIS_URL: "redis://localhost:6379/0"
+        run: pytest tests/test_redis_ratelimiter_integration.py --no-cov -v
