@@ -60,8 +60,10 @@ warn_redundant_casts = true
 [[tool.mypy.overrides]]
 # mangoo_native is an optional, self-built Rust extension (see hatch_build.py)
 # with no type stubs of its own; psycopg/pymysql are optional PostgreSQL/MySQL
-# drivers (see db.py) not installed in the default dev/type-check environment.
-module = ["mangoo_native", "psycopg", "psycopg.*", "pymysql", "pymysql.*"]
+# drivers (see db.py), and redis is an optional Redis rate-limiter backend
+# (see hardening.py's RedisRateLimiter) -- none of the three are installed in
+# the default dev/type-check environment.
+module = ["mangoo_native", "psycopg", "psycopg.*", "pymysql", "pymysql.*", "redis", "redis.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
