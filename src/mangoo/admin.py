@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from .audit import audit_events, record_audit_event
 from .db import connect
+from .jobs import list_jobs, retry_job
 from .models import Decimal, Integer, Toggle
 from .response import Response
 from .routing import path
@@ -51,7 +52,7 @@ class ModelAdmin:
         return self.list_fields or tuple(name for name in self.entity._columns if name != "id")
 
 
-def admin_routes(database_path, prefix: str = "admin", *, signals: SignalBus | None = None, pulse: SignalBus | None = None, models: list[ModelAdmin] | None = None):
+def admin_routes(database_path, prefix: str = "admin", *, signals: SignalBus | None = None, pulse: SignalBus | None = None, models: list[ModelAdmin] | None = None, jobs: bool = False):
     """Return administrator-only index, user-list, and registered-model CRUD routes.
 
     Applications can extend this base with their own protected management views.
@@ -60,7 +61,9 @@ def admin_routes(database_path, prefix: str = "admin", *, signals: SignalBus | N
     for ``signals``. Pass ``models=[ModelAdmin(...)]``
     to add paginated list/add/edit/delete views -- with validation, a
     per-model permission check, and change history built on the audit log --
-    for your own entities.
+    for your own entities. Pass ``jobs=True`` to add a read-only, paginated
+    view of the background job queue (``mangoo.jobs``), filterable by status,
+    with a retry action for dead-lettered jobs.
     """
     if pulse is not None:
         warnings.warn("`pulse=` is deprecated; use `signals=` instead.", DeprecationWarning, stacklevel=2)
@@ -74,7 +77,8 @@ def admin_routes(database_path, prefix: str = "admin", *, signals: SignalBus | N
         if signals is not None:
             signals.publish("admin.action", actor_id=user.id if user else None, data={"action": "index_viewed"})
         links = "".join(f"<li><a href='/{prefix}/{model.slug}'>{escape(model.slug)}</a></li>" for model in (models or ()))
-        return Response(f"<h1>Mangoo administration</h1><ul><li><a href='/{prefix}/users'>Users</a></li>{links}</ul>")
+        jobs_link = f"<li><a href='/{prefix}/jobs'>Jobs</a></li>" if jobs else ""
+        return Response(f"<h1>Mangoo administration</h1><ul><li><a href='/{prefix}/users'>Users</a></li>{jobs_link}{links}</ul>")
 
     @superuser_required(database_path)
     def users(request):
@@ -91,9 +95,62 @@ def admin_routes(database_path, prefix: str = "admin", *, signals: SignalBus | N
         return Response(f"<h1>Users</h1><table><thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Admin</th><th>Status</th></tr></thead><tbody>{items}</tbody></table>")
 
     routes = [path(prefix, index), path(f"{prefix}/users", users)]
+    if jobs:
+        routes.extend(_jobs_admin_routes(database_path, prefix, signals))
     for model in models or ():
         routes.extend(_model_admin_routes(database_path, prefix, model, signals))
     return routes
+
+
+# ---------------------------------------------------------------------------
+# Job-queue admin: paginated list view (mangoo.jobs), filterable by status,
+# plus a retry action for dead-lettered jobs.
+# ---------------------------------------------------------------------------
+
+_JOB_STATUSES = ("pending", "running", "succeeded", "dead")
+
+
+def _jobs_admin_routes(database_path, prefix: str, signals: SignalBus | None):
+    base = f"{prefix}/jobs"
+
+    @superuser_required(database_path)
+    def jobs_list(request):
+        user = request_user(request, database_path)
+        status = request.query_params.get("status", [""])[0] or None
+        if status is not None and status not in _JOB_STATUSES:
+            status = None
+        page = _parse_page(request)
+        rows, total = list_jobs(database_path, status=status, page=page, page_size=25)
+        page_count = max(1, -(-total // 25))
+        page = min(page, page_count)
+        record_audit_event(database_path, "admin.jobs.list_viewed", actor_id=user.id if user else None)
+        if signals is not None:
+            signals.publish("admin.action", actor_id=user.id if user else None, data={"action": "jobs.list_viewed"})
+        token = csrf_token(request)
+        body = _render_jobs_list(prefix, rows, status=status, page=page, page_count=page_count, total=total, csrf=token)
+        return Response(body, headers=(cookie(CSRF_COOKIE_NAME, token, same_site="Strict"),))
+
+    @superuser_required(database_path)
+    @csrf_protect
+    def jobs_retry(request):
+        if request.method != "POST":
+            return Response("<h1>405 Method Not Allowed</h1>", status=405, headers=(("Allow", "POST"),))
+        remainder = request.path.strip("/").removeprefix(base).lstrip("/")
+        if not remainder.endswith("/retry"):
+            return Response("<h1>404 Not Found</h1>", status=404)
+        try:
+            job_id = int(remainder.removesuffix("/retry"))
+        except ValueError:
+            return Response("<h1>404 Not Found</h1>", status=404)
+        user = request_user(request, database_path)
+        reset = retry_job(database_path, job_id, signals=signals)
+        if reset:
+            record_audit_event(database_path, "admin.jobs.retried", actor_id=user.id if user else None, metadata={"id": job_id})
+            if signals is not None:
+                signals.publish("admin.action", actor_id=user.id if user else None, data={"action": "jobs.retried", "id": job_id})
+        return _redirect(f"/{base}")
+
+    return [path(base, jobs_list), path(f"{base}/<path>", jobs_retry, methods=("POST",))]
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +317,25 @@ def _render_list(prefix: str, slug: str, fields: tuple[str, ...], rows: list, *,
     if page < page_count:
         nav.append(f"<a href='/{prefix}/{slug}?page={page + 1}'>Next</a>")
     return f"<h1>{escape(slug)}</h1><p><a href='/{prefix}/{slug}/new'>Add new</a></p><table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table><p>Page {page} of {page_count} ({total} total) {' | '.join(nav)}</p>"
+
+
+def _render_jobs_list(prefix: str, rows: list[dict], *, status: str | None, page: int, page_count: int, total: int, csrf: str) -> str:
+    bold = " style='font-weight:bold'"
+    filters = "".join(f"<a href='/{prefix}/jobs?status={escape(candidate)}'{bold if candidate == status else ''}>{escape(candidate)}</a>" for candidate in _JOB_STATUSES)
+    filters = f"<a href='/{prefix}/jobs'{bold if status is None else ''}>all</a> | {filters}"
+    body_rows = []
+    for row in rows:
+        error = f"<td>{escape(row['last_error'])}</td>" if row["last_error"] else "<td></td>"
+        retry = f"<form method='post' action='/{prefix}/jobs/{row['id']}/retry'><input type='hidden' name='csrf_token' value='{escape(csrf)}'><button type='submit'>Retry</button></form>" if row["status"] == "dead" else ""
+        body_rows.append(f"<tr><td>{row['id']}</td><td>{escape(row['name'])}</td><td>{escape(row['status'])}</td><td>{row['attempts']}/{row['max_attempts']}</td><td>{escape(str(row['run_at']))}</td>{error}<td>{escape(str(row['updated_at']))}</td><td>{retry}</td></tr>")
+    nav = []
+    status_suffix = f"&status={escape(status)}" if status else ""
+    if page > 1:
+        nav.append(f"<a href='/{prefix}/jobs?page={page - 1}{status_suffix}'>Previous</a>")
+    if page < page_count:
+        nav.append(f"<a href='/{prefix}/jobs?page={page + 1}{status_suffix}'>Next</a>")
+    header = "<th>ID</th><th>Name</th><th>Status</th><th>Attempts</th><th>Run at</th><th>Last error</th><th>Updated</th><th></th>"
+    return f"<h1>Jobs</h1><p>{filters}</p><table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table><p>Page {page} of {page_count} ({total} total) {' | '.join(nav)}</p>"
 
 
 def _render_field(name: str, column, value, error: str | None) -> str:

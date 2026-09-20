@@ -281,6 +281,10 @@ them `dead`. This is poll-based, not push-based: a job becomes eligible the
 instant its `run_at` passes, but a worker only notices on its next poll, so
 pickup latency is bounded by `poll_interval` (default 1 second), not instant.
 
+Pass `jobs=True` to `admin_routes()` to add a superuser-only `/admin/jobs`
+view: a paginated, status-filterable list of jobs (`pending`/`running`/
+`succeeded`/`dead`) with a one-click retry action for dead-lettered jobs.
+
 ## Testing and CI
 
 Install the development extra and run the suite with `pip install -e ".[dev]"`

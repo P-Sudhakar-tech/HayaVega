@@ -166,6 +166,53 @@ def _mark_failed(database, job_id: int, attempts: int, max_attempts: int, exc: E
         signals.publish("job.dead" if attempts >= max_attempts else "job.failed", data={"job_id": job_id, "attempts": attempts})
 
 
+def list_jobs(database, *, status: str | None = None, page: int = 1, page_size: int = 25) -> tuple[list[dict], int]:
+    """Return one page of jobs (most recently updated first) and the total matching count.
+
+    Powers the admin jobs view. ``status``, when given, restricts to one of
+    ``pending``/``running``/``succeeded``/``dead``.
+    """
+    initialize_jobs_db(database)
+    connection = connect(database)
+    try:
+        where = "WHERE status = ?" if status else ""
+        params: tuple = (status,) if status else ()
+        total = connection.execute(f"SELECT COUNT(*) AS count FROM mangoo_jobs {where}", params).fetchone()["count"]
+        offset = max(0, (page - 1) * page_size)
+        rows = connection.execute(
+            f"SELECT id, name, status, attempts, max_attempts, run_at, last_error, created_at, updated_at FROM mangoo_jobs {where} ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?",
+            (*params, page_size, offset),
+        ).fetchall()
+        return [dict(row) for row in rows], total
+    finally:
+        connection.close()
+
+
+def retry_job(database, job_id: int, *, signals: SignalBus | None = None) -> bool:
+    """Reset one dead-lettered job back to `pending` for another attempt.
+
+    Only affects jobs currently `dead` -- guarded the same way
+    `claim_next_job` guards its claim, via `WHERE status = 'dead'` on the
+    `UPDATE`, so retrying a job that isn't actually dead (already retried by
+    another admin request, or since picked up) is a no-op rather than a
+    race. Returns whether a row was actually reset.
+    """
+    initialize_jobs_db(database)
+    connection = connect(database)
+    try:
+        cursor = connection.execute(
+            "UPDATE mangoo_jobs SET status = 'pending', attempts = 0, run_at = ?, last_error = NULL, updated_at = ? WHERE id = ? AND status = 'dead'",
+            (_now(), _now(), job_id),
+        )
+        connection.commit()
+        reset = cursor.rowcount > 0
+    finally:
+        connection.close()
+    if reset and signals is not None:
+        signals.publish("job.retried", data={"job_id": job_id})
+    return reset
+
+
 def run_worker(database, handlers: dict[str, Callable[[dict], None]], *, poll_interval: float = 1.0, signals: SignalBus | None = None, max_iterations: int | None = None) -> None:
     """Poll for eligible jobs and run them, forever (or `max_iterations` times).
 
