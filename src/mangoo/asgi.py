@@ -34,10 +34,12 @@ from .hardening import Hardening, HardeningOptions
 from .request import Request
 from .response import Response, json_response
 from .swagger import documentation_routes
+from .websocket import WebSocket, WebSocketDisconnect
 
 if TYPE_CHECKING:
     from .addons.signals import SignalBus
     from .metrics import MetricsRegistry
+    from .websocket import WebSocketRoute
 
 LOGGER = logging.getLogger("mangoo.asgi")
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -121,6 +123,83 @@ def _request_from_scope(scope: dict, body: bytes) -> Request:
     )
 
 
+def _scope_header(scope: dict, name: bytes) -> str:
+    for raw_name, raw_value in scope.get("headers", ()):
+        if raw_name == name:
+            return raw_value.decode("latin-1")
+    return ""
+
+
+def _reject_websocket(scope: dict, hardening_layer: Hardening | None) -> int | None:
+    """Return a close code if this connection should be rejected before accept, else None.
+
+    WebSocket connections bypass the browser's same-origin/CORS enforcement
+    that protects ordinary HTTP requests -- a page on any origin can open a
+    WebSocket to any host and have the browser send cookies along with it
+    ("cross-site WebSocket hijacking"). Reusing ``HardeningOptions.allowed_hosts``/
+    ``allowed_origins`` here (the same settings ``Hardening.reject()`` already
+    enforces for HTTP) closes that gap for WebSocket routes the same way, if
+    either is configured; deployments that already trust every origin can
+    leave them unset and every connection is accepted, matching this
+    framework's existing "opt-in, not on by default" hardening posture.
+    """
+    if hardening_layer is None:
+        return None
+    options = hardening_layer.options
+    if options.allowed_hosts and "*" not in options.allowed_hosts:
+        host = _scope_header(scope, b"host").split(":", 1)[0].lower()
+        if host not in options.allowed_hosts:
+            return 4403
+    if options.allowed_origins:
+        origin = _scope_header(scope, b"origin")
+        if origin and origin not in options.allowed_origins:
+            return 4403
+    return None
+
+
+async def _handle_websocket(scope: dict, receive, send, *, route: WebSocketRoute | None, hardening_layer: Hardening | None, signals: SignalBus | None) -> None:
+    connect_message = await receive()
+    if connect_message["type"] != "websocket.connect":
+        return
+    rejection_code = _reject_websocket(scope, hardening_layer)
+    path = scope.get("path", "/")
+    if rejection_code is not None:
+        if signals is not None:
+            signals.publish("websocket.rejected", data={"path": path, "code": rejection_code})
+        await send({"type": "websocket.close", "code": rejection_code})
+        return
+    if route is None:
+        await send({"type": "websocket.close", "code": 1000})
+        return
+    ws = WebSocket(scope, receive, send)
+    if signals is not None:
+        signals.publish("websocket.connected", data={"path": path})
+    try:
+        await route.handler(ws)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        LOGGER.exception("Unhandled websocket handler error path=%s", path)
+        if not ws.closed:
+            try:
+                await ws.close(code=1011)
+            except Exception:
+                pass  # the connection may already be gone; nothing more to do
+    finally:
+        # A handler that returns (normally, or by not calling accept() at
+        # all to silently reject) without itself sending websocket.close
+        # would otherwise leave the client waiting forever -- this is the
+        # one place that's guaranteed to run regardless of how the handler
+        # exited, so it's where that gets closed out.
+        if not ws.closed:
+            try:
+                await ws.close(code=1000)
+            except Exception:
+                pass  # the connection may already be gone; nothing more to do
+        if signals is not None:
+            signals.publish("websocket.disconnected", data={"path": path})
+
+
 async def _handle_lifespan(receive, send) -> None:
     """Answer ASGI lifespan events so servers like uvicorn don't hang waiting for a reply.
 
@@ -148,6 +227,7 @@ def create_asgi_application(
     api_version: str = "0.1.0",
     pool_connections: bool = False,
     max_sync_workers: int = 16,
+    websocket_patterns: list[WebSocketRoute] | None = None,
 ):
     """Build the ASGI application for a route list.
 
@@ -183,6 +263,14 @@ def create_asgi_application(
     before assuming 16 is right for it, the same standing advice
     ``enable_connection_pooling()`` and ``DEPLOYMENT.md`` already give for
     their own tunables.
+
+    Pass ``websocket_patterns=[websocket_path(...), ...]`` (from
+    ``mangoo.websocket``) to add WebSocket routes; see that module for the
+    handler contract. WebSocket connections have no WSGI equivalent, so this
+    parameter only ever does anything under this ASGI application. Reuses
+    ``hardening``'s ``allowed_hosts``/``allowed_origins`` to reject
+    cross-origin WebSocket connections the same way HTTP requests already
+    are, if either is configured.
     """
     if pulse is not None:
         warnings.warn("`pulse=` is deprecated; use `signals=` instead.", DeprecationWarning, stacklevel=2)
@@ -194,6 +282,7 @@ def create_asgi_application(
     route_list.extend(documentation_routes(route_list, title=api_title, version=api_version))
     routes = {route.pattern: route for route in route_list}
     wildcard_routes = [route for route in route_list if route.pattern.endswith("/<path>")]
+    websocket_routes = {route.pattern: route for route in (websocket_patterns or ())}
     hardening_layer = Hardening(hardening) if hardening else None
     available_routes_html = _available_routes_html(route_list) if debug else ""
 
@@ -202,8 +291,12 @@ def create_asgi_application(
             await _handle_lifespan(receive, send)
             sync_executor.shutdown(wait=False)
             return
+        if scope["type"] == "websocket":
+            websocket_route = websocket_routes.get(scope.get("path", "/").strip("/"))
+            await _handle_websocket(scope, receive, send, route=websocket_route, hardening_layer=hardening_layer, signals=signals)
+            return
         if scope["type"] != "http":
-            raise ValueError(f"Mangoo's ASGI application only supports 'http' and 'lifespan' scopes, got {scope['type']!r}.")
+            raise ValueError(f"Mangoo's ASGI application only supports 'http', 'websocket', and 'lifespan' scopes, got {scope['type']!r}.")
 
         started_at = perf_counter()
         requested = scope.get("path", "/").strip("/")

@@ -93,6 +93,40 @@ worker guidance and
 [`benchmarks/README.md`](benchmarks/README.md#asgi-vs-fastapi) for how it
 measures against FastAPI on the same server.
 
+### WebSockets
+
+WebSocket connections only exist under ASGI -- WSGI has no equivalent scope
+type. Register a handler with `websocket_path()` and pass it to
+`create_asgi_application(websocket_patterns=[...])`:
+
+```python
+from mangoo.websocket import WebSocketDisconnect, websocket_path
+
+async def echo(ws):
+    await ws.accept()
+    try:
+        while True:
+            await ws.send_text(await ws.receive_text())
+    except WebSocketDisconnect:
+        pass
+
+websocket_patterns = [websocket_path("ws/echo", echo)]
+application = create_asgi_application(urlpatterns, websocket_patterns=websocket_patterns)
+```
+
+One `async def` handler owns a connection's whole lifetime: call
+`ws.accept()` (or return without calling it to reject the connection), then
+`ws.receive_text()`/`ws.receive_json()` and `ws.send_text()`/`ws.send_json()`
+in a loop, catching `WebSocketDisconnect` when the client goes away. Only
+exact-path routes are supported (no `<path>` wildcard segment). If
+`hardening`'s `allowed_hosts`/`allowed_origins` are configured, a WebSocket
+connection with a mismatched `Host`/`Origin` header is rejected before
+`accept()` is ever called -- the same protection those settings already give
+HTTP requests, applied here because WebSocket connections bypass the
+browser's ordinary same-origin/CORS enforcement ("cross-site WebSocket
+hijacking"). `mangoo.testing.connect_websocket()` drives a connection against
+an ASGI application in-process, the WebSocket equivalent of `AsyncTestClient`.
+
 ## Rust development runtime
 
 `SERVER['ENGINE'] = 'rust'` in settings switches `mango launch` from the

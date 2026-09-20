@@ -225,7 +225,7 @@ class AsgiApplicationTests(unittest.TestCase):
             pass
 
         with self.assertRaises(ValueError):
-            asyncio.run(app({"type": "websocket"}, receive, send))
+            asyncio.run(app({"type": "grpc"}, receive, send))
 
 
 if __name__ == "__main__":

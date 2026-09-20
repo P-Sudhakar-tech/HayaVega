@@ -63,6 +63,105 @@ class TestClient:
         return self.request("POST", path, **kwargs)
 
 
+class WebSocketClosed(Exception):
+    """Raised by ``WebSocketTestSession.receive_text``/``receive_json`` once the server has closed the connection."""
+
+    def __init__(self, code: int):
+        self.code = code
+        super().__init__(f"WebSocket closed by the server with code {code}")
+
+
+class WebSocketTestSession:
+    """Drives one WebSocket connection against a Mangoo ASGI application in-process.
+
+    Symmetric to ``AsyncTestClient``: no real network socket, just the same
+    ``scope``/``receive``/``send`` contract an ASGI server itself drives.
+    Unlike an HTTP request/response, a WebSocket connection is held open
+    across many messages in both directions, so this drives the
+    application's handler coroutine as a background ``asyncio.Task`` talking
+    over two queues, rather than one call-and-return like
+    ``AsyncTestClient.request``. Use as an async context manager:
+
+    ```python
+    async with connect_websocket(application, "/ws/echo") as session:
+        await session.send_text("hi")
+        assert await session.receive_text() == "hi"
+    ```
+
+    Entering the context sends the connection's ``websocket.connect``
+    message and waits for the application to respond with either
+    ``websocket.accept`` (``session.accepted`` is ``True``) or an immediate
+    ``websocket.close`` (``session.close_code`` is set, ``accepted`` is
+    ``False`` -- the shape a rejected connection, e.g. a failed host/origin
+    check, takes). Exiting the context sends ``websocket.disconnect`` if the
+    server hasn't already closed the connection, then awaits the handler
+    task so any exception it raised propagates to the test.
+    """
+
+    def __init__(self, application, path: str, *, headers: dict[str, str] | None = None):
+        self.application = application
+        self.path = path
+        self.headers = headers or {}
+        self.accepted = False
+        self.close_code: int | None = None
+        self._to_app: asyncio.Queue = asyncio.Queue()
+        self._from_app: asyncio.Queue = asyncio.Queue()
+        self._task: asyncio.Task | None = None
+
+    async def __aenter__(self) -> WebSocketTestSession:
+        path_info, _, query_string = self.path.partition("?")
+        scope = {
+            "type": "websocket",
+            "path": path_info,
+            "query_string": query_string.encode("latin-1"),
+            "headers": [(name.lower().encode("latin-1"), value.encode("latin-1")) for name, value in self.headers.items()],
+            "client": ("127.0.0.1", 0),
+        }
+
+        async def receive():
+            return await self._to_app.get()
+
+        async def send(message):
+            await self._from_app.put(message)
+
+        self._task = asyncio.create_task(self.application(scope, receive, send))
+        await self._to_app.put({"type": "websocket.connect"})
+        first = await self._from_app.get()
+        if first["type"] == "websocket.accept":
+            self.accepted = True
+        elif first["type"] == "websocket.close":
+            self.close_code = first.get("code", 1000)
+        else:
+            raise AssertionError(f"Expected websocket.accept or websocket.close first, got {first['type']!r}")
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if self.close_code is None:
+            await self._to_app.put({"type": "websocket.disconnect", "code": 1000})
+        if self._task is not None:
+            await self._task
+
+    async def send_text(self, data: str) -> None:
+        await self._to_app.put({"type": "websocket.receive", "text": data})
+
+    async def send_json(self, data) -> None:
+        await self.send_text(msgspec.json.encode(data).decode("utf-8"))
+
+    async def receive_text(self) -> str:
+        message = await self._from_app.get()
+        if message["type"] == "websocket.close":
+            self.close_code = message.get("code", 1000)
+            raise WebSocketClosed(self.close_code)
+        return message.get("text") or ""
+
+    async def receive_json(self):
+        return msgspec.json.decode(await self.receive_text())
+
+
+def connect_websocket(application, path: str, *, headers: dict[str, str] | None = None) -> WebSocketTestSession:
+    return WebSocketTestSession(application, path, headers=headers)
+
+
 class AsyncTestClient:
     """Dependency-free test client for Mangoo ASGI applications (see ``mangoo.asgi``).
 
