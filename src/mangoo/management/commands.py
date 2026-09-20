@@ -7,6 +7,7 @@ from mangoo.autoreload import run_with_reloader
 from mangoo.checks import run_checks
 from mangoo.conf import load_settings
 from mangoo.hardening import HardeningOptions
+from mangoo.jobs import run_worker
 from mangoo.migrations import MigrationGenerationError, migration_directories
 from mangoo.migrations import apply as apply_migrations
 from mangoo.migrations import generate as generate_migration
@@ -16,7 +17,7 @@ from mangoo.runtime import serve
 from mangoo.rust_runtime import RustRuntimeUnavailableError
 from mangoo.rust_runtime import serve as serve_rust
 
-HELP_TEXT = "Commands: launch [port] [--noreload], newapp <name>, createadmin, enable2fa <username>, newmigration <app>, applymigrations, migrationstatus, diagnose"
+HELP_TEXT = "Commands: launch [port] [--noreload], newapp <name>, createadmin, enable2fa <username>, newmigration <app>, applymigrations, migrationstatus, diagnose, runworker"
 
 # Django spells these runserver/startapp/createsuperuser/migrate/
 # makemigrations/showmigrations; Mangoo's own names below are distinct on
@@ -57,6 +58,8 @@ def execute_from_command_line(argv: list[str] | None = None) -> None:
         _newmigration(args[2])
     elif canonical == "diagnose":
         _diagnose()
+    elif canonical == "runworker":
+        _runworker()
     else:
         print(HELP_TEXT)
 
@@ -158,6 +161,20 @@ def _newmigration(app: str) -> None:
         print(f"Error: {error}")
         return
     print(f"Created {generated}" if generated else "No entities found; no migration created.")
+
+
+def _runworker() -> None:
+    settings = load_settings()
+    handlers = {}
+    for name, dotted_path in settings.job_handlers.items():
+        module_path, _, attribute = dotted_path.rpartition(".")
+        module = __import__(module_path, fromlist=[attribute])
+        handlers[name] = getattr(module, attribute)
+    print(f"Mangoo job worker started, {len(handlers)} handler(s) registered.")
+    try:
+        run_worker(settings.database, handlers)
+    except KeyboardInterrupt:
+        print("\nMangoo job worker stopped.")
 
 
 def _diagnose() -> None:

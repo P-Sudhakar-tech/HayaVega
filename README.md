@@ -252,6 +252,35 @@ are opt-in: set `MANGOO_TEST_POSTGRES_NAME` or `MANGOO_TEST_MYSQL_NAME` plus
 optional host, port, user, and password variables before running the test
 suite.
 
+## Background jobs
+
+Mangoo persists durable background work in `mangoo_jobs`, reusing the same
+SQLite/PostgreSQL/MySQL connection layer as sessions, audit events, and
+migrations -- no new broker (no Redis, no RabbitMQ) required. A project
+defines plain handler functions and enqueues work:
+
+```python
+# myapp/jobs.py
+def send_email(payload: dict) -> None:
+    ...
+
+# project/settings.py
+JOB_HANDLERS = {"send_email": "myapp.jobs.send_email"}
+```
+
+```python
+from mangoo.jobs import enqueue
+
+enqueue(DATABASES["default"], "send_email", {"to": "a@example.com"})
+```
+
+Run `mango runworker` to start a worker process that polls for eligible jobs
+and dispatches them to the registered handlers, retrying failed jobs with
+capped exponential backoff (up to `max_attempts`, default 3) before marking
+them `dead`. This is poll-based, not push-based: a job becomes eligible the
+instant its `run_at` passes, but a worker only notices on its next poll, so
+pickup latency is bounded by `poll_interval` (default 1 second), not instant.
+
 ## Testing and CI
 
 Install the development extra and run the suite with `pip install -e ".[dev]"`

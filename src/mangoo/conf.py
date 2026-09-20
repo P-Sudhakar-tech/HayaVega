@@ -24,6 +24,7 @@ class ProjectSettings:
     server_tls_cert: str | None
     server_tls_key: str | None
     security: dict
+    job_handlers: dict
     module_name: str = "project.settings"
 
     @property
@@ -88,5 +89,6 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
         server_tls_cert=tls_cert,
         server_tls_key=tls_key,
         security=dict(getattr(module, "SECURITY", {})),
+        job_handlers=dict(getattr(module, "JOB_HANDLERS", {})),
         module_name=module.__name__,
     )
