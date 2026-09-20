@@ -205,6 +205,42 @@ tracked client identities (default: 10,000); idle clients are pruned and the
 least-recently-used identity is evicted when full. Use an edge proxy or Redis
 rate limiter for coordinated limits across multiple application instances.
 
+## Caching
+
+`mangoo.cache` gives you a small, pluggable cache behind one interface --
+`get`/`set`/`delete`/`clear`/`get_or_set` -- with two backends:
+
+```python
+from mangoo.cache import InMemoryCache, RedisCache
+
+cache = InMemoryCache(max_entries=10_000)          # one process, no dependency
+cache = RedisCache("redis://localhost:6379/0")     # shared across every process pointed at it
+```
+
+`InMemoryCache` is a thread-safe, TTL-aware, bounded LRU cache -- the same
+design as `hardening.RateLimiter`, just for arbitrary values instead of
+request counts; it stores Python objects directly, no serialization.
+`RedisCache` JSON-encodes values via `msgspec` (already a core dependency),
+so only JSON-safe values round-trip; it shares state across processes the
+same way `hardening.RedisRateLimiter` does, and requires `uv add redis`.
+
+Cache a whole view's response with `cached_view`:
+
+```python
+from mangoo.cache import cached_view
+
+@cached_view(cache, ttl=60)
+def product_list(request):
+    ...
+```
+
+Only `GET` requests are served from, or written to, the cache -- a
+request meant to have a side effect is never cached. The cache key defaults
+to the request's path and query string; pass `key_func=` to key on something
+else. Nothing invalidates a cached entry except its `ttl` expiring or an
+explicit `cache.delete()`/`cache.clear()` call, so pick `ttl` deliberately
+for data that changes.
+
 ## Observability
 
 Every response carries an `X-Request-ID`; a valid incoming ID is preserved,

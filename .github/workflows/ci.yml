@@ -197,3 +197,7 @@ jobs:
         env:
           MANGOO_TEST_REDIS_URL: "redis://localhost:6379/0"
         run: pytest tests/test_redis_ratelimiter_integration.py --no-cov -v
+      - name: Run the opt-in Redis cache integration test
+        env:
+          MANGOO_TEST_REDIS_URL: "redis://localhost:6379/0"
+        run: pytest tests/test_redis_cache_integration.py --no-cov -v
