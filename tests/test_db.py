@@ -3,9 +3,12 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from mangoo.db import (
+    Connection,
     DatabaseConfigurationError,
+    _is_stale_connection_error,
     close_pooled_connections,
     close_pooled_readonly_connections,
     connect,
@@ -182,3 +185,134 @@ class ReadonlyConnectionPoolingTests(unittest.TestCase):
         self.assertFalse(readonly_connection_pooling_enabled())
         with self.assertRaises(sqlite3.ProgrammingError):
             raw.execute("SELECT 1")
+
+
+class _FlakyCursor:
+    def __init__(self, raw):
+        self._raw = raw
+
+    def execute(self, sql, params):
+        self._raw.calls += 1
+        if self._raw.calls <= self._raw.fail_times:
+            raise self._raw.exc
+
+    def fetchone(self):
+        return {"ok": True}
+
+
+class _FlakyRaw:
+    """A fake DB-API connection whose `cursor().execute()` raises `exc` the
+    first `fail_times` calls, then succeeds -- simulates a pooled connection
+    that the server has silently dropped."""
+
+    def __init__(self, fail_times: int, exc: Exception):
+        self.fail_times = fail_times
+        self.exc = exc
+        self.calls = 0
+
+    def cursor(self):
+        return _FlakyCursor(self)
+
+
+class StaleConnectionReconnectTests(unittest.TestCase):
+    """`Connection.execute()`'s reactive reconnect for pooled MySQL/PostgreSQL
+    connections (see `_reconnect`/`_is_stale_connection_error` in db.py) --
+    the "known limitation" `enable_connection_pooling()` used to document as
+    unsolved. Exercised against fake raw connections so this doesn't need a
+    real, droppable MySQL/PostgreSQL server."""
+
+    def test_stale_mysql_connection_is_reconnected_and_retried(self):
+        import pymysql
+
+        stale = pymysql.err.OperationalError(2006, "MySQL server has gone away")
+        flaky_raw = _FlakyRaw(fail_times=1, exc=stale)
+        connection = Connection(flaky_raw, "mysql", config={"ENGINE": "mysql", "NAME": "x"})
+        connection.pooled = True
+        fresh_raw = _FlakyRaw(fail_times=0, exc=stale)
+
+        with mock.patch("mangoo.db._open", return_value=Connection(fresh_raw, "mysql", config=connection._config)) as opened:
+            result = connection.execute("SELECT 1").fetchone()
+
+        opened.assert_called_once_with(connection._config)
+        self.assertIs(connection.raw, fresh_raw)
+        self.assertEqual(result, {"ok": True})
+
+    def test_mysql_interface_error_is_also_treated_as_stale(self):
+        import pymysql
+
+        stale = pymysql.err.InterfaceError(0, "")
+        flaky_raw = _FlakyRaw(fail_times=1, exc=stale)
+        connection = Connection(flaky_raw, "mysql", config={"ENGINE": "mysql", "NAME": "x"})
+        connection.pooled = True
+        fresh_raw = _FlakyRaw(fail_times=0, exc=stale)
+
+        with mock.patch("mangoo.db._open", return_value=Connection(fresh_raw, "mysql", config=connection._config)):
+            connection.execute("SELECT 1")
+
+        self.assertIs(connection.raw, fresh_raw)
+
+    def test_non_stale_mysql_error_is_not_retried(self):
+        import pymysql
+
+        syntax_error = pymysql.err.ProgrammingError(1064, "You have an error in your SQL syntax")
+        flaky_raw = _FlakyRaw(fail_times=99, exc=syntax_error)
+        connection = Connection(flaky_raw, "mysql", config={"ENGINE": "mysql", "NAME": "x"})
+        connection.pooled = True
+
+        with mock.patch("mangoo.db._open") as opened:
+            with self.assertRaises(pymysql.err.ProgrammingError):
+                connection.execute("SELECT 1")
+
+        opened.assert_not_called()
+        self.assertIs(connection.raw, flaky_raw)
+
+    def test_unpooled_connection_is_never_reconnected(self):
+        import pymysql
+
+        stale = pymysql.err.OperationalError(2006, "MySQL server has gone away")
+        flaky_raw = _FlakyRaw(fail_times=99, exc=stale)
+        connection = Connection(flaky_raw, "mysql", config={"ENGINE": "mysql", "NAME": "x"})
+        connection.pooled = False
+
+        with mock.patch("mangoo.db._open") as opened:
+            with self.assertRaises(pymysql.err.OperationalError):
+                connection.execute("SELECT 1")
+
+        opened.assert_not_called()
+
+    def test_a_second_consecutive_stale_failure_still_raises(self):
+        """The retry happens exactly once -- a connection that comes back
+        stale again is a real error, not an infinite retry loop."""
+        import pymysql
+
+        stale = pymysql.err.OperationalError(2006, "MySQL server has gone away")
+        flaky_raw = _FlakyRaw(fail_times=99, exc=stale)
+        connection = Connection(flaky_raw, "mysql", config={"ENGINE": "mysql", "NAME": "x"})
+        connection.pooled = True
+        still_stale_raw = _FlakyRaw(fail_times=99, exc=stale)
+
+        with mock.patch("mangoo.db._open", return_value=Connection(still_stale_raw, "mysql", config=connection._config)) as opened:
+            with self.assertRaises(pymysql.err.OperationalError):
+                connection.execute("SELECT 1")
+
+        opened.assert_called_once()
+
+    def test_is_stale_connection_error_classifies_mysql_error_codes(self):
+        import pymysql
+
+        self.assertTrue(_is_stale_connection_error("mysql", pymysql.err.OperationalError(2006, "gone away")))
+        self.assertTrue(_is_stale_connection_error("mysql", pymysql.err.OperationalError(2013, "lost connection")))
+        self.assertTrue(_is_stale_connection_error("mysql", pymysql.err.InterfaceError(0, "")))
+        self.assertFalse(_is_stale_connection_error("mysql", pymysql.err.OperationalError(1045, "access denied")))
+        self.assertFalse(_is_stale_connection_error("mysql", pymysql.err.ProgrammingError(1064, "syntax error")))
+
+    def test_is_stale_connection_error_classifies_postgresql_operational_errors(self):
+        try:
+            import psycopg
+        except ImportError:
+            self.skipTest("psycopg is not installed")
+        self.assertTrue(_is_stale_connection_error("postgresql", psycopg.OperationalError("server closed the connection unexpectedly")))
+        self.assertFalse(_is_stale_connection_error("postgresql", psycopg.errors.UniqueViolation("duplicate key")))
+
+    def test_sqlite_is_never_eligible_for_reconnect(self):
+        self.assertFalse(_is_stale_connection_error("sqlite3", RuntimeError("anything")))

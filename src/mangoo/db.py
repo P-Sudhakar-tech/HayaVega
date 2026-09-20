@@ -23,15 +23,45 @@ def normalize_config(database: str | Path | dict) -> dict:
 
 
 class Connection:
-    def __init__(self, raw, engine: str):
+    def __init__(self, raw, engine: str, config: dict | None = None):
         self.raw, self.engine = raw, engine
+        self._config = config
         self._transaction_depth = 0
         self.pooled = False
 
     def execute(self, sql: str, params=()):
+        """Run one statement, transparently reconnecting a stale pooled connection once.
+
+        Only pooled MySQL/PostgreSQL connections are eligible: a pooled
+        connection can sit idle long enough for the server to drop it
+        (MySQL's `wait_timeout`, a network blip) between requests, and the
+        *first* statement run against it afterwards is what surfaces that --
+        there is no local, network-free way to detect it beforehand. Since
+        the failure happens before anything reaches the server (the driver
+        can't even write the request on a dead socket), reopening the
+        connection and retrying the exact same statement once is safe: it
+        cannot double-execute a statement the server never saw. A second
+        failure after reconnecting is a real error and propagates normally.
+        SQLite is never eligible -- it has no server-side idle timeout, so
+        this path can't help it and the check is skipped entirely.
+        """
+        try:
+            return self._execute_once(sql, params)
+        except Exception as exc:
+            if self.pooled and self.engine in {"postgresql", "mysql"} and _is_stale_connection_error(self.engine, exc):
+                self._reconnect()
+                return self._execute_once(sql, params)
+            raise
+
+    def _execute_once(self, sql: str, params=()):
         cursor = self.raw.cursor()
         cursor.execute(sql.replace("?", "%s") if self.engine in {"postgresql", "mysql"} else sql, params)
         return cursor
+
+    def _reconnect(self) -> None:
+        assert self._config is not None, "reconnect is only reachable for connections opened via _open(), which always sets _config"
+        fresh = _open(self._config)
+        self.raw = fresh.raw
 
     def commit(self):
         self.raw.commit()
@@ -113,14 +143,14 @@ def enable_connection_pooling() -> None:
     (SQLite enforces this directly: a connection created with the default
     `check_same_thread=True` cannot be used from another thread at all).
 
-    Known limitation, not solved here: a pooled MySQL/PostgreSQL connection
-    that has sat idle long enough for the server to drop it (MySQL's
-    `wait_timeout`, a network blip) is not detected or transparently
-    reconnected -- the next call using it fails with a real error. This
-    does not affect SQLite, which has no server-side idle timeout; for
-    long-running MySQL/PostgreSQL deployments, restarting worker processes
-    periodically is the simple mitigation until a real bounded pool with
-    health checks is built as its own, separate piece of work.
+    A pooled MySQL/PostgreSQL connection that has sat idle long enough for
+    the server to drop it (MySQL's `wait_timeout`, a network blip) is
+    transparently reconnected: `Connection.execute()` recognizes the
+    driver-specific "connection is dead" error, reopens the underlying
+    connection, and retries the same statement once -- see
+    `_is_stale_connection_error`/`Connection._reconnect`. This does not
+    affect SQLite, which has no server-side idle timeout and is never
+    eligible for this path.
 
     **Benchmark this for your own deployment before enabling it -- it is
     not a universal win.** Measured against `benchmarks/`'s SQLite-backed
@@ -343,7 +373,7 @@ def _open(config: dict) -> Connection:
     if engine in {"sqlite", "sqlite3"}:
         raw = sqlite3.connect(config["NAME"])
         raw.row_factory = sqlite3.Row
-        return Connection(raw, "sqlite3")
+        return Connection(raw, "sqlite3", config)
     if engine in {"postgres", "postgresql"}:
         try:
             import psycopg
@@ -358,7 +388,7 @@ def _open(config: dict) -> Connection:
             password=config.get("PASSWORD"),
             row_factory=dict_row,
         )
-        return Connection(raw, "postgresql")
+        return Connection(raw, "postgresql", config)
     if engine in {"mysql", "mariadb"}:
         try:
             import pymysql
@@ -372,8 +402,33 @@ def _open(config: dict) -> Connection:
             database=config["NAME"],
             cursorclass=pymysql.cursors.DictCursor,
         )
-        return Connection(raw, "mysql")
+        return Connection(raw, "mysql", config)
     raise DatabaseConfigurationError(f"Unsupported database engine: {engine}")
+
+
+def _is_stale_connection_error(engine: str, exc: Exception) -> bool:
+    """Whether `exc` indicates the server dropped a connection out from under us.
+
+    Distinguishes "connection is dead, retry on a fresh one" from ordinary
+    query errors (bad SQL, constraint violations) that a retry would just
+    reproduce -- only the former should trigger `Connection._reconnect()`.
+    """
+    if engine == "mysql":
+        import pymysql
+
+        if isinstance(exc, pymysql.err.InterfaceError):
+            return True
+        if isinstance(exc, pymysql.err.OperationalError):
+            code = exc.args[0] if exc.args else None
+            # 2006 server gone away, 2013 lost connection during query,
+            # 2003/2014 can't connect/out-of-sync after a dropped socket.
+            return code in {2003, 2006, 2013, 2014}
+        return False
+    if engine == "postgresql":
+        import psycopg
+
+        return isinstance(exc, psycopg.OperationalError)
+    return False
 
 
 def user_id_definition(engine: str) -> str:
