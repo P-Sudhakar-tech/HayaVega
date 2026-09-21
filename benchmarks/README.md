@@ -958,3 +958,183 @@ including the ones earlier in this document, was never a fully reliable
 read on which framework was actually ahead. Anyone citing a `template_render`
 number from this suite going forward should average several runs, not
 quote one.
+
+## The Rust runtime vs. FastAPI, directly measured
+
+Every FastAPI comparison published above used `waitress` as Mangoo's WSGI
+server, because every one of those runs predates the Rust runtime ("The
+Rust runtime vs the Python runtime (waitress)" above) existing. That
+section only ever compared the Rust runtime against Mangoo's own
+`waitress` baseline, never against FastAPI directly -- so no number on
+file actually answered "does the Rust runtime beat FastAPI," only the
+weaker, inferred claim that it should, since waitress and FastAPI were
+themselves roughly tied. `benchmarks/rust_runtime_vs_fastapi.py` closes
+that gap: same two apps as every other FastAPI comparison in this
+document (`benchmarks/mangoo_app/app.py` behind `mangoo.rust_runtime`,
+`benchmarks/fastapi_app/app.py` behind `uvicorn`), same four scenarios,
+same seeded data -- only the missing pairing.
+
+**Three full `oha -z 10s -c 30` runs, no code changed between them (per
+this document's own standing rule after the `template_render`
+re-measurement above: one run is not a reliable read):**
+
+| Scenario | Rust runtime (3 runs) req/s | FastAPI (3 runs) req/s | Ratio (3 runs) | Average ratio |
+|---|---:|---:|---:|---:|
+| `json_echo` | 9425, 9929, 9429 | 1942, 1950, 1941 | 4.85x, 5.09x, 4.86x | **4.93x** |
+| `db_list` | 1616, 1669, 1575 | 703, 700, 719 | 2.30x, 2.38x, 2.19x | **2.29x** |
+| `template_render` | 1295, 1284, 1219 | 703, 758, 727 | 1.84x, 1.69x, 1.68x | **1.74x** |
+| `static_file` | 2069, 1986, 1977 | 699, 719, 713 | 2.96x, 2.76x, 2.77x | **2.83x** |
+
+Success rate was 100% for both targets on every scenario, all three runs.
+
+**Result: the Rust runtime beats FastAPI outright on every scenario, by a
+wide and consistent margin (1.68x-5.09x across individual runs, none
+close to a tie)** -- unlike the noisy, single-digit-percent margins that
+made the `waitress`-vs-FastAPI comparison unreliable above, these ratios
+are large enough that the run-to-run noise this document has repeatedly
+found on this environment (up to 17% swings on `template_render`
+specifically) cannot plausibly explain them away. `template_render`
+carries the smallest margin of the four, consistent with it being the
+one scenario where the ~35-45ms SQLite connection-and-query cost (paid
+identically by both frameworks, see "environment ceiling" in
+`INDUSTRY_LEADERSHIP_ROADMAP.md`) is a larger share of total request
+time than the HTTP-layer cost the Rust runtime actually improves --
+`json_echo`, which does no database work at all, shows the largest and
+most consistent margin (~4.9x) for the same reason.
+
+This closes the last open item from the Rust-runtime work: it was
+previously benchmarked only against Mangoo's own `waitress`, with a
+FastAPI win inferred rather than measured. It is now measured directly,
+and the inference holds.
+
+## Real concurrent I/O under ASGI: the scenario every prior comparison left open
+
+Every scenario benchmarked anywhere above (`json_echo`, `db_list`,
+`template_render`, `static_file`) is a plain synchronous view under every
+transport tested, including Mangoo (ASGI) and FastAPI. None of them
+exercise the one property ASGI actually has that WSGI doesn't: an
+`async def` view awaiting I/O yields the event loop instead of blocking a
+whole OS thread for the call's duration, so many more requests can be in
+flight than there are threads. "ASGI vs FastAPI" above says this
+explicitly: "`async def` views doing concurrent I/O ... still aren't
+benchmarked here." `benchmarks/asgi_concurrent_io.py` is that benchmark.
+
+**Setup:** `benchmarks/upstream_app` is a raw ASGI app (no framework) that
+just `await asyncio.sleep()`s for a fixed delay before responding --
+standing in for a real downstream network call without real-network
+flakiness. Three routes, same upstream, same delay, compared:
+
+- `remote_io` (`GET /remote`, `async def`, awaits the call) on Mangoo
+  (ASGI) and on FastAPI -- both served by uvicorn.
+- `remote_io_blocking` (`GET /remote-blocking`, plain `def`, blocks a
+  thread for the call) on Mangoo (ASGI) (dispatched through its 16-worker
+  sync pool), on Mangoo (WSGI/`waitress`, 16 threads), and on FastAPI
+  (dispatched through Starlette/anyio's thread pool).
+
+Concurrency defaults to 64 -- deliberately above every blocking path's
+thread-pool size, so a queuing ceiling has room to show up if the async
+paths avoid it and the blocking ones don't.
+
+### Three real bugs found and fixed while building this, not shipped blind
+
+Building a fair, working version of this benchmark surfaced three
+separate, genuine problems -- none in Mangoo's or FastAPI's own code, all
+in the benchmark's own plumbing. Each is disclosed in full in
+`benchmarks/_upstream_client.py`'s docstring; summarized here:
+
+1. **httpx.AsyncClient does not overlap concurrent requests on this dev
+   environment.** The first version of the async views used
+   `httpx.AsyncClient`, the obvious real-world choice. A direct
+   microbenchmark (`asyncio.gather` of N concurrent `client.get()` calls
+   against the upstream, no Mangoo/FastAPI involved at all) showed N=32
+   taking ~300-900ms across every configuration tried -- default pooled
+   client, `trust_env=False`, a fresh client per call, both
+   `WindowsProactorEventLoopPolicy` and `WindowsSelectorEventLoopPolicy`.
+   The same load over raw `asyncio.open_connection` sockets, no httpx at
+   all, took ~50ms. This is a genuine, reproducible httpx/httpcore
+   (1.0.9) bottleneck on this machine, not a Mangoo or FastAPI issue --
+   both apps' `/remote` routes used the identical client, so it would
+   have suppressed both sides equally, hiding rather than answering the
+   question this benchmark exists to ask. Routed around with
+   `benchmarks/_upstream_client.py`, a minimal raw-socket async client
+   built specifically to isolate this benchmark's actual variable.
+2. **The replacement client's first version reproduced a bug this
+   project already found twice before.** It sent `Connection: close`,
+   opening a fresh TCP connection per call. Under real concurrency,
+   `netstat` showed dozens of `127.0.0.1:9010` connections sitting in
+   `FIN_WAIT_2` -- the same Windows ephemeral-port/`TIME_WAIT` failure
+   mode already diagnosed for the Django benchmark target and for the
+   Rust runtime's own missing keep-alive (see "The Rust runtime vs the
+   Python runtime (waitress)" above). Fixed by pooling and reusing
+   keep-alive connections instead, the same "one connection per client,
+   kept alive" shape `mangoo.db.enable_connection_pooling()` already uses
+   on the database side.
+3. **The keep-alive fix then failed to parse the response it got back.**
+   uvicorn's `h11` implementation sends `benchmarks/upstream_app`'s
+   response with `Transfer-Encoding: chunked` on a persistent connection
+   -- verified independently with stdlib `http.client`, so this is
+   uvicorn's real behavior, not something to work around server-side.
+   The minimal client parses both `Content-Length` and chunked framing
+   now, the same as any real HTTP/1.1 client needs to.
+
+A fourth issue was a flaw in the benchmark's own design, not its
+client: an earlier version shared one long-lived upstream process across
+all three sequentially-benchmarked targets. Killing a target's process
+with `SIGTERM` between targets doesn't give its outbound connections to
+the upstream a clean FIN handshake, so the upstream accumulated
+`CLOSE_WAIT` sockets that were still present, unfairly, when the next
+target's benchmark began -- confirmed with `netstat` (64 `CLOSE_WAIT` + 64
+`FIN_WAIT_2` after repeated runs) and with a paired comparison: the same
+target measured ~5x worse against a contaminated shared upstream than
+against a freshly started one on an unused port. Fixed by giving each
+target its own freshly started upstream process.
+
+### Results: three full runs, `oha -z 10s -c 64`, 40ms simulated upstream latency
+
+100% success rate, every target, every scenario, all three runs.
+
+| Comparison | Run 1 | Run 2 | Run 3 | Average |
+|---|---:|---:|---:|---:|
+| 1. Mangoo (ASGI) `/remote` vs FastAPI `/remote` (both async) | 913.6 vs 902.9 (1.01x) | 911.9 vs 855.6 (1.07x) | 873.4 vs 870.2 (1.00x) | **899.6 vs 876.2 req/s, 1.03x** |
+| 2. Mangoo (ASGI) `/remote` vs its own `/remote-blocking` | 913.6 vs 283.2 (3.23x) | 911.9 vs 277.6 (3.29x) | 873.4 vs 257.9 (3.39x) | **899.6 vs 272.9 req/s, 3.30x** |
+| 3. Mangoo (WSGI) `/remote-blocking` vs FastAPI `/remote-blocking` | 281.1 vs 456.2 (0.62x) | 264.8 vs 461.1 (0.57x) | 270.0 vs 456.6 (0.59x) | **272.0 vs 457.9 req/s, 0.59x** |
+
+**Comparison 1 -- the question this file exists to answer: Mangoo (ASGI)
+and FastAPI are a statistical tie on real concurrent I/O** (1.03x average,
+individual runs ranging 1.00x-1.07x, all in Mangoo's favor but by margins
+this document's own noise findings elsewhere say not to over-read).
+Neither framework has an advantage here -- both scale past their
+respective thread-pool sizes by roughly the same amount under the same
+load, which is exactly what "both are a real ASGI transport, not just a
+WSGI transport with an event loop bolted on" would predict.
+
+**Comparison 2 is the real headline: within the same Mangoo process, the
+`async def` view beats its own blocking twin by 3.30x.** This is the
+concrete, measured version of the claim `mangoo.asgi`'s own module
+docstring already makes in prose ("choose ASGI only when a project needs
+`async def` views for concurrent I/O ... that WSGI's one-thread-per-
+request model can't overlap as cheaply") -- previously asserted, now
+demonstrated, with every other variable (routing code, server, process)
+held constant.
+
+**Comparison 3 is real but not a fair framework-speed comparison, and is
+reported with that caveat rather than left to imply one.** FastAPI's
+blocking route runs through Starlette/anyio's default thread pool, which
+defaults to **40** tokens (`anyio._backends._asyncio.AsyncIOBackend.
+current_default_thread_limiter`); Mangoo's two blocking paths here
+(`waitress --threads=16` and `create_asgi_application`'s own
+`max_sync_workers=16` default) both use 16. At `-c 64` -- above every
+pool size here -- more headroom means more throughput regardless of
+either framework's own per-request cost, so this ratio is measuring pool
+size more than framework speed. Matching Mangoo's pool size to anyio's
+(`max_sync_workers=40`, or `waitress --threads=40`) would be needed
+before this specific comparison meant anything about relative framework
+overhead; not attempted here since it wasn't this benchmark's question.
+
+### Conclusion
+
+The gap `benchmarks/README.md`'s "ASGI vs FastAPI" section left open is
+closed: Mangoo's ASGI transport handles real concurrent I/O as well as
+FastAPI's (comparison 1), and ASGI's claimed advantage over WSGI-style
+blocking is real and substantial within Mangoo's own two transports
+(comparison 2), not just a theoretical property asserted in a docstring.

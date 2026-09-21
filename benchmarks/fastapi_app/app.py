@@ -8,17 +8,28 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
+import requests
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
+from benchmarks._upstream_client import fetch_upstream
+
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE = Path(tempfile.gettempdir()) / "fastapi_benchmark.sqlite3"
 SEED_COUNT = 20
+UPSTREAM_URL = "http://127.0.0.1:9010/delay"
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+# Same session shape benchmarks/mangoo_app uses for its identical blocking
+# route below -- see benchmarks/asgi_concurrent_io.py for why (a fair
+# comparison needs the upstream call itself to cost the same on both
+# sides). The async route below uses benchmarks/_upstream_client instead
+# of httpx.AsyncClient -- see that module's docstring for the disclosed
+# reason.
+_upstream_session = requests.Session()
 
 
 def seed() -> None:
@@ -60,6 +71,24 @@ def posts_json():
 @application.get("/posts", response_class=HTMLResponse)
 def posts_page(request: Request):
     return templates.TemplateResponse(request, "page.html", {"posts": fetch_posts()})
+
+
+@application.get("/remote")
+async def remote_io():
+    """Real concurrent I/O: awaits benchmarks/upstream_app instead of blocking
+    a thread for it. The direct counterpart to Mangoo (ASGI)'s `remote_io` in
+    benchmarks/mangoo_asgi_app/app.py -- see benchmarks/asgi_concurrent_io.py."""
+    return await fetch_upstream()
+
+
+@application.get("/remote-blocking")
+def remote_io_blocking():
+    """The blocking contrast: a plain `def` route, so FastAPI dispatches it
+    through Starlette/anyio's thread pool instead of the event loop -- the
+    counterpart to Mangoo's `remote_io_blocking` in
+    benchmarks/mangoo_app/app.py. See benchmarks/asgi_concurrent_io.py."""
+    response = _upstream_session.get(UPSTREAM_URL, timeout=5)
+    return response.json()
 
 
 @application.on_event("startup")

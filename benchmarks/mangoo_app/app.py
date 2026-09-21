@@ -10,6 +10,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import requests
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from mangoo import Entity, Integer, Text, api_route, path, static_routes
@@ -22,6 +24,12 @@ from mangoo.ui import Button, Page, div, li, ui_routes, ul
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE = Path(tempfile.gettempdir()) / "mangoo_benchmark.sqlite3"
 SEED_COUNT = 20
+UPSTREAM_URL = "http://127.0.0.1:9010/delay"
+# One shared Session, not a fresh connection per call, so the blocking-I/O
+# scenario measures thread-pool queuing under sustained latency, not an
+# unrelated TCP-handshake-per-request cost neither transport is really
+# about. See benchmarks/asgi_concurrent_io.py.
+_upstream_session = requests.Session()
 
 
 class Post(Entity):
@@ -96,11 +104,29 @@ def greeting(request):
     return "Hello from Mangoo GraphQL"
 
 
+def remote_io_blocking(request):
+    """A sync view that blocks on a real network call to benchmarks/upstream_app.
+
+    Deliberately synchronous (a plain `requests.get`, not `httpx.AsyncClient`)
+    so it ties up whatever thread runs it for the upstream's full response
+    time -- under WSGI (`waitress --threads=16`), one of 16 worker threads;
+    under Mangoo ASGI, one of `create_asgi_application`'s 16-worker sync
+    dispatch pool (see `mangoo.asgi`). This is the contrast baseline for
+    `remote_io` (the `async def` version, ASGI-only, in
+    benchmarks/mangoo_asgi_app/app.py and benchmarks/fastapi_app/app.py):
+    same upstream, same latency, only the concurrency model differs. See
+    benchmarks/asgi_concurrent_io.py.
+    """
+    response = _upstream_session.get(UPSTREAM_URL, timeout=5)
+    return response.json()
+
+
 schema = Schema(query={"greeting": greeting})
 
 urlpatterns = [
     api_route("echo", echo, methods=("GET",)),
     api_route("posts.json", posts_json, methods=("GET",)),
+    api_route("remote-blocking", remote_io_blocking, methods=("GET",)),
     path("posts", posts_page, methods=("GET",)),
     path("posts/fragment", posts_fragment, methods=("GET",)),
     path("posts/fragment-native", posts_fragment_native, methods=("GET",)),
