@@ -1233,10 +1233,59 @@ a shared-upstream design contaminating later-run targets with earlier
 targets' unclosed connections) -- none in Mangoo's or FastAPI's own code
 (see "Real concurrent I/O under ASGI" in `benchmarks/README.md` for the
 full account).
-Deferred, not needed now: a Tortoise ORM (or other async-driver) benchmark
-comparison -- new scope (an async-driver comparison app); and release
-automation (`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8d, dependency
-scanning itself is delivered, see Order 8c).
+~~A Tortoise ORM (or other async-driver) benchmark comparison~~ -- built
+on direct request as its own app (`benchmarks/tortoise_app`) and its own
+runner (`benchmarks/tortoise_vs_mangoo.py`), scoped to the one scenario an
+async driver can plausibly change (`db_list`) with the `aiosqlite`
+single-worker-thread-per-connection caveat disclosed up front. Three full
+runs found Mangoo beats it on both transports (ASGI 1.23x-1.39x, WSGI
+1.05x-1.07x), and even FastAPI's own plain-`sqlite3` baseline is within
+noise of Tortoise ORM itself -- see "Tortoise ORM: the async-driver
+comparison, built and measured" in `benchmarks/README.md` for the full
+account and the exact reason (a documented default connection-pool size
+of one, contended by every concurrent request in the benchmark).
+Still deferred, not needed now: release automation
+(`UPCOMING_IMPROVEMENT_ROADMAP.md`'s Order 8d, dependency scanning itself
+is delivered, see Order 8c).
+
+### Tortoise ORM: the async-driver benchmark comparison, delivered
+
+This document's own record above called a Tortoise ORM/async-driver
+comparison "new scope, requested but not yet started" twice -- once when
+first raised, once when the ASGI concurrent-I/O work above closed out
+every other open item. Asked directly to go with it, that scope was
+built rather than deferred a third time.
+
+- [x] **`benchmarks/tortoise_app/app.py`**: FastAPI + Tortoise ORM over
+      `aiosqlite`, the same `Post` shape and `SEED_COUNT` as every other
+      target, exposing only `/posts.json` (the one scenario an async
+      driver can plausibly change) plus a DB-free `/echo` for the
+      readiness check every app in `benchmarks/` already uses.
+- [x] **`benchmarks/tortoise_vs_mangoo.py`** pairs it against three
+      targets: FastAPI's own plain-`sqlite3` baseline (Tortoise's own
+      framework, without Tortoise), Mangoo (ASGI, sync ORM), and Mangoo
+      (WSGI, sync ORM).
+- [x] **Disclosed before the first run:** `aiosqlite` is not true async
+      I/O -- its own source
+      (`_connection_worker_thread` in `aiosqlite/core.py`) shows one
+      dedicated background thread per connection running the real,
+      blocking `sqlite3` calls, with `await` just parking the coroutine on
+      a `Future` that thread resolves. Tortoise's default SQLite
+      connection pool is also a single connection, making that one
+      thread the sole serialization point for every concurrent request --
+      the library's own documented default, kept rather than tuned away,
+      since benchmarking a different configuration would answer a
+      different question than the one asked.
+- [x] **Three full `oha -z 10s -c 30` runs, 100% success every target,
+      every run:** Mangoo (ASGI) beat Tortoise ORM 1.23x-1.39x, Mangoo
+      (WSGI) 1.05x-1.07x, and FastAPI's own `sqlite3` baseline landed
+      within noise of Tortoise ORM itself (0.84x-1.03x) rather than
+      clearly ahead -- Tortoise ORM's async driver did not give FastAPI a
+      database-bound edge over Mangoo's synchronous ORM at this
+      concurrency.
+- Full table, all three runs, and the exact explanation (contention on a
+  single-connection pool at `-c 30` against Mangoo's full 16-worker pools
+  on both transports): [`benchmarks/README.md`](benchmarks/README.md#tortoise-orm-the-async-driver-comparison-built-and-measured).
 
 ### The custom Rust HTTP runtime: delivered, with a disclosed scope-down and two real bugs found while benchmarking it
 

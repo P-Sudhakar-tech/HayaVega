@@ -33,6 +33,10 @@ python benchmarks/run.py --duration 10s --connections 30
 the Mangoo (ASGI) target added when Phase 3 introduced `mangoo.asgi`; no
 extra dependency is needed for it.
 
+`benchmarks/tortoise_vs_mangoo.py` (see "Tortoise ORM: the async-driver
+comparison" below) additionally needs `tortoise-orm` and `aiosqlite`:
+`pip install tortoise-orm aiosqlite`.
+
 Results are written to `benchmarks/results/RESULTS.md`. Each target's
 server log is written to `benchmarks/results/<name>_server.log` for the
 duration of that target's run (overwritten each run, not meant to be kept).
@@ -1137,4 +1141,78 @@ The gap `benchmarks/README.md`'s "ASGI vs FastAPI" section left open is
 closed: Mangoo's ASGI transport handles real concurrent I/O as well as
 FastAPI's (comparison 1), and ASGI's claimed advantage over WSGI-style
 blocking is real and substantial within Mangoo's own two transports
+(comparison 2), not just a theoretical property asserted in a docstring.
+
+## Tortoise ORM: the async-driver comparison, built and measured
+
+The `INDUSTRY_LEADERSHIP_ROADMAP.md` entry above ("Deferred, not needed
+now: a Tortoise ORM (or other async-driver) benchmark comparison -- new
+scope") is new scope, not forgotten scope: every target in this suite,
+Mangoo's own ORM included, opens a plain synchronous `sqlite3` connection
+per request. Tortoise ORM's default driver for SQLite, `aiosqlite`, is the
+first async database driver to appear anywhere in this suite, and that is
+a different shape of comparison from anything above -- it needed its own
+app and its own scoping before being benchmarked, not a route bolted onto
+an existing target.
+
+**`benchmarks/tortoise_app/app.py`** is that app: FastAPI + Tortoise ORM
+over `aiosqlite`, the same `Post` shape (`id`, `title`, `views`) and the
+same `SEED_COUNT = 20` as every other target, exposing only `/posts.json`
+(plus a DB-free `/echo` for the readiness check every other app in this
+directory already uses). It's scoped to just the `db_list` scenario on
+purpose: `json_echo`, `template_render`, and `static_file` don't touch the
+database, so an async driver can't plausibly change them, and all three
+are already benchmarked elsewhere in this document.
+
+**Disclosed before the first run, not discovered after it: `aiosqlite` is
+not true async I/O.** Reading its own source
+(`aiosqlite/core.py`, `_connection_worker_thread`) shows every connection
+opens a dedicated background `threading.Thread` that runs the real,
+blocking `sqlite3` calls; `await`ing a query just parks the coroutine on a
+`Future` that thread later resolves via `call_soon_threadsafe`. So this
+comparison is really "one dedicated worker thread per connection"
+(Tortoise ORM) vs. "N shared threads across every connection" (Mangoo's
+own ORM, dispatched to ASGI's sync-dispatch pool or a WSGI worker thread)
+-- not "async I/O vs. blocking I/O" in the sense the concurrent-I/O
+comparison above tested for a real network call. Tortoise's default
+connection pool for SQLite is also a single connection, so its one
+worker thread is the sole serialization point for every concurrent
+request in this benchmark; that is disclosed as part of the comparison,
+not tuned away, because it's the library's own documented default and
+changing it would be benchmarking a different configuration than what a
+reader gets from `Tortoise.init()` out of the box.
+
+### Results: three full runs, `oha -z 10s -c 30`, `GET /posts.json`
+
+Four targets, same seeded data, same scenario, same machine:
+
+| Target | Run 1 | Run 2 | Run 3 | Average | Ratio vs. Tortoise ORM |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Tortoise ORM (FastAPI + aiosqlite) | 698.2 req/s | 729.0 req/s | 729.6 req/s | 718.9 req/s | 1.00x |
+| FastAPI (sync `sqlite3`) | 719.1 req/s | 613.4 req/s | 632.9 req/s | 655.1 req/s | 0.91x |
+| Mangoo (ASGI, sync ORM) | 972.9 req/s | 949.1 req/s | 894.8 req/s | 938.9 req/s | 1.31x |
+| Mangoo (WSGI, sync ORM) | 740.3 req/s | 777.4 req/s | 763.6 req/s | 760.4 req/s | 1.06x |
+
+100% success rate, every target, every run. Reproduce with
+`python benchmarks/tortoise_vs_mangoo.py --duration 10s --connections 30 --runs 3`.
+
+### Conclusion
+
+Tortoise ORM's async driver does not give FastAPI a database-bound edge
+over Mangoo's synchronous ORM at this concurrency: Mangoo (ASGI) beats it
+outright (1.23x-1.39x across the three runs), Mangoo (WSGI) ties-to-wins
+it (1.05x-1.07x), and even FastAPI's own plain-`sqlite3` baseline --
+Tortoise's own framework, without Tortoise -- lands within noise of
+Tortoise ORM itself (0.84x-1.03x) rather than clearly ahead of it. The
+single-worker-thread-per-connection design disclosed above is the direct
+explanation, not a surprise found after the numbers came in: at
+`-c 30`, thirty concurrent requests contend for the one worker thread
+Tortoise's default single-connection pool provides, while Mangoo's sync
+ORM calls are spread across a full 16-worker pool (`waitress --threads=16`
+or ASGI's `max_sync_workers` default) on both of its own transports. A
+reader who wants Tortoise ORM to compete here would need to raise its
+pool size explicitly (`Tortoise.init(..., connections={"default": {...,
+"maxsize": 16}})` or equivalent) -- not attempted in this pass, since
+benchmarking a different configuration than the library's own documented
+default was not this comparison's question.
 (comparison 2), not just a theoretical property asserted in a docstring.
