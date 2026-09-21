@@ -24,7 +24,11 @@ dependencies = ["msgspec>=0.21,<0.22"]
 # the whole pytest session (INTERRUPTED, exit code 2) rather than failing
 # just the one file. Invisible in any dev environment where hatchling
 # happens to already be installed for an unrelated reason.
-dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.16", "mypy>=1.13", "hatchling>=1.25"]
+# pymysql is pure Python and needs no server, so it is listed here so the
+# stale-connection reconnect unit tests in tests/test_db.py (which build
+# pymysql's exception types against a fake connection) run in CI's `test`
+# job, not only in the opt-in mysql-integration job.
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.16", "mypy>=1.13", "hatchling>=1.25", "pymysql>=1.1"]
 docs = ["mkdocs>=1.6", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26", "mike>=2.1"]
 
 [project.scripts]

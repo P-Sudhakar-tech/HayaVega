@@ -102,6 +102,7 @@ type. Register a handler with `websocket_path()` and pass it to
 ```python
 from mangoo.websocket import WebSocketDisconnect, websocket_path
 
+
 async def echo(ws):
     await ws.accept()
     try:
@@ -109,6 +110,7 @@ async def echo(ws):
             await ws.send_text(await ws.receive_text())
     except WebSocketDisconnect:
         pass
+
 
 websocket_patterns = [websocket_path("ws/echo", echo)]
 application = create_asgi_application(urlpatterns, websocket_patterns=websocket_patterns)
@@ -247,8 +249,8 @@ rate limiter for coordinated limits across multiple application instances.
 ```python
 from mangoo.cache import InMemoryCache, RedisCache
 
-cache = InMemoryCache(max_entries=10_000)          # one process, no dependency
-cache = RedisCache("redis://localhost:6379/0")     # shared across every process pointed at it
+cache = InMemoryCache(max_entries=10_000)  # one process, no dependency
+cache = RedisCache("redis://localhost:6379/0")  # shared across every process pointed at it
 ```
 
 `InMemoryCache` is a thread-safe, TTL-aware, bounded LRU cache -- the same
@@ -263,9 +265,9 @@ Cache a whole view's response with `cached_view`:
 ```python
 from mangoo.cache import cached_view
 
+
 @cached_view(cache, ttl=60)
-def product_list(request):
-    ...
+def product_list(request): ...
 ```
 
 Only `GET` requests are served from, or written to, the cache -- a
@@ -331,8 +333,8 @@ defines plain handler functions and enqueues work:
 
 ```python
 # myapp/jobs.py
-def send_email(payload: dict) -> None:
-    ...
+def send_email(payload: dict) -> None: ...
+
 
 # project/settings.py
 JOB_HANDLERS = {"send_email": "myapp.jobs.send_email"}
