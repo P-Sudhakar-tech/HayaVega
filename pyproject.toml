@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 authors = [{name = "Mangoo contributors"}]
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["msgspec>=0.21,<0.22"]
+dependencies = ["msgspec>=0.21,<0.23"]
 
 [project.optional-dependencies]
 # hatchling is otherwise only a [build-system] requirement -- pip's build
