@@ -362,8 +362,8 @@ view: a paginated, status-filterable list of jobs (`pending`/`running`/
 Install the development extra and run the suite with `pip install -e ".[dev]"`
 then `pytest`. This enforces an 85% coverage gate by default (see
 `pyproject.toml`); pass `--no-cov` to skip it locally. GitHub Actions
-(`.github/workflows/ci.yml`) runs the suite on Python 3.10, 3.11, and 3.12 for
-every push and pull request, plus a separate job that builds the
+(`.github/workflows/ci.yml`) runs the suite on Python 3.10, 3.11, 3.12, and
+3.15 for every push and pull request, plus a separate job that builds the
 `mangoo_native` Rust extension and runs the tests it backs, and a separate job
 that runs the opt-in PostgreSQL integration test against a `postgres:16`
 service container.
