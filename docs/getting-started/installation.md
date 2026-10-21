@@ -25,7 +25,7 @@ same regardless of which install path got it there, the same way
 Mangoo isn't published to PyPI yet &mdash; install it directly from a local checkout of the repository:
 
 ```bash
-cd mangoo
+cd mangoo-framework
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 pip install -e .
