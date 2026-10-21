@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from collections import OrderedDict
 from html import escape
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from .security import csrf_token
 
@@ -201,4 +201,4 @@ def entity_form(entity_class, fields: tuple[str, ...] | None = None) -> type[For
         required = not column.nullable and column.default is None
         factory = _COLUMN_FIELDS.get(type(column).__name__)
         namespace[name] = factory(required) if factory else CharField(required=required)
-    return FormMeta(f"{entity_class.__name__}Form", (Form,), namespace)
+    return cast("type[Form]", FormMeta(f"{entity_class.__name__}Form", (Form,), namespace))

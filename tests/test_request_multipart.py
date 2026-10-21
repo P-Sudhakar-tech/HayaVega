@@ -5,9 +5,9 @@ from mangoo.request import MultipartUnavailableError, Request
 
 
 def _multipart_body(boundary: str, *, title: str, filename: str, file_content: bytes, file_content_type: str = "image/png") -> bytes:
-    field_part = f'--{boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\n{title}\r\n'.encode("utf-8")
-    file_header = f'--{boundary}\r\nContent-Disposition: form-data; name="avatar"; filename="{filename}"\r\nContent-Type: {file_content_type}\r\n\r\n'.encode("utf-8")
-    closing = f"--{boundary}--\r\n".encode("utf-8")
+    field_part = f'--{boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\n{title}\r\n'.encode()
+    file_header = f'--{boundary}\r\nContent-Disposition: form-data; name="avatar"; filename="{filename}"\r\nContent-Type: {file_content_type}\r\n\r\n'.encode()
+    closing = f"--{boundary}--\r\n".encode()
     return field_part + file_header + file_content + b"\r\n" + closing
 
 

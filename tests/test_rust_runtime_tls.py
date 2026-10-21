@@ -14,6 +14,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from types import ModuleType
 
 try:
     import mangoo_native  # noqa: F401
@@ -135,8 +136,8 @@ class RustRuntimeTlsTests(unittest.TestCase):
 
 
 class TlsSettingsValidationTests(unittest.TestCase):
-    def _module(self, server: dict) -> "ModuleType":
-        from types import ModuleType, SimpleNamespace
+    def _module(self, server: dict) -> ModuleType:
+        from types import SimpleNamespace
 
         module = ModuleType("config.settings")
         module.settings = SimpleNamespace(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server=server)
