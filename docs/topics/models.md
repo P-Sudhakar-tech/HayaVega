@@ -28,17 +28,48 @@ with `__table__ = "products"` if you need a specific name.
 | `Integer` | `int` | |
 | `Decimal` | `float` | `DOUBLE`/`DOUBLE PRECISION` depending on engine |
 | `Toggle` | `bool` | `BOOLEAN`/`INTEGER` depending on engine |
-| `Timestamp` | `str` (ISO 8601) | Accepts a `datetime` and stores its `.isoformat()` |
+| `Timestamp` | `datetime` (aware, UTC) | Accepts a naive or aware `datetime`; always reads back aware UTC -- see [Timestamps & timezones](#timestamps-timezones) |
 | `Key` | `int` | The implicit `id` column; rarely declared directly |
 
 Every column accepts `default=`, `nullable=`, `unique=`.
 
+## Timestamps & timezones
+
+`Timestamp` is always timezone-aware UTC -- not an opt-in project
+setting (Django's `USE_TZ`), just the only behavior this column has:
+
+```python
+from datetime import datetime, timedelta, timezone
+
+event = Event(occurred_at=datetime(2024, 1, 1, 12, 0, 0))  # naive -- assumed UTC
+event.occurred_at  # datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc) -- aware, immediately
+
+event = Event(occurred_at=datetime(2024, 1, 1, 17, 0, tzinfo=timezone(timedelta(hours=5))))
+event.occurred_at  # converted to datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+```
+
+A naive `datetime` is assumed to already be UTC; an aware one is
+converted. Either way, reading the attribute back -- immediately after
+construction, or after a `fetch()` round trip through the database --
+always gives an aware `datetime` in UTC, never a naive one and never a
+raw string.
+
+Internally, the stored value is always a plain ISO string, not a raw
+`datetime` object handed to a database driver: Python's `sqlite3`
+module deprecated its implicit `datetime` adapters as of 3.12 and
+removes them in 3.14, so relying on a driver to serialize a `datetime`
+automatically is not a safe bet going forward. `record.as_dict()`
+reflects this storage representation (a string), not the aware
+`datetime` attribute access gives you -- useful as-is for JSON
+serialization (`EntitySerializer`) without extra datetime-encoding
+logic.
+
 ## Migrations
 
 ```bash
-python manage.py newmigration blog     # generates a checksummed migration from Product's columns
-python manage.py applymigrations       # applies pending migrations, transactionally
-python manage.py migrationstatus       # shows what's applied / pending
+python mango.py newmigration blog     # generates a checksummed migration from Product's columns
+python mango.py applymigrations       # applies pending migrations, transactionally
+python mango.py migrationstatus       # shows what's applied / pending
 ```
 
 Migrations are forward-only, checksummed (a modified or missing migration
@@ -65,7 +96,16 @@ products.seek(published=False).erase()
 
 # Count
 products.browse().total()
+
+# Substring search across multiple columns, ORed together
+products.browse().search("name", "description", query="rust").fetch()
 ```
+
+`search(*fields, query=...)` ORs a `LIKE` match across `fields` --
+narrow and single-purpose (admin's `search_fields` is built on it),
+not a general `Q()`/OR-expression system. It combines with `seek()`'s
+clauses via AND, and an empty `query` is a no-op. `seek()`'s own
+`match()` stays AND-only across every criterion, same as always.
 
 `.seek(**criteria)` supports operator suffixes: `field__above`,
 `field__at_least`, `field__below`, `field__at_most`, `field__not`,
@@ -127,7 +167,59 @@ all three covered by this project's own CI, including real service
 containers, not mocks.
 
 ```python
-DATABASES = {
-    "default": {"ENGINE": "postgresql", "NAME": "myapp", "HOST": "localhost", "PORT": 5432, "USER": "myapp", "PASSWORD": "..."},
-}
+class database:
+    engine = "postgresql"
+    name = "myapp"
+    host = "localhost"
+    port = 5432
+    user = "myapp"
+    password = "..."
 ```
+
+## Multiple databases
+
+Mangoo's built-in helpers (`Collection`, `admin_routes`, `auth_routes`,
+migrations) each address exactly one `database` dict -- there's no
+Django-style named-connection registry or `.using("replica")`. A project
+that talks to a second database (an analytics warehouse, a legacy
+read-only source) defines its own extra named section next to `database`
+and converts it with the same public helper the loader uses internally,
+`mangoo.conf.load_database()`:
+
+```python title="config/settings.py"
+class Settings:
+    ...
+
+    class database:
+        engine = "sqlite3"
+        name = BASE_DIR / "mangoo.sqlite3"
+
+    class databases:
+        analytics = {
+            "engine": "postgresql",
+            "name": "warehouse",
+            "host": "analytics.internal",
+            "user": "warehouse_ro",
+            "password": os.getenv("ANALYTICS_DB_PASSWORD"),
+        }
+```
+
+```python title="apps/blog/routes.py"
+from mangoo.conf import load_database, load_settings
+from .settings import settings as config_settings
+
+_settings = load_settings()
+_analytics_db = load_database(config_settings.databases.analytics, label="Settings.databases.analytics")
+
+
+def top_posts(request):
+    return Post.collection(_analytics_db).browse().arrange("-views").window(10).values("title", "views")
+```
+
+`load_database()` does the same validation as the primary section
+(`engine` must be `sqlite3`/`postgresql`/`mysql`/`mariadb`, `name` is
+required, a relative SQLite `name` needs `base_dir=`) and returns the
+same upper-cased dict `connect()`/`Collection`/`admin_routes`/`auth_routes`
+all expect -- `label` only changes what a validation error names, so
+point it at your own section (e.g. `"Settings.databases.analytics"`)
+rather than the default `"database"`.

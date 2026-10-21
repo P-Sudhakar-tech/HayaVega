@@ -10,7 +10,7 @@ from mangoo.checks import CheckMessage, run_checks
 def _settings(**overrides) -> SimpleNamespace:
     defaults = {
         "base_dir": Path(tempfile.gettempdir()),
-        "module_name": "project.settings",
+        "module_name": "config.settings",
         "debug": True,
         "secret_key": "a-real-unique-secret",
         "allowed_hosts": ("example.com",),
@@ -121,6 +121,20 @@ class DeprecatedUsageScanTests(unittest.TestCase):
         self.assertIsInstance(messages, list)
 
 
+class CryptoCheckTests(unittest.TestCase):
+    @patch("mangoo.checks.crypto.available", return_value=True)
+    def test_no_finding_when_cryptography_is_installed(self, _available):
+        messages = run_checks(_settings())
+        self.assertFalse(any("cryptography" in message.message for message in messages))
+
+    @patch("mangoo.checks.crypto.available", return_value=False)
+    def test_info_finding_when_cryptography_is_not_installed(self, _available):
+        messages = run_checks(_settings())
+        matches = [message for message in messages if "cryptography" in message.message]
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0].level, "info")
+
+
 class RunChecksOrderingTests(unittest.TestCase):
     def test_errors_are_reported_before_warnings(self):
         messages = run_checks(_settings(debug=False, secret_key="", allowed_hosts=(), security={}))
@@ -129,6 +143,7 @@ class RunChecksOrderingTests(unittest.TestCase):
 
     @patch("mangoo.checks._scan_deprecated_usage", return_value=[])
     @patch("mangoo.checks._pending_migration_checks", return_value=[])
+    @patch("mangoo.checks._crypto_checks", return_value=[])
     @patch("mangoo.checks._settings_checks", return_value=[])
     def test_a_clean_project_reports_no_issues(self, *_mocks):
         self.assertEqual(run_checks(_settings()), [])

@@ -45,13 +45,15 @@ full methodology, scope, and honest caveats in
 ## What works now
 
 - `newproject` and `newapp` scaffolding (`startproject`/`startapp` still work as deprecated aliases)
-- A conventional `manage.py`, `settings.py`, and `urls.py` project layout
+- A conventional `mango.py`, `settings.py`, and `routes.py` project layout
 - A development server and Python views
 - Both WSGI (default) and ASGI deployment, the latter for projects that need `async def` views
 - A small PyO3 native module (`mangoo_native`) for the Rust/Python boundary
 - Server-rendered HTML via `mangoo.templates`, plus `mangoo.ui`: server-rendered components and a first-party htmx-style hypermedia runtime (`mangoo-ui.js`), no JS build step
 
 ## Quick start
+
+Not yet published to PyPI -- once a release goes out, `pip install mangoo-framework` will be the normal install path (the importable module stays `mangoo` either way, the same as `pip install beautifulsoup4` giving you `import bs4`). Until then, install from this checkout:
 
 ```powershell
 cd D:\separate_code\mangoo
@@ -60,8 +62,8 @@ python -m venv .venv
 pip install -e .
 mangoo-admin newproject mysite
 cd mysite
-python manage.py newapp blog
-python manage.py launch
+python mango.py newapp blog
+python mango.py launch
 ```
 
 Open `http://127.0.0.1:8000/`.
@@ -72,13 +74,13 @@ WSGI (above) is the default for every scaffolded project and needs nothing
 extra. Reach for ASGI only when a view needs `async def` for concurrent I/O
 (calling another service, an async database driver) that WSGI's
 one-thread-per-request model can't overlap as cheaply. `mango newproject`
-also scaffolds `project/asgi.py`, built with
+also scaffolds `config/asgi.py`, built with
 `mangoo.asgi.create_asgi_application()` instead of
 `mangoo.runtime.create_application()` but otherwise exposing the same kind
 of standard `application` object:
 
 ```bash
-uvicorn project.asgi:application --host 0.0.0.0 --port 8000
+uvicorn config.asgi:application --host 0.0.0.0 --port 8000
 ```
 
 Views may be `async def` (awaited directly) or ordinary synchronous
@@ -131,7 +133,7 @@ an ASGI application in-process, the WebSocket equivalent of `AsyncTestClient`.
 
 ## Rust development runtime
 
-`SERVER['ENGINE'] = 'rust'` in settings switches `mango launch` from the
+`Settings.server.engine = 'rust'` in settings switches `mango launch` from the
 default `wsgiref` dev server to `mangoo_native`'s own WSGI-compatible
 HTTP/1.1 server -- a synchronous, fixed-thread-pool design (the same
 concurrency model `waitress` uses; CPython's GIL means async I/O would not
@@ -147,18 +149,20 @@ benchmarking it.
 
 ## Settings
 
-Each project has a conventional `project/settings.py`, but Mangoo uses its own explicit runtime sections:
+Each project has a conventional `config/settings.py`, but instead of Django's flat `ALL_CAPS` module globals, Mangoo settings live on a single `class Settings:` with explicit, typed sections -- instantiated once as `settings = Settings()` and read everywhere through `mangoo.conf.load_settings()`:
 
-- `BASE_DIR`, `SECRET_KEY`, `DEBUG`, and `ALLOWED_HOSTS` for project identity and environment behavior.
-- `INSTALLED_APPS`, `MIDDLEWARE`, and `ROOT_URLCONF` for application composition.
-- `DATABASES['default']` for the SQLite database location.
-- `SERVER` for the development host and port.
+- `base_dir`, `secret_key`, `debug`, and `allowed_hosts` for project identity and environment behavior.
+- `installed_apps`, `middleware`, and `root_urlconf` for application composition.
+- `database` (a nested `class database:` section) for the database location and credentials.
+- `server` (a nested `class server:` section) for the development host and port.
 
-For example, change the default development port in `SERVER['PORT']`, or override it temporarily with `python manage.py launch 8001`.
+For example, change the default development port in `Settings.server.port`, or override it temporarily with `python mango.py launch 8001`.
+
+`middleware` is a list of dotted paths to request/response middleware factories, resolved and wired into `config/wsgi.py`/`config/asgi.py` automatically -- see [Middleware](docs/topics/middleware.md) for the factory contract and ordering rules.
 
 ## Databases
 
-Mangoo's database layer accepts SQLite, PostgreSQL, MySQL, and MariaDB through a familiar `DATABASES['default']` configuration format. SQLite works with Python alone. For other engines, add the driver with UV before starting the project:
+Mangoo's database layer accepts SQLite, PostgreSQL, MySQL, and MariaDB through the `database` section of `Settings`. SQLite works with Python alone. For other engines, add the driver with UV before starting the project:
 
 ```powershell
 uv add "psycopg[binary]"   # PostgreSQL
@@ -171,17 +175,16 @@ uv add pymysql cryptography # MySQL or MariaDB -- cryptography is required by
 Example PostgreSQL configuration:
 
 ```python
-DATABASES = {
-    "default": {
-        "ENGINE": "postgresql",
-        "NAME": "mangoo",
-        "HOST": "localhost",
-        "PORT": 5432,
-        "USER": "mangoo",
-        "PASSWORD": os.getenv("MANGOO_DATABASE_PASSWORD"),
-    },
-}
+class database:
+    engine = "postgresql"
+    name = "mangoo"
+    host = "localhost"
+    port = 5432
+    user = "mangoo"
+    password = os.getenv("MANGOO_DATABASE_PASSWORD")
 ```
+
+There is exactly one `database` section -- `Collection`/`admin_routes`/`auth_routes`/migrations each take one `database` dict, with no Django-style named-connection registry. A project talking to a second database defines its own extra section and converts it with `mangoo.conf.load_database()`; see [Multiple databases](docs/topics/models.md#multiple-databases).
 
 ### Connection pooling
 
@@ -202,15 +205,15 @@ operations = [
 ]
 ```
 
-Run `python manage.py applymigrations` to apply pending migrations, or
-`python manage.py migrationstatus` to inspect their state. Each migration runs
+Run `python mango.py applymigrations` to apply pending migrations, or
+`python mango.py migrationstatus` to inspect their state. Each migration runs
 in its own transaction; if any operation fails, neither its schema changes nor
 its history row are committed. Applied files are checksummed, so changed or
 missing migration files are rejected instead of silently proceeding.
 
 For an app with declared `Entity` classes, create the reviewed initial table
-migration with `python manage.py newmigration blog` (after adding `"blog"`
-to `INSTALLED_APPS`). Later invocations generate only nullable `ADD COLUMN`
+migration with `python mango.py newmigration blog` (after adding `"blog"`
+to `Settings.installed_apps`). Later invocations generate only nullable `ADD COLUMN`
 operations and record a dependency on the preceding migration. New tables,
 non-nullable fields, field alterations, and removals must remain explicit,
 reviewed SQL migrations; `newmigration` detects a type, nullability, or
@@ -220,23 +223,23 @@ declared entity.
 
 ## Production validation and probes
 
-Before starting with `DEBUG = False`, Mangoo requires a non-default
-`SECRET_KEY`, explicit `ALLOWED_HOSTS`, and `SECURITY` settings for
-`FORCE_HTTPS` and `SECURE_COOKIES`. Add `*health_routes(DATABASES['default'])`
+Before starting with `Settings.debug = False`, Mangoo requires a non-default
+`secret_key`, explicit `allowed_hosts`, and `security` section settings for
+`force_https` and `secure_cookies`. Add `*health_routes(_settings.database)`
 to your URL patterns to expose `GET /healthz` (liveness) and `GET /readyz`
 (database readiness) for your deployment platform.
 
-Run `python manage.py diagnose` (or `mango diagnose`) to catch the same
+Run `python mango.py diagnose` (or `mango diagnose`) to catch the same
 class of issue *before* a deploy attempt fails on it: unsafe settings
-(`DEBUG` left on, a placeholder `SECRET_KEY`, a wildcard `ALLOWED_HOSTS`),
+(`debug` left on, a placeholder `secret_key`, a wildcard `allowed_hosts`),
 deprecated Pulse-era API usage anywhere in your own project files, and
 pending migrations -- each finding names exactly where the problem is and
-what to do about it, e.g. "Set SECRET_KEY ... in project.settings."
+what to do about it, e.g. "Set Settings.secret_key ... in config.settings."
 
 ## Rate limiting
 
 The built-in limiter is process-local and intended for development or a small
-single-instance deployment. Set `SECURITY['RATE_LIMIT_MAX_CLIENTS']` to bound
+single-instance deployment. Set `Settings.security.rate_limit_max_clients` to bound
 tracked client identities (default: 10,000); idle clients are pruned and the
 least-recently-used identity is evicted when full. Use an edge proxy or Redis
 rate limiter for coordinated limits across multiple application instances.
@@ -305,15 +308,15 @@ returned a 5xx status, or `metrics.snapshot()` for the raw counters.
 
 ## Reverse proxies
 
-Set `SECURITY['TRUST_PROXY_HEADERS'] = True` only with an explicit
-`SECURITY['TRUSTED_PROXY_IPS']` list (IP addresses or CIDR networks). Mangoo
+Set `Settings.security.trust_proxy_headers = True` only with an explicit
+`Settings.security.trusted_proxy_ips` list (IP addresses or CIDR networks). Mangoo
 then honors forwarded client and HTTPS headers only from those proxies. HTTPS
 redirects retain the original query string.
 
 ## Audit events
 
 Mangoo persists privacy-safe authentication and administration events in
-`mangoo_audit_events`. Use `audit_events(DATABASES['default'])` for operational
+`mangoo_audit_events`. Use `audit_events(_settings.database)` for operational
 review. Events contain an actor ID, event type, timestamp, and small metadata;
 passwords, session tokens, and request headers are never stored.
 
@@ -336,14 +339,14 @@ defines plain handler functions and enqueues work:
 def send_email(payload: dict) -> None: ...
 
 
-# project/settings.py
-JOB_HANDLERS = {"send_email": "myapp.jobs.send_email"}
+# config/settings.py, inside class Settings:
+job_handlers = {"send_email": "myapp.jobs.send_email"}
 ```
 
 ```python
 from mangoo.jobs import enqueue
 
-enqueue(DATABASES["default"], "send_email", {"to": "a@example.com"})
+enqueue(_settings.database, "send_email", {"to": "a@example.com"})
 ```
 
 Run `mango runworker` to start a worker process that polls for eligible jobs
@@ -356,6 +359,31 @@ pickup latency is bounded by `poll_interval` (default 1 second), not instant.
 Pass `jobs=True` to `admin_routes()` to add a superuser-only `/admin/jobs`
 view: a paginated, status-filterable list of jobs (`pending`/`running`/
 `succeeded`/`dead`) with a one-click retry action for dead-lettered jobs.
+
+## Custom management commands
+
+`mango.py`'s command set (`launch`, `newapp`, `createadmin`, ...) is a
+fixed, closed list -- but a project can register its own, resolved the
+same dotted-path-from-settings way `job_handlers` already is:
+
+```python
+# myapp/commands.py
+def hello_command(args: list[str]) -> None:
+    print("hello", " ".join(args))
+
+
+# config/settings.py, inside class Settings:
+commands = {"hello": "myapp.commands.hello_command"}
+```
+
+```powershell
+python mango.py hello world
+```
+
+A custom command receives the remaining CLI arguments as a plain
+`list[str]` -- no argument-parsing framework imposed. A name that
+collides with a built-in command (`launch`, `diagnose`, ...) is never
+shadowed: the built-in always wins.
 
 ## Testing and CI
 
@@ -503,7 +531,7 @@ Press `Ctrl+C` in the same terminal to stop the server cleanly, including when a
 
 ## MVP polish
 
-Render templates with `render_template("page.html", context, directories=(BASE_DIR / "templates",))`, and expose development assets with `*static_routes(BASE_DIR / "static")`. The included `TestClient` exercises a WSGI application without a network socket. Unhandled view errors are logged to `mangoo.runtime` and return a safe `500` response without a traceback when debug mode is disabled.
+Render templates with `render_template("page.html", context, directories=(_settings.base_dir / "templates",))`, and expose development assets with `*static_routes(_settings.base_dir / "static")`. The included `TestClient` exercises a WSGI application without a network socket. Unhandled view errors are logged to `mangoo.runtime` and return a safe `500` response without a traceback when debug mode is disabled.
 
 ### Templates
 
@@ -622,7 +650,7 @@ class Product(Entity):
     price = Decimal()
 
 
-products = Product.collection(DATABASES["default"])
+products = Product.collection(_settings.database)
 products.append(name="Notebook", price=9.5)
 items = products.seek(price__above=5).arrange("-price").window(20).fetch()
 ```
@@ -632,7 +660,7 @@ items = products.seek(price__above=5).arrange("-price").window(20).fetch()
 For read-only rendering (a list page, a JSON API response) where entity behavior isn't needed, `values()` returns plain `dict` rows instead of `Entity` objects, skipping per-column coercion entirely -- a measured 1.28-1.36x faster than `fetch()` plus manual dict extraction for the same rows:
 
 ```python
-posts = Post.collection(DATABASES["default"]).browse().arrange("id").window(20).values("title", "views")
+posts = Post.collection(_settings.database).browse().arrange("id").window(20).values("title", "views")
 # [{"title": "First post", "views": 12}, ...]
 ```
 
@@ -666,26 +694,26 @@ The serializer normalizes entities, mappings, lists, and dates, then encodes the
 Create the first administrator for a project with:
 
 ```powershell
-python manage.py createadmin
+python mango.py createadmin
 ```
 
 Mangoo prompts for a username, email address, and password confirmation. It stores users in the project's local SQLite database (`mangoo.sqlite3` by default), with salted scrypt password hashes. Application code can validate credentials with `mangoo.authenticate(database_path, username, password)`.
 
 ## Authentication security
 
-Mangoo's built-in authentication uses salted, memory-hard scrypt password hashes; requires passwords of at least 12 characters with lowercase, uppercase, numeric, and symbol characters; locks an account for 15 minutes after five failed attempts; and stores only hashes of session tokens. Enable authenticator-app two-factor authentication with:
+Mangoo's built-in authentication uses salted, memory-hard scrypt password hashes; by default requires passwords of at least 12 characters with lowercase, uppercase, numeric, and symbol characters (replaceable with your own `validators=[...]` list, or project-wide via `Settings.password_validators` -- see [Password policy](docs/topics/auth.md#password-policy)); locks an account for 15 minutes after five failed attempts; and stores only hashes of session tokens. Enable authenticator-app two-factor authentication with:
 
 ```powershell
-python manage.py enable2fa admin
+python mango.py enable2fa admin
 ```
 
-The command prints a secret to add to a TOTP-compatible authenticator app. Keep it private: it is shown only when two-factor authentication is enabled.
+The command prints a secret to add to a TOTP-compatible authenticator app. Keep it private: it is shown only when two-factor authentication is enabled. `mango.py enable2fa` automatically encrypts the stored secret with a key derived from `Settings.secret_key` when `cryptography` is installed (`uv add cryptography`); without it, `mango diagnose` reports that the secret is stored in plaintext instead. Calling `enable_totp`/`authenticate`/`auth_routes` directly from your own code needs `secret_key=` passed explicitly -- see [Authentication](docs/topics/auth.md#two-factor-authentication-totp).
 
 The generated project also exposes JSON authentication endpoints: `POST /api/auth/login`, `GET /api/auth/me`, and `POST /api/auth/logout`. Login accepts `username`, `password`, and optional `totp_code`; it returns a Bearer session token. Use HTTPS before exposing these endpoints outside local development.
 
 ## Admin
 
-`admin_routes(DATABASES['default'])` always provides administrator-only
+`admin_routes(_settings.database)` always provides administrator-only
 `/admin` and `/admin/users` pages. Pass `models=[ModelAdmin(YourEntity)]` to
 add paginated list/add/edit/delete pages for your own `mangoo.models.Entity`
 subclasses:
@@ -701,7 +729,7 @@ class Product(Entity):
     price = Integer()
 
 
-urlpatterns = [*admin_routes(DATABASES["default"], models=[ModelAdmin(Product)])]
+urlpatterns = [*admin_routes(_settings.database, models=[ModelAdmin(Product)])]
 ```
 
 Each registered model gets:
@@ -710,6 +738,7 @@ Each registered model gets:
 - **Validation**: a blank required field or a value that fails a column's type coercion (e.g. text in an `Integer` field) is a form error, not a crash.
 - **Permissions**: `ModelAdmin(..., can_access=lambda user: ...)` gates a model on any predicate; the default requires `user.is_superuser`, same as `superuser_required`.
 - **Change history**: the edit page lists every create/update/delete recorded against that record, sourced from the same audit log `audit_events()` reads -- updates record which field names changed, not their values.
+- **Filtering, searching, and bulk actions**: `ModelAdmin(..., list_filter=("published",), search_fields=("title", "body"), actions={"archive": archive_fn})` -- filter dropdowns populated from the column's actual distinct values, a substring search box across named columns, and named bulk operations (`callable(list[Entity])`) run against every checked row. See [Admin](docs/topics/admin.md) for the full behavior.
 
 Every add/edit/delete submission is CSRF-protected the same way as
 `auth_routes`: the rendered form carries a hidden `csrf_token` field (plain

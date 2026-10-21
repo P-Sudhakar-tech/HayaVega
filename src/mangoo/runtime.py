@@ -11,6 +11,7 @@ from wsgiref.simple_server import make_server
 
 from . import db
 from .hardening import Hardening, HardeningOptions
+from .middleware import build_chain
 from .request import Request
 from .response import Response, json_response
 from .swagger import documentation_routes
@@ -90,6 +91,7 @@ def create_application(
     api_title: str = "Mangoo API",
     api_version: str = "0.1.0",
     pool_connections: bool = False,
+    middleware: list | None = None,
 ):
     """Build the WSGI application for a route list.
 
@@ -111,7 +113,12 @@ def create_application(
     pair it with ``mangoo.metrics.metrics_routes`` to expose ``/metrics``.
     ``api_title`` and ``api_version`` name the generated OpenAPI document at
     ``/openapi.json``; set ``api_version`` to version your API independently
-    of the package.
+    of the package. ``middleware``, when given a list of already-resolved
+    middleware factories (``mangoo.middleware.load_middleware(Settings.middleware)``),
+    wraps route matching and the view call -- it runs after hardening
+    (which always runs first and can't be bypassed by a middleware) and
+    before the matched view. See ``mangoo.middleware`` for the factory
+    contract.
     """
     if pulse is not None:
         warnings.warn("`pulse=` is deprecated; use `signals=` instead.", DeprecationWarning, stacklevel=2)
@@ -125,12 +132,37 @@ def create_application(
     hardening_layer = Hardening(hardening) if hardening else None
     available_routes_html = _available_routes_html(route_list) if debug else ""
 
-    def application(environ, start_response):
-        started_at = perf_counter()
-        requested = environ.get("PATH_INFO", "/").strip("/")
+    def _match(requested: str):
         route = routes.get(requested)
         if route is None:
             route = next((item for item in wildcard_routes if requested.startswith(item.pattern.removesuffix("/<path>") + "/")), None)
+        return route
+
+    def _dispatch(request) -> Response:
+        """Route matching, the view call, and error handling -- the one
+        part of the pipeline a middleware chain wraps. Hardening's
+        reject/preflight checks happen in the caller, before this is
+        reached, and can't be bypassed by a middleware here."""
+        requested = request.path.strip("/")
+        route = _match(requested)
+        if route is None:
+            body = f"<h1>404 Not Found</h1><p>No route matches '/{html.escape(requested)}'.</p>{available_routes_html}" if debug else "<h1>404 Not Found</h1>"
+            return Response(body, status=404)
+        if request.method not in route.methods:
+            return Response("<h1>405 Method Not Allowed</h1>", status=405, headers=(("Allow", ", ".join(route.methods)),))
+        try:
+            result = route.view(request)
+            return result if isinstance(result, Response) else Response(str(result))
+        except Exception as exc:
+            LOGGER.exception("Unhandled request error path=%s", request.path)
+            return _error_response(route, exc, debug=debug)
+
+    dispatch = build_chain(middleware or (), _dispatch)
+
+    def application(environ, start_response):
+        started_at = perf_counter()
+        requested = environ.get("PATH_INFO", "/").strip("/")
+        route = _match(requested)
         try:
             content_length = int(environ.get("CONTENT_LENGTH") or 0)
         except ValueError:
@@ -147,18 +179,8 @@ def create_application(
             response = rejection
         elif preflight is not None:
             response = preflight
-        elif route is None:
-            body = f"<h1>404 Not Found</h1><p>No route matches '/{html.escape(requested)}'.</p>{available_routes_html}" if debug else "<h1>404 Not Found</h1>"
-            response = Response(body, status=404)
-        elif request.method not in route.methods:
-            response = Response("<h1>405 Method Not Allowed</h1>", status=405, headers=(("Allow", ", ".join(route.methods)),))
         else:
-            try:
-                result = route.view(request)
-                response = result if isinstance(result, Response) else Response(str(result))
-            except Exception as exc:
-                LOGGER.exception("Unhandled request error path=%s", request.path)
-                response = _error_response(route, exc, debug=debug)
+            response = dispatch(request)
         duration_ms = (perf_counter() - started_at) * 1000
         if signals is not None:
             signals.publish("request.finished", data={"method": request.method, "path": request.path, "status": response.status, "duration_ms": round(duration_ms, 2)})

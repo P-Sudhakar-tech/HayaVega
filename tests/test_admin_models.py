@@ -262,5 +262,139 @@ class CsrfProtectionTests(ModelAdminSetup):
         self.assertEqual(response.status_code, 303)
 
 
+class ListFilterAndSearchSetup(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.database = Path(self.directory.name) / "app.sqlite3"
+        self.admin_user = create_superuser(self.database, "admin", "admin@example.com", "Strong-Password-7!")
+        self.admin_token = create_session(self.database, self.admin_user)
+
+    def tearDown(self):
+        self.directory.cleanup()
+
+    def bearer(self, token: str) -> dict:
+        return {"Authorization": f"Bearer {token}"}
+
+    def seed(self, model_admin: ModelAdmin):
+        self.app = create_application(admin_routes(self.database, models=[model_admin]))
+        self.client = TestClient(self.app)
+        products = Product.collection(self.database)
+        products.append(name="Rust mug", price=12, active=True)
+        products.append(name="Python sticker", price=3, active=True)
+        products.append(name="Rust sticker", price=2, active=False)
+
+
+class ListFilterTests(ListFilterAndSearchSetup):
+    def setUp(self):
+        super().setUp()
+        self.seed(ModelAdmin(Product, list_filter=("active",)))
+
+    def test_rejects_a_filter_field_that_is_not_a_real_column(self):
+        with self.assertRaises(ValueError):
+            ModelAdmin(Product, list_filter=("not_a_real_column",))
+
+    def test_no_filter_shows_every_row(self):
+        response = self.client.get("/admin/product", headers=self.bearer(self.admin_token))
+        self.assertIn("Rust mug", response.text)
+        self.assertIn("Python sticker", response.text)
+        self.assertIn("Rust sticker", response.text)
+
+    def test_filter_narrows_to_matching_rows_only(self):
+        response = self.client.get("/admin/product?filter_active=True", headers=self.bearer(self.admin_token))
+        self.assertIn("Rust mug", response.text)
+        self.assertIn("Python sticker", response.text)
+        self.assertNotIn("Rust sticker", response.text)
+
+    def test_an_invalid_filter_value_is_ignored_not_a_400(self):
+        response = self.client.get("/admin/product?filter_active=not-a-boolean-ish-value-xyz", headers=self.bearer(self.admin_token))
+        self.assertEqual(response.status_code, 200)
+
+    def test_filter_options_reflect_distinct_values_present(self):
+        response = self.client.get("/admin/product", headers=self.bearer(self.admin_token))
+        self.assertIn("filter_active", response.text)
+
+
+class SearchFieldsTests(ListFilterAndSearchSetup):
+    def setUp(self):
+        super().setUp()
+        self.seed(ModelAdmin(Product, search_fields=("name",)))
+
+    def test_rejects_a_search_field_that_is_not_a_real_column(self):
+        with self.assertRaises(ValueError):
+            ModelAdmin(Product, search_fields=("not_a_real_column",))
+
+    def test_search_matches_a_substring_across_the_named_fields(self):
+        response = self.client.get("/admin/product?q=Rust", headers=self.bearer(self.admin_token))
+        self.assertIn("Rust mug", response.text)
+        self.assertIn("Rust sticker", response.text)
+        self.assertNotIn("Python sticker", response.text)
+
+    def test_empty_search_shows_every_row(self):
+        response = self.client.get("/admin/product?q=", headers=self.bearer(self.admin_token))
+        self.assertIn("Rust mug", response.text)
+        self.assertIn("Python sticker", response.text)
+        self.assertIn("Rust sticker", response.text)
+
+
+class BulkActionsTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.database = Path(self.directory.name) / "app.sqlite3"
+        self.admin_user = create_superuser(self.database, "admin", "admin@example.com", "Strong-Password-7!")
+        self.admin_token = create_session(self.database, self.admin_user)
+        self.deactivated: list[int] = []
+
+        def deactivate(records):
+            for record in records:
+                self.deactivated.append(record.id)
+                Product.collection(self.database).seek(id__exact=record.id).revise(active=False)
+
+        self.app = create_application(admin_routes(self.database, models=[ModelAdmin(Product, actions={"deactivate": deactivate})]))
+        self.client = TestClient(self.app)
+        products = Product.collection(self.database)
+        self.first = products.append(name="Rust mug", price=12, active=True)
+        self.second = products.append(name="Python sticker", price=3, active=True)
+
+    def tearDown(self):
+        self.directory.cleanup()
+
+    def bearer(self, token: str) -> dict:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_action_dropdown_is_rendered_when_actions_are_registered(self):
+        response = self.client.get("/admin/product", headers=self.bearer(self.admin_token))
+        self.assertIn("name='action'", response.text)
+        self.assertIn("deactivate", response.text)
+
+    def test_no_action_dropdown_when_no_actions_are_registered(self):
+        app = create_application(admin_routes(self.database, models=[ModelAdmin(Product)]))
+        response = TestClient(app).get("/admin/product", headers=self.bearer(self.admin_token))
+        self.assertNotIn("name='action'", response.text)
+
+    def test_applying_an_action_runs_it_against_every_selected_record(self):
+        response = self.client.post(
+            "/admin/product",
+            form_data=[("action", "deactivate"), ("selected", str(self.first.id)), ("selected", str(self.second.id))],
+            headers=self.bearer(self.admin_token),
+        )
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(set(self.deactivated), {self.first.id, self.second.id})
+        self.assertFalse(Product.collection(self.database).seek(id__exact=self.first.id).only().active)
+
+    def test_an_unknown_action_name_is_a_no_op(self):
+        response = self.client.post(
+            "/admin/product",
+            form_data=[("action", "not-a-real-action"), ("selected", str(self.first.id))],
+            headers=self.bearer(self.admin_token),
+        )
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(self.deactivated, [])
+
+    def test_no_selected_rows_is_a_no_op(self):
+        response = self.client.post("/admin/product", form_data=[("action", "deactivate")], headers=self.bearer(self.admin_token))
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(self.deactivated, [])
+
+
 if __name__ == "__main__":
     unittest.main()

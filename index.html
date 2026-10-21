@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Mangoo is an early, runnable Python web framework with Django-shaped project ergonomics, FastAPI-style automatic API docs, and a Rust core taking over performance-critical paths as it matures.">
+<meta name="description" content="Mangoo is an early, runnable Python web framework with its own clear project conventions, automatic interactive API docs, and a Rust core taking over performance-critical paths as it matures.">
 <title>Mangoo</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Ctext y='104' font-size='104'%3E%F0%9F%A5%AD%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -203,8 +203,8 @@
 
   <section class="hero wrap">
     <div class="eyebrow">Python web framework &middot; open source &middot; early and runnable</div>
-    <h1 class="headline">Django's shape. <em>FastAPI's docs.</em></h1>
-    <p class="lead">Mangoo gives Python projects Django's routing, entities, and migrations, FastAPI's automatic OpenAPI docs and Swagger UI, and hardened authentication &mdash; with a native Rust core ripening in as it matures. It's a real, tested checkout, not a finished product: see exactly what's shipped and what isn't below.</p>
+    <h1 class="headline">Its own shape. <em>Automatic docs.</em></h1>
+    <p class="lead">Mangoo gives Python projects a conventional routing, entities, and migrations layer of its own, automatic OpenAPI docs and Swagger UI, and hardened authentication &mdash; with a native Rust core ripening in as it matures. It's a real, tested checkout, not a finished product: see exactly what's shipped and what isn't below.</p>
     <div class="hero-actions">
       <a class="btn btn-primary" href="#getting-started">Read the quickstart</a>
       <a class="btn btn-ghost" href="https://github.com/P-Sudhakar-tech/mangoo" target="_blank" rel="noopener">View source on GitHub</a>
@@ -242,9 +242,9 @@
       <div class="transcript">
         <div class="tline"><div class="cmd"><span class="p">&gt;</span>python -m venv .venv</div><div class="note">Creates an isolated environment</div></div>
         <div class="tline"><div class="cmd"><span class="p">&gt;</span>pip install -e .</div><div class="note">Installs Mangoo and its CLI entry points</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>mangoo-admin startproject mysite</div><div class="note">Writes settings.py, urls.py, manage.py</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python manage.py startapp blog</div><div class="note">Adds an app package under INSTALLED_APPS</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python manage.py runserver</div><div class="out">Development server: http://127.0.0.1:8000/</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>mango newproject mysite</div><div class="note">Writes config/settings.py, config/routes.py, mango.py</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python mango.py newapp blog</div><div class="note">Adds an app package under Settings.installed_apps</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python mango.py launch</div><div class="out">Development server: http://127.0.0.1:8000/</div></div>
       </div>
     </div>
   </div>
@@ -321,30 +321,30 @@
         <article class="doc-section" id="getting-started">
           <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
           <h3>Getting started</h3>
-          <p>A Mangoo project follows a Django-familiar shape: <code>manage.py</code>, a <code>settings.py</code>, and a <code>urls.py</code>. SQLite needs no extra driver, so a first project runs with nothing beyond Python and pip.</p>
+          <p>A Mangoo project follows its own conventional shape: <code>mango.py</code>, a <code>settings.py</code>, and a <code>routes.py</code>. SQLite needs no extra driver, so a first project runs with nothing beyond Python and pip.</p>
           <div class="snippet-label">powershell</div>
           <pre>python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e .
-mangoo-admin startproject mysite
+mango newproject mysite
 cd mysite
-python manage.py startapp blog
-python manage.py runserver</pre>
+python mango.py newapp blog
+python mango.py launch</pre>
           <p>Open <code>http://127.0.0.1:8000/</code>. During development, <code>./mango.cmd launch 8001</code> runs straight from a source checkout without installing, and watches files to restart the server automatically &mdash; press <code>Ctrl+C</code> once to stop it cleanly.</p>
         </article>
 
         <article class="doc-section" id="settings">
           <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
           <h3>Project &amp; settings</h3>
-          <p>Every generated project keeps its own explicit runtime sections rather than scattering configuration across the codebase.</p>
+          <p>Every generated project keeps one <code>class Settings:</code> with explicit, typed sections, instead of flat <code>ALL_CAPS</code> module globals.</p>
           <div class="table-wrap"><table>
             <thead><tr><th>Setting</th><th>Purpose</th></tr></thead>
             <tbody>
-              <tr><td><code>BASE_DIR</code>, <code>SECRET_KEY</code>, <code>DEBUG</code>, <code>ALLOWED_HOSTS</code></td><td>Project identity and environment behavior</td></tr>
-              <tr><td><code>INSTALLED_APPS</code>, <code>MIDDLEWARE</code>, <code>ROOT_URLCONF</code></td><td>Application composition</td></tr>
-              <tr><td><code>DATABASES['default']</code></td><td>SQLite, PostgreSQL, MySQL, or MariaDB connection</td></tr>
-              <tr><td><code>SERVER</code></td><td>Development host and port</td></tr>
-              <tr><td><code>SECURITY</code></td><td><code>FORCE_HTTPS</code>, <code>SECURE_COOKIES</code>, proxy trust, rate limits</td></tr>
+              <tr><td><code>base_dir</code>, <code>secret_key</code>, <code>debug</code>, <code>allowed_hosts</code></td><td>Project identity and environment behavior</td></tr>
+              <tr><td><code>installed_apps</code>, <code>middleware</code>, <code>root_urlconf</code></td><td>Application composition</td></tr>
+              <tr><td><code>class database:</code></td><td>SQLite, PostgreSQL, MySQL, or MariaDB connection</td></tr>
+              <tr><td><code>class server:</code></td><td>Development host and port</td></tr>
+              <tr><td><code>class security:</code></td><td><code>force_https</code>, <code>secure_cookies</code>, proxy trust, rate limits</td></tr>
             </tbody>
           </table></div>
           <div class="callout"><strong>Other databases:</strong> add the driver with uv before starting the project &mdash; <code>uv add "psycopg[binary]"</code> for PostgreSQL, <code>uv add pymysql</code> for MySQL/MariaDB.</div>
@@ -355,7 +355,7 @@ python manage.py runserver</pre>
           <h3>Routing &amp; views</h3>
           <p>Routes are plain Python callables. <code>api_route</code> declares a JSON endpoint and is picked up automatically by the built-in OpenAPI document.</p>
           <div class="doc-grid">
-            <div><div class="snippet-label">project/urls.py</div><pre><span class="kw">from</span> mangoo <span class="kw">import</span> api_route, path
+            <div><div class="snippet-label">config/routes.py</div><pre><span class="kw">from</span> mangoo <span class="kw">import</span> api_route, path
 
 <span class="kw">def</span> <span class="fn">health</span>(request):
     <span class="kw">return</span> {<span class="str">"status"</span>: <span class="str">"ok"</span>}
@@ -367,13 +367,13 @@ urlpatterns = [
   <span class="fn">"status"</span>: <span class="str">"ok"</span>
 }</pre></div>
           </div>
-          <p>Render escaped templates with <code>render_template("page.html", context, directories=(...))</code>, serve development assets with <code>*static_routes(BASE_DIR / "static")</code>, and exercise a view without a socket using the bundled <code>TestClient</code>.</p>
+          <p>Render escaped templates with <code>render_template("page.html", context, directories=(...))</code>, serve development assets with <code>*static_routes(_settings.base_dir / "static")</code>, and exercise a view without a socket using the bundled <code>TestClient</code>.</p>
         </article>
 
         <article class="doc-section" id="entities">
           <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
           <h3>Entities &amp; queries</h3>
-          <p>Mangoo's data layer uses its own declarative entities and query verbs rather than copying Django's ORM API one-for-one.</p>
+          <p>Mangoo's data layer uses its own declarative entities and query verbs rather than copying an off-the-shelf ORM API one-for-one.</p>
           <div class="snippet-label">blog/models.py</div>
           <pre><span class="kw">from</span> mangoo <span class="kw">import</span> Decimal, Entity, Text
 
@@ -381,7 +381,7 @@ urlpatterns = [
     name = Text(unique=<span class="kw">True</span>)
     price = Decimal()
 
-products = Product.collection(DATABASES[<span class="str">"default"</span>])
+products = Product.collection(_settings.database)
 products.append(name=<span class="str">"Notebook"</span>, price=9.5)
 items = (products.seek(price__above=5)
                   .arrange(<span class="str">"-price"</span>)
@@ -398,8 +398,8 @@ items = (products.seek(price__above=5)
           <pre>operations = [
     <span class="str">"CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"</span>,
 ]</pre>
-          <p><code>python manage.py migrate</code> applies pending migrations; <code>showmigrations</code> inspects their state. Applied files are checksummed, so an altered or missing migration is rejected rather than silently reapplied.</p>
-          <div class="callout"><strong>Schema-diff detection:</strong> <code>makemigrations blog</code> generates the reviewed initial table, then only additive, nullable columns automatically. A type, nullability, or uniqueness change on an already-migrated column now raises an error naming the column, instead of silently drifting from what's declared.</div>
+          <p><code>python mango.py applymigrations</code> applies pending migrations; <code>migrationstatus</code> inspects their state. Applied files are checksummed, so an altered or missing migration is rejected rather than silently reapplied.</p>
+          <div class="callout"><strong>Schema-diff detection:</strong> <code>newmigration blog</code> generates the reviewed initial table, then only additive, nullable columns automatically. A type, nullability, or uniqueness change on an already-migrated column now raises an error naming the column, instead of silently drifting from what's declared.</div>
         </article>
 
         <article class="doc-section" id="auth">
@@ -414,13 +414,13 @@ items = (products.seek(price__above=5)
               <tr><td><code>POST /api/auth/logout</code></td><td>Revokes the session token</td></tr>
             </tbody>
           </table></div>
-          <p><code>python manage.py createsuperuser</code> creates the first administrator; <code>enable2fa &lt;username&gt;</code> turns on authenticator-app two-factor authentication. Only hashes of session tokens are ever stored, and audit events for logins, sessions, and admin actions are persisted without credentials.</p>
+          <p><code>python mango.py createadmin</code> creates the first administrator; <code>enable2fa &lt;username&gt;</code> turns on authenticator-app two-factor authentication. Only hashes of session tokens are ever stored, and audit events for logins, sessions, and admin actions are persisted without credentials.</p>
         </article>
 
         <article class="doc-section" id="production">
           <div class="doc-kicker"><span class="tag tag-progress">In progress</span></div>
           <h3>Production &amp; deployment</h3>
-          <p>Starting with <code>DEBUG = False</code> requires a non-default <code>SECRET_KEY</code>, explicit <code>ALLOWED_HOSTS</code>, and <code>SECURITY</code> settings for HTTPS and secure cookies &mdash; Mangoo refuses to boot otherwise. Add <code>*health_routes(...)</code> for <code>GET /healthz</code> and <code>GET /readyz</code>.</p>
+          <p>Starting with <code>Settings.debug = False</code> requires a non-default <code>secret_key</code>, explicit <code>allowed_hosts</code>, and <code>security</code> section settings for HTTPS and secure cookies &mdash; Mangoo refuses to boot otherwise. Add <code>*health_routes(...)</code> for <code>GET /healthz</code> and <code>GET /readyz</code>.</p>
           <div class="table-wrap"><table>
             <caption>Condensed from the project's security review checklist</caption>
             <thead><tr><th>Control</th><th>Requirement</th></tr></thead>
@@ -438,7 +438,7 @@ items = (products.seek(price__above=5)
         <article class="doc-section" id="apis">
           <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
           <h3>REST, GraphQL &amp; OpenAPI</h3>
-          <p>Every application automatically exposes an OpenAPI 3 document at <code>/openapi.json</code> and an interactive Swagger UI at <code>/docs</code>, built from whatever routes were declared with <code>api_route</code> &mdash; the same "docs come free" ergonomics FastAPI made popular, without requiring async views to get them.</p>
+          <p>Every application automatically exposes an OpenAPI 3 document at <code>/openapi.json</code> and an interactive Swagger UI at <code>/docs</code>, built from whatever routes were declared with <code>api_route</code> &mdash; "docs come free" ergonomics, without requiring async views to get them.</p>
           <div class="doc-grid">
             <div><div class="snippet-label">REST</div><pre>api_route(
     <span class="str">'api/items'</span>, view,

@@ -75,6 +75,7 @@ def auth_routes(
     database_path: str | Path,
     *,
     secure_cookies: bool = False,
+    secret_key: str | None = None,
     signals: SignalBus | None = None,
     pulse: SignalBus | None = None,
     notify: Callable[[str, User, str], None] | None = None,
@@ -92,7 +93,11 @@ def auth_routes(
     lets login recover the real client IP behind a trusted proxy instead of
     the proxy's own address; without it, the immediate connection's address
     is used. Every login and session records its IP address and user agent
-    (when known) in the audit log and on the session itself.
+    (when known) in the audit log and on the session itself. ``secret_key``
+    (pass ``Settings.secret_key``) is only needed if any user has TOTP
+    enabled with their secret stored encrypted (``enable_totp(..., secret_key=...)``)
+    -- without it here, such a user's TOTP check fails closed rather than
+    silently skipping it.
     """
     if pulse is not None:
         warnings.warn("`pulse=` is deprecated; use `signals=` instead.", DeprecationWarning, stacklevel=2)
@@ -106,7 +111,7 @@ def auth_routes(
             payload = request.json()
             client_ip = resolve_client_ip(request, trust_proxy_headers=trust_proxy_headers, trusted_proxy_networks=trusted_proxy_networks)
             user_agent = request.headers.get("User-Agent") or None
-            user = authenticate(database_path, payload["username"], payload["password"], payload.get("totp_code"), ip_address=client_ip, user_agent=user_agent)
+            user = authenticate(database_path, payload["username"], payload["password"], payload.get("totp_code"), ip_address=client_ip, user_agent=user_agent, secret_key=secret_key)
         except (KeyError, TypeError, ValueError):
             return json_response({"detail": "Invalid authentication request."}, 400)
         if user is None:

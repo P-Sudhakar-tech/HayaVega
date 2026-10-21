@@ -3,18 +3,26 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from mangoo import crypto
 from mangoo.audit import audit_events
 from mangoo.auth import (
     UserAlreadyExistsError,
     _totp_code,
     authenticate,
     authenticate_session,
+    common_password_validator,
+    create_password_reset_token,
     create_session,
     create_superuser,
+    create_user,
     enable_totp,
     hash_password,
+    min_length_validator,
+    reset_password,
     revoke_session,
+    validate_password,
     verify_password,
 )
 
@@ -76,6 +84,46 @@ class AuthenticationTests(unittest.TestCase):
         code = _totp_code(secret, int(time.time()))
         self.assertIsNotNone(authenticate(self.database, "admin", PASSWORD, code))
 
+    def _raw_totp_secret(self) -> str:
+        connection = sqlite3.connect(self.database)
+        try:
+            return connection.execute("SELECT totp_secret FROM mangoo_users WHERE username = 'admin'").fetchone()[0]
+        finally:
+            connection.close()
+
+    def test_totp_secret_is_encrypted_at_rest_when_a_secret_key_is_given(self):
+        create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
+        secret = enable_totp(self.database, "admin", secret_key="a-real-unique-secret")
+        stored = self._raw_totp_secret()
+        self.assertTrue(crypto.is_encrypted(stored))
+        self.assertNotIn(secret, stored)
+        code = _totp_code(secret, int(time.time()))
+        self.assertIsNotNone(authenticate(self.database, "admin", PASSWORD, code, secret_key="a-real-unique-secret"))
+
+    def test_totp_authentication_fails_closed_without_the_secret_key(self):
+        """An encrypted secret that can't be decrypted must count as a
+        failed check, never a skipped one -- silently accepting any code
+        because decryption failed would make TOTP meaningless."""
+        create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
+        secret = enable_totp(self.database, "admin", secret_key="a-real-unique-secret")
+        code = _totp_code(secret, int(time.time()))
+        self.assertIsNone(authenticate(self.database, "admin", PASSWORD, code))
+
+    def test_totp_authentication_fails_closed_with_the_wrong_secret_key(self):
+        create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
+        secret = enable_totp(self.database, "admin", secret_key="a-real-unique-secret")
+        code = _totp_code(secret, int(time.time()))
+        self.assertIsNone(authenticate(self.database, "admin", PASSWORD, code, secret_key="a-different-secret"))
+
+    @patch("mangoo.auth.crypto.encrypt")
+    def test_totp_secret_falls_back_to_plaintext_when_cryptography_is_unavailable(self, encrypt):
+        encrypt.side_effect = crypto.EncryptionUnavailableError("cryptography is not installed")
+        create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
+        secret = enable_totp(self.database, "admin", secret_key="a-real-unique-secret")
+        self.assertEqual(self._raw_totp_secret(), secret)
+        code = _totp_code(secret, int(time.time()))
+        self.assertIsNotNone(authenticate(self.database, "admin", PASSWORD, code))
+
     def test_session_tokens_are_hashed_and_can_be_revoked(self):
         user = create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
         token = create_session(self.database, user)
@@ -97,3 +145,76 @@ class AuthenticationTests(unittest.TestCase):
         for _ in range(5):
             self.assertIsNone(authenticate(self.database, "admin", "Wrong-Password-7!"))
         self.assertIsNone(authenticate(self.database, "admin", PASSWORD))
+
+
+class PasswordValidatorTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.database = Path(self.temporary_directory.name) / "users.sqlite3"
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+
+    def test_min_length_validator_rejects_a_password_shorter_than_the_given_length(self):
+        with self.assertRaisesRegex(ValueError, "8"):
+            min_length_validator(8)("short")
+
+    def test_min_length_validator_accepts_a_long_enough_password(self):
+        min_length_validator(8)("long-enough")
+
+    def test_common_password_validator_rejects_a_denylisted_password_case_insensitively(self):
+        validator = common_password_validator(["password123"])
+        with self.assertRaises(ValueError):
+            validator("Password123")
+
+    def test_common_password_validator_accepts_anything_not_on_the_list(self):
+        common_password_validator(["password123"])("something-else-entirely")
+
+    def test_create_user_uses_validate_password_by_default(self):
+        with self.assertRaisesRegex(ValueError, "at least 12"):
+            create_user(self.database, "alice", "alice@example.com", "short")
+
+    def test_create_user_accepts_a_custom_validator_list_instead_of_the_default(self):
+        """A password `validate_password` would reject (no symbol, under
+        the default's complexity rules) succeeds under a relaxed
+        custom policy."""
+        user = create_user(self.database, "alice", "alice@example.com", "just-twelve1", validators=[min_length_validator(8)])
+        self.assertEqual(user.username, "alice")
+
+    def test_create_user_runs_every_validator_in_the_given_list(self):
+        with self.assertRaises(ValueError):
+            create_user(self.database, "alice", "alice@example.com", "password123", validators=[min_length_validator(8), common_password_validator(["password123"])])
+
+    def test_create_superuser_passes_validators_through(self):
+        user = create_superuser(self.database, "root", "root@example.com", "short-pw", validators=[min_length_validator(4)])
+        self.assertTrue(user.is_superuser)
+
+    def test_hash_password_itself_does_not_validate(self):
+        """`hash_password` is also used to silently re-hash an
+        already-verified legacy password on login -- it must never
+        reject a password on its own, or a policy tightened after the
+        fact would lock out a user whose already-correct password no
+        longer satisfies it."""
+        hash_password("short")  # would fail validate_password(); must not raise here
+
+    def test_reset_password_validates_before_consuming_the_token(self):
+        """A rejected new password must never burn a single-use reset
+        token -- the same token must still work on a later, valid
+        attempt."""
+        user = create_user(self.database, "alice", "alice@example.com", PASSWORD)
+        token = create_password_reset_token(self.database, user)
+        with self.assertRaises(ValueError):
+            reset_password(self.database, token, "short")
+        result = reset_password(self.database, token, "Another-Strong-9!")
+        self.assertIsNotNone(result)
+
+    def test_reset_password_accepts_a_custom_validator_list(self):
+        user = create_user(self.database, "alice", "alice@example.com", PASSWORD)
+        token = create_password_reset_token(self.database, user)
+        result = reset_password(self.database, token, "short-pw", validators=[min_length_validator(4)])
+        self.assertIsNotNone(result)
+
+    def test_validate_password_is_still_directly_usable_on_its_own(self):
+        with self.assertRaises(ValueError):
+            validate_password("short")
+        validate_password(PASSWORD)

@@ -10,7 +10,7 @@ tooling Mangoo's own 415+ tests run on.
 import unittest
 from mangoo.runtime import create_application
 from mangoo.testing import TestClient
-from .urls import urlpatterns
+from .routes import urlpatterns
 
 
 class ViewTests(unittest.TestCase):

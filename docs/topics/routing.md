@@ -65,9 +65,12 @@ this guarantees.
 
 ```python
 from mangoo import static_routes
+from mangoo.conf import load_settings
+
+_settings = load_settings()
 
 urlpatterns = [
-    *static_routes(BASE_DIR / "static", "static"),
+    *static_routes(_settings.base_dir / "static", "static"),
 ]
 ```
 

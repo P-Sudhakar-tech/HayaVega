@@ -1,9 +1,12 @@
 from mangoo import Response, admin_routes, api_route, path, static_routes
 from mangoo.auth_api import auth_routes
+from mangoo.conf import load_settings
 from mangoo.graphql import Schema, graphql_view
 from mangoo.ui import Alert, Button, Card, Page, div, li, ui_routes, ul
 
-from .settings import DATABASES, DEBUG, LANDING_PAGE
+from .settings import LANDING_PAGE
+
+_settings = load_settings()
 
 
 def home(request):
@@ -53,8 +56,8 @@ urlpatterns = [
     *static_routes(LANDING_PAGE.parent / "assets", "assets"),
     api_route("api/health", health),
     path("graphql", graphql_view(schema), methods=("POST",)),
-    *auth_routes(DATABASES["default"], secure_cookies=not DEBUG),
-    *admin_routes(DATABASES["default"]),
+    *auth_routes(_settings.database, secure_cookies=not _settings.debug, secret_key=_settings.secret_key),
+    *admin_routes(_settings.database),
     path("ui-demo", ui_demo),
     path("ui-demo/items", ui_demo_add_item, methods=("POST",)),
     *ui_routes(),

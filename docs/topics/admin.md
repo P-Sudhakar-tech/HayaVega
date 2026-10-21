@@ -42,6 +42,48 @@ urlpatterns = [
 | `list_fields` | every declared column | Which columns the list view shows |
 | `page_size` | `25` | Rows per page |
 | `can_access` | `user.is_superuser` | `predicate(user) -> bool` gate, same mechanism as `superuser_required` |
+| `list_filter` | `()` | Column names to add an exact-match dropdown for |
+| `search_fields` | `()` | Column names a search box ORs a substring match across |
+| `actions` | `{}` | Named bulk operations: `{"name": callable(list[Entity])}` |
+
+`list_filter`/`search_fields` entries are validated against the
+entity's declared columns at `ModelAdmin(...)` construction time --
+typo a column name and it fails immediately, not on the first request
+that hits it.
+
+## Filtering, searching, and bulk actions
+
+```python
+from mangoo.admin import ModelAdmin
+from .models import Post
+
+
+def archive(records):
+    for record in records:
+        Post.collection(DATABASE).seek(id__exact=record.id).revise(archived=True)
+
+
+ModelAdmin(
+    Post,
+    list_filter=("published",),
+    search_fields=("title", "body"),
+    actions={"archive": archive},
+)
+```
+
+- **`list_filter`** renders one `<select>` per named column on the list
+  view, its options populated from the distinct values actually
+  present in the table -- not a fixed, hardcoded choice list. Combines
+  with `search_fields` via AND.
+- **`search_fields`** adds a search box (`?q=...`) that ORs a
+  substring match (`Selection.search`) across the named columns. This
+  is intentionally narrow -- not a general `Q()`/OR-expression system
+  -- scoped to exactly this one admin feature.
+- **`actions`** adds a checkbox per row and an action dropdown. Each
+  action is a plain `callable(list[Entity])` -- no special base class
+  -- run against every record whose checkbox was selected when the
+  list view's own form is submitted. An unregistered action name, or
+  no rows selected, is a no-op (redirects back to the list unchanged).
 
 ## What you get for free
 

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Offer Django-like project ergonomics while moving routing, request processing, database work, and tooling into Rust through PyO3.
+Offer conventional, batteries-included project ergonomics of its own while moving routing, request processing, database work, and tooling into Rust through PyO3.
 
 ```mermaid
 flowchart LR
@@ -69,7 +69,7 @@ A developer can create a project and app, configure routes, run a server, return
 
 ```text
 Python application code
-  settings.py / urls.py / views.py / models.py
+  settings.py / routes.py / views.py / models.py
              │ PyO3
              ▼
 Rust runtime

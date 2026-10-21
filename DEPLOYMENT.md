@@ -2,20 +2,20 @@
 
 ## Running the application
 
-`mango launch` / `python manage.py launch` uses `wsgiref.simple_server`,
+`mango launch` / `python mango.py launch` uses `wsgiref.simple_server`,
 which is explicitly single-threaded and dev-only -- do not put it behind
 real traffic. Every scaffolded project (`mango newproject`) ships a
-`project/wsgi.py` exposing a standard WSGI `application` object; point a
+`config/wsgi.py` exposing a standard WSGI `application` object; point a
 real, multi-worker server at that instead:
 
 ```bash
 # Linux/macOS: gunicorn (the conventional choice for a sync WSGI app)
-gunicorn project.wsgi:application --workers 5 --bind 0.0.0.0:8000
+gunicorn config.wsgi:application --workers 5 --bind 0.0.0.0:8000
 
 # Any platform, including Windows: waitress
 # (gunicorn cannot run on Windows at all -- it imports fcntl, a POSIX-only
 # module, and fails before it can even start)
-waitress-serve --port=8000 --threads=16 project.wsgi:application
+waitress-serve --port=8000 --threads=16 config.wsgi:application
 ```
 
 `create_application()`'s return value is a plain WSGI callable with no
@@ -44,13 +44,13 @@ WSGI above stays the default; nothing about it requires ASGI. Reach for
 ASGI only when a view needs to `await` concurrent I/O -- calling another
 service, an async database driver -- that WSGI's one-thread-per-request
 model can't overlap as cheaply. `mango newproject` also scaffolds
-`project/asgi.py`, exposing the same kind of standard `application` object
+`config/asgi.py`, exposing the same kind of standard `application` object
 but built with `mangoo.asgi.create_asgi_application()` instead of
 `mangoo.runtime.create_application()`:
 
 ```bash
-uvicorn project.asgi:application --workers 4 --host 0.0.0.0 --port 8000
-hypercorn project.asgi:application --workers 4 --bind 0.0.0.0:8000
+uvicorn config.asgi:application --workers 4 --host 0.0.0.0 --port 8000
+hypercorn config.asgi:application --workers 4 --bind 0.0.0.0:8000
 ```
 
 Views may be `async def` (awaited directly on the event loop) or ordinary
@@ -72,8 +72,8 @@ with that shape of workload.
 
 ### Rust runtime: an opt-in, settings-driven native WSGI server
 
-`SERVER['ENGINE'] = 'rust'` in a project's settings module switches
-`mango launch` (and `python manage.py launch`) from the default `wsgiref`
+`Settings.server.engine = 'rust'` in a project's settings module switches
+`mango launch` (and `python mango.py launch`) from the default `wsgiref`
 dev server to `mangoo_native`'s own WSGI-compatible HTTP/1.1 server --
 still development tooling, not a production server recommendation of its
 own (see the gunicorn/waitress guidance above for that), but a real,
@@ -84,8 +84,11 @@ dispatcher already has) -- `mango launch` reports a clear, actionable
 error rather than silently falling back if it wasn't.
 
 ```python
-# project/settings.py
-SERVER = {"HOST": "127.0.0.1", "PORT": 8000, "ENGINE": "rust"}  # default: "python"
+# config/settings.py, inside class Settings:
+class server:
+    host = "127.0.0.1"
+    port = 8000
+    engine = "rust"  # default: "python"
 ```
 
 **Scope, disclosed rather than oversold:** this is a synchronous,
@@ -109,9 +112,9 @@ issues, three of them exploitable (request smuggling, response
 splitting) -- see
 [`benchmarks/README.md`'s hardening section](benchmarks/README.md#hardening-pass-the-known-failure-modes-of-a-hand-written-http-server-found-and-fixed).
 
-**Optional TLS**: `SERVER['TLS_CERT']`/`SERVER['TLS_KEY']` (PEM file
+**Optional TLS**: `Settings.server.tls_cert`/`Settings.server.tls_key` (PEM file
 paths) serve the application over HTTPS instead of plain HTTP, using
-`rustls` -- both settings are only valid with `SERVER['ENGINE'] = 'rust'`
+`rustls` -- both settings are only valid with `Settings.server.engine = 'rust'`
 (rejected otherwise, rather than silently serving plaintext where HTTPS
 was expected). Benchmarked overhead is modest (roughly 0-12% depending on
 scenario, since the TLS handshake cost is paid once per connection and
@@ -128,16 +131,21 @@ proxy (nginx, a cloud load balancer), the same as the gunicorn/waitress
 guidance above.
 
 ```python
-# project/settings.py
-SERVER = {"HOST": "127.0.0.1", "PORT": 8443, "ENGINE": "rust", "TLS_CERT": "cert.pem", "TLS_KEY": "key.pem"}
+# config/settings.py, inside class Settings:
+class server:
+    host = "127.0.0.1"
+    port = 8443
+    engine = "rust"
+    tls_cert = "cert.pem"
+    tls_key = "key.pem"
 ```
 
 ## Before deployment
 
 1. Set a unique `MANGOO_SECRET_KEY`; never use the scaffold default.
-2. Set `DEBUG = False`, explicit `ALLOWED_HOSTS`, and `SECURITY['FORCE_HTTPS'] = True`.
-3. Set `SECURITY['SECURE_COOKIES'] = True` and configure `TRUSTED_PROXY_IPS` when a reverse proxy sends forwarded headers.
-4. Apply and verify migrations with `python manage.py applymigrations` and `python manage.py migrationstatus`.
+2. Set `Settings.debug = False`, explicit `Settings.allowed_hosts`, and `Settings.security.force_https = True`.
+3. Set `Settings.security.secure_cookies = True` and configure `Settings.security.trusted_proxy_ips` when a reverse proxy sends forwarded headers.
+4. Apply and verify migrations with `python mango.py applymigrations` and `python mango.py migrationstatus`.
 5. Configure application health probes for `/healthz` and `/readyz`.
 6. If you mounted `metrics_routes`, point a Prometheus scrape config at `/metrics`.
 
@@ -145,7 +153,7 @@ SERVER = {"HOST": "127.0.0.1", "PORT": 8443, "ENGINE": "rust", "TLS_CERT": "cert
 
 Terminate TLS at a trusted proxy and forward `Host`, `X-Forwarded-For`, and
 `X-Forwarded-Proto`. Only list the proxy's address or CIDR in
-`SECURITY['TRUSTED_PROXY_IPS']`; do not trust forwarded headers from arbitrary
+`Settings.security.trusted_proxy_ips`; do not trust forwarded headers from arbitrary
 internet clients. The application redirects HTTP to HTTPS and retains query
 strings.
 

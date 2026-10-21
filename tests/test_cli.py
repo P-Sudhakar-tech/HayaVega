@@ -23,7 +23,7 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with patch("mangoo.cli.Path.cwd", return_value=Path(directory)):
                 main(["newproject", "demo"])
-            self.assertTrue((Path(directory) / "demo" / "manage.py").is_file())
+            self.assertTrue((Path(directory) / "demo" / "mango.py").is_file())
 
     def test_newapp_creates_an_app(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -36,7 +36,7 @@ class CliTests(unittest.TestCase):
             stderr = io.StringIO()
             with patch("mangoo.cli.Path.cwd", return_value=Path(directory)), redirect_stderr(stderr):
                 main(["startproject", "demo"])
-            self.assertTrue((Path(directory) / "demo" / "manage.py").is_file())
+            self.assertTrue((Path(directory) / "demo" / "mango.py").is_file())
             self.assertIn("deprecated", stderr.getvalue())
             self.assertIn("newproject", stderr.getvalue())
 

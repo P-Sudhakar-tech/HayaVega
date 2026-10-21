@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 import re
 import secrets
 import sqlite3
 import struct
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from hashlib import pbkdf2_hmac, scrypt, sha256
 from hmac import compare_digest, new
 from pathlib import Path
 
+from . import crypto
 from .audit import record_audit_event
 from .db import connect, user_id_definition
 
@@ -43,6 +46,18 @@ class User:
     is_active: bool
     two_factor_enabled: bool = False
     email_verified: bool = False
+
+
+@dataclass(frozen=True)
+class Group:
+    """A named set of permission codenames (e.g. ``"blog.add_post"``) --
+    a lightweight analog of Django's ``Group``/``Permission`` models, as
+    a JSON string list rather than a separate relational
+    permission/content-type schema (``contenttypes`` is out of scope)."""
+
+    id: int
+    name: str
+    permissions: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -119,6 +134,24 @@ def initialize_auth_db(database_path: str | Path | dict) -> None:
             )
             """
         )
+        connection.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS mangoo_groups (
+                id {user_id_definition(connection.engine)},
+                name TEXT NOT NULL UNIQUE,
+                permissions TEXT NOT NULL DEFAULT '[]'
+            )
+            """
+        )
+        connection.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS mangoo_user_groups (
+                id {user_id_definition(connection.engine)},
+                user_id INTEGER NOT NULL REFERENCES mangoo_users(id) ON DELETE CASCADE,
+                group_id INTEGER NOT NULL REFERENCES mangoo_groups(id) ON DELETE CASCADE
+            )
+            """
+        )
         connection.commit()
     finally:
         connection.close()
@@ -132,8 +165,47 @@ def validate_password(password: str) -> None:
         raise ValueError("Password must contain lowercase, uppercase, number, and symbol characters.")
 
 
+def min_length_validator(length: int) -> Callable[[str], None]:
+    """Return a validator rejecting any password shorter than `length`
+    -- a relaxed drop-in replacement for the default `validate_password`
+    when a project wants a different length floor without its
+    character-class requirements."""
+
+    def validator(password: str) -> None:
+        if len(password) < length:
+            raise ValueError(f"Password must contain at least {length} characters.")
+
+    return validator
+
+
+def common_password_validator(denylist: Iterable[str]) -> Callable[[str], None]:
+    """Return a validator rejecting any password (case-insensitively)
+    found in `denylist`. Pair with `validate_password`/`min_length_validator`
+    rather than using alone -- this alone enforces no length or
+    complexity requirement."""
+    denied = {entry.lower() for entry in denylist}
+
+    def validator(password: str) -> None:
+        if password.lower() in denied:
+            raise ValueError("This password is too common.")
+
+    return validator
+
+
+def _run_validators(password: str, validators: Iterable[Callable[[str], None]] | None) -> None:
+    for validator in validators if validators is not None else (validate_password,):
+        validator(password)
+
+
 def hash_password(password: str) -> str:
-    validate_password(password)
+    """Hash `password` -- does **not** validate it. Called both when a
+    user is choosing a new password (validated by the caller first,
+    e.g. `create_user`/`reset_password`) and when a successful login
+    silently re-hashes an already-*verified* legacy PBKDF2 password
+    under scrypt (`authenticate`) -- that second case must never
+    re-validate, or a policy tightened after the fact would lock out a
+    user whose already-correct password no longer satisfies it.
+    """
     salt = os.urandom(16)
     derived_key = scrypt(password.encode("utf-8"), salt=salt, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=32)
     return "scrypt${}${}${}${}${}".format(SCRYPT_N, SCRYPT_R, SCRYPT_P, base64.b64encode(salt).decode("ascii"), base64.b64encode(derived_key).decode("ascii"))
@@ -170,12 +242,17 @@ def get_user_by_username(database_path: str | Path | dict, username: str) -> Use
         connection.close()
 
 
-def create_user(database_path: str | Path | dict, username: str, email: str, password: str, *, is_superuser: bool = False) -> User:
+def create_user(database_path: str | Path | dict, username: str, email: str, password: str, *, is_superuser: bool = False, validators: Iterable[Callable[[str], None]] | None = None) -> User:
+    """`validators`, when given, replaces the default `[validate_password]`
+    entirely -- each is called as `validator(password)` and must raise
+    `ValueError` to reject it; the first rejection wins. Omit it for the
+    default policy."""
     username, email = username.strip(), email.strip().lower()
     if not username or len(username) > 150:
         raise ValueError("Username is required and must be 150 characters or fewer.")
     if not _EMAIL_PATTERN.fullmatch(email):
         raise ValueError("A valid email address is required.")
+    _run_validators(password, validators)
     initialize_auth_db(database_path)
     connection = _connect(database_path)
     try:
@@ -195,8 +272,100 @@ def create_user(database_path: str | Path | dict, username: str, email: str, pas
         connection.close()
 
 
-def create_superuser(database_path: str | Path | dict, username: str, email: str, password: str) -> User:
-    return create_user(database_path, username, email, password, is_superuser=True)
+def create_superuser(database_path: str | Path | dict, username: str, email: str, password: str, *, validators: Iterable[Callable[[str], None]] | None = None) -> User:
+    return create_user(database_path, username, email, password, is_superuser=True, validators=validators)
+
+
+# ---------------------------------------------------------------------------
+# Groups & permissions: role-based access narrower than Django's
+# Group/Permission models (no contenttypes dependency -- permissions are
+# free-form string codenames, e.g. "blog.add_post", stored as a JSON list
+# per group) but built on the same idea: group a set of permissions once,
+# assign users to groups, check membership at authorization time.
+# `security.has_permission_required` is the decorator built on this.
+# ---------------------------------------------------------------------------
+
+
+def _group_from_row(row) -> Group:
+    return Group(row["id"], row["name"], tuple(json.loads(row["permissions"] or "[]")))
+
+
+def create_group(database_path: str | Path | dict, name: str, permissions: Iterable[str] = ()) -> Group:
+    initialize_auth_db(database_path)
+    codenames = tuple(sorted(set(permissions)))
+    connection = _connect(database_path)
+    try:
+        insert = "INSERT INTO mangoo_groups (name, permissions) VALUES (?, ?)"
+        cursor = connection.execute(
+            insert + (" RETURNING id" if connection.engine == "postgresql" else ""),
+            (name, json.dumps(codenames)),
+        )
+        connection.commit()
+        identifier = cursor.fetchone()["id"] if connection.engine == "postgresql" else cursor.lastrowid
+        return Group(identifier, name, codenames)
+    except sqlite3.IntegrityError as error:
+        raise ValueError(f"A group named {name!r} already exists.") from error
+    finally:
+        connection.close()
+
+
+def get_group_by_name(database_path: str | Path | dict, name: str) -> Group | None:
+    initialize_auth_db(database_path)
+    connection = _connect(database_path)
+    try:
+        row = connection.execute("SELECT id, name, permissions FROM mangoo_groups WHERE name = ?", (name,)).fetchone()
+        return _group_from_row(row) if row is not None else None
+    finally:
+        connection.close()
+
+
+def add_user_to_group(database_path: str | Path | dict, user: User, group: Group) -> None:
+    initialize_auth_db(database_path)
+    connection = _connect(database_path)
+    try:
+        existing = connection.execute("SELECT 1 FROM mangoo_user_groups WHERE user_id = ? AND group_id = ?", (user.id, group.id)).fetchone()
+        if existing is None:
+            connection.execute("INSERT INTO mangoo_user_groups (user_id, group_id) VALUES (?, ?)", (user.id, group.id))
+            connection.commit()
+            record_audit_event(database_path, "auth.user_added_to_group", actor_id=user.id, metadata={"group": group.name})
+    finally:
+        connection.close()
+
+
+def remove_user_from_group(database_path: str | Path | dict, user: User, group: Group) -> None:
+    initialize_auth_db(database_path)
+    connection = _connect(database_path)
+    try:
+        cursor = connection.execute("DELETE FROM mangoo_user_groups WHERE user_id = ? AND group_id = ?", (user.id, group.id))
+        connection.commit()
+        if cursor.rowcount:
+            record_audit_event(database_path, "auth.user_removed_from_group", actor_id=user.id, metadata={"group": group.name})
+    finally:
+        connection.close()
+
+
+def user_permissions(database_path: str | Path | dict, user: User) -> set[str]:
+    """Return every permission codename granted to `user` through group
+    membership -- the union of every group's permissions the user
+    belongs to. Does not special-case `is_superuser`: callers that want
+    "superuser bypasses every permission check" (the same default every
+    other predicate in this codebase already applies -- see
+    `security.superuser_required`/`has_permission_required`) check
+    `user.is_superuser` themselves.
+    """
+    initialize_auth_db(database_path)
+    connection = _connect(database_path)
+    try:
+        rows = connection.execute(
+            "SELECT g.permissions FROM mangoo_groups g JOIN mangoo_user_groups ug ON ug.group_id = g.id WHERE ug.user_id = ?",
+            (user.id,),
+        ).fetchall()
+        permissions: set[str] = set()
+        for row in rows:
+            permissions.update(json.loads(row["permissions"] or "[]"))
+        return permissions
+    finally:
+        connection.close()
 
 
 def generate_totp_secret() -> str:
@@ -217,12 +386,25 @@ def verify_totp(secret: str, code: str, timestamp: int | None = None) -> bool:
     return any(compare_digest(_totp_code(secret, now + step * 30), str(code)) for step in (-1, 0, 1))
 
 
-def enable_totp(database_path: str | Path | dict, username: str) -> str:
+def enable_totp(database_path: str | Path | dict, username: str, *, secret_key: str | None = None) -> str:
+    """Generate a TOTP secret, store it, and return the plaintext secret
+    (for the admin to hand to the user's authenticator app -- never the
+    stored value, which is encrypted when `secret_key` is given and
+    `cryptography` is installed; see `crypto.py`). Without `secret_key`,
+    or without `cryptography` installed, the secret is stored in plaintext
+    -- `mango diagnose` reports that fallback.
+    """
     initialize_auth_db(database_path)
     secret = generate_totp_secret()
+    stored_secret = secret
+    if secret_key:
+        try:
+            stored_secret = crypto.encrypt(secret_key, secret)
+        except crypto.EncryptionUnavailableError:
+            pass
     connection = _connect(database_path)
     try:
-        cursor = connection.execute("UPDATE mangoo_users SET totp_secret = ?, totp_enabled = 1 WHERE username = ?", (secret, username))
+        cursor = connection.execute("UPDATE mangoo_users SET totp_secret = ?, totp_enabled = 1 WHERE username = ?", (stored_secret, username))
         connection.commit()
         if cursor.rowcount != 1:
             raise ValueError("User was not found.")
@@ -248,8 +430,31 @@ def _login_context(ip_address: str | None, user_agent: str | None) -> dict:
     return context
 
 
-def authenticate(database_path: str | Path | dict, username: str, password: str, totp_code: str | None = None, *, ip_address: str | None = None, user_agent: str | None = None) -> User | None:
-    """Verify credentials and record the attempt, including the caller-supplied IP address and user agent, if given."""
+def _resolve_totp_secret(stored_secret: str | None, secret_key: str | None) -> str | None:
+    """Return the plaintext TOTP secret, or None if it can't be resolved
+    (encrypted but no/wrong `secret_key`, or `cryptography` unavailable) --
+    callers must treat None the same as "verification cannot succeed", not
+    silently skip the check."""
+    if not stored_secret:
+        return None
+    if not crypto.is_encrypted(stored_secret):
+        return stored_secret
+    if not secret_key:
+        return None
+    try:
+        return crypto.decrypt(secret_key, stored_secret)
+    except (crypto.EncryptionUnavailableError, ValueError):
+        return None
+
+
+def authenticate(database_path: str | Path | dict, username: str, password: str, totp_code: str | None = None, *, ip_address: str | None = None, user_agent: str | None = None, secret_key: str | None = None) -> User | None:
+    """Verify credentials and record the attempt, including the caller-supplied IP address and user agent, if given.
+
+    `secret_key` is only needed when the user has TOTP enabled and their
+    secret was stored encrypted (see `enable_totp`) -- pass the same
+    `Settings.secret_key` used to enable it, or the TOTP check fails
+    closed rather than silently skipping it.
+    """
     initialize_auth_db(database_path)
     now = int(time.time())
     context = _login_context(ip_address, user_agent)
@@ -263,7 +468,8 @@ def authenticate(database_path: str | Path | dict, username: str, password: str,
             record_audit_event(database_path, "auth.login_failed", actor_id=row["id"], metadata={"reason": "locked", **context})
             return None
         password_valid = verify_password(password, row["password_hash"])
-        totp_valid = not row["totp_enabled"] or (totp_code is not None and verify_totp(row["totp_secret"], totp_code, now))
+        totp_secret = _resolve_totp_secret(row["totp_secret"], secret_key) if row["totp_enabled"] else None
+        totp_valid = not row["totp_enabled"] or (totp_code is not None and totp_secret is not None and verify_totp(totp_secret, totp_code, now))
         if not password_valid or not totp_valid:
             _record_failure(connection, row, now)
             record_audit_event(database_path, "auth.login_failed", actor_id=row["id"], metadata={"reason": "invalid_credentials", **context})
@@ -423,8 +629,14 @@ def create_password_reset_token(database_path: str | Path | dict, user: User) ->
     return token
 
 
-def reset_password(database_path: str | Path | dict, token: str, new_password: str) -> User | None:
-    """Consume a password-reset token, set the new password, and revoke every existing session."""
+def reset_password(database_path: str | Path | dict, token: str, new_password: str, *, validators: Iterable[Callable[[str], None]] | None = None) -> User | None:
+    """Consume a password-reset token, set the new password, and revoke every existing session.
+
+    Validates `new_password` (see `create_user`'s `validators`) *before*
+    consuming the token -- a rejected password must never burn a
+    single-use reset link the user would then have to request again.
+    """
+    _run_validators(new_password, validators)
     row = _consume_auth_token(database_path, token, _PASSWORD_RESET_PURPOSE)
     if row is None:
         return None

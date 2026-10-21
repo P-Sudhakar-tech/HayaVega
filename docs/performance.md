@@ -37,8 +37,9 @@ Mangoo leads every published scenario on both transports.
 
 ## The Rust runtime vs. waitress
 
-```python title="project/settings.py"
-SERVER = {"ENGINE": "rust"}  # see Rust runtime
+```python title="config/settings.py"
+class server:
+    engine = "rust"  # see Rust runtime
 ```
 
 | Scenario | Rust runtime | waitress | Ratio |

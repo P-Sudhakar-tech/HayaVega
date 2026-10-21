@@ -6,12 +6,15 @@ single regex, and never arbitrary code execution.
 ## Rendering
 
 ```python
+from mangoo.conf import load_settings
 from mangoo.templates import render_template
+
+_settings = load_settings()
 
 
 def posts_page(request):
-    posts = Post.collection(DATABASE).browse().values("title", "views")
-    return Response(render_template("posts.html", {"posts": posts}, directories=(BASE_DIR / "templates",)))
+    posts = Post.collection(_settings.database).browse().values("title", "views")
+    return Response(render_template("posts.html", {"posts": posts}, directories=(_settings.base_dir / "templates",)))
 ```
 
 ## Syntax
@@ -46,6 +49,37 @@ number) for an undefined variable, a non-iterable loop target, or an
 undeclared block; the default (`debug=False`) renders these as empty
 text instead, so a template typo degrades gracefully in production
 rather than 500ing.
+
+## Rendering flash messages
+
+`consume_messages` needs a `Response` to attach the cookie-clearing
+header to, but you need the message list *before* rendering the page
+that will display it. Get both in one call by consuming against an
+empty placeholder, then filling in the real body:
+
+```python
+from dataclasses import replace
+
+from mangoo.messages import consume_messages
+
+
+def posts_page(request):
+    messages, draft = consume_messages(request, Response(""))
+    body = render_template("posts.html", {"posts": posts, "messages": messages}, directories=(_settings.base_dir / "templates",))
+    return replace(draft, body=body)
+```
+
+```django title="templates/posts.html"
+{% if messages %}
+  <ul class="messages">
+    {% for message in messages %}
+      <li class="{{ message.level }}">{{ message.text }}</li>
+    {% endfor %}
+  </ul>
+{% endif %}
+```
+
+See [Messages](messages.md) for the full API.
 
 ## Caching
 

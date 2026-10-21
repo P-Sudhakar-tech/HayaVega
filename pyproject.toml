@@ -28,7 +28,17 @@ dependencies = ["msgspec>=0.21,<0.23"]
 # stale-connection reconnect unit tests in tests/test_db.py (which build
 # pymysql's exception types against a fake connection) run in CI's `test`
 # job, not only in the opt-in mysql-integration job.
-dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.16", "mypy>=1.13", "hatchling>=1.25", "pymysql>=1.1"]
+# cryptography is optional (see src/mangoo/crypto.py -- it's only used to
+# encrypt a TOTP secret at rest, never a mandatory dependency for every
+# project), but it's listed here so tests/test_crypto.py and auth.py's
+# TOTP-encryption tests exercise the real AES-GCM path in CI's `test` job,
+# not just the plaintext fallback `mango diagnose` warns about when it's
+# absent.
+# python-multipart is likewise optional (see src/mangoo/request.py --
+# only needed to parse multipart/form-data file uploads), listed here so
+# tests/test_request_multipart.py exercises the real parser in CI, not
+# just the MultipartUnavailableError fallback path.
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.16", "mypy>=1.13", "hatchling>=1.25", "pymysql>=1.1", "cryptography>=42", "python-multipart>=0.0.9"]
 docs = ["mkdocs>=1.6", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26", "mike>=2.1"]
 
 [project.scripts]

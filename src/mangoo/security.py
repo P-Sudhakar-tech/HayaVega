@@ -7,7 +7,7 @@ import secrets
 from functools import wraps
 from hmac import compare_digest
 
-from .auth import User, authenticate_session
+from .auth import User, authenticate_session, user_permissions
 from .response import json_response
 
 SESSION_COOKIE_NAME = "mangoo_session"
@@ -138,3 +138,12 @@ def superuser_required(database_path):
 
 def email_verified_required(database_path):
     return permission_required(database_path, lambda user: user.email_verified, message="Email verification required.")
+
+
+def has_permission_required(database_path, codename: str):
+    """Require an authenticated user who holds `codename` through group
+    membership (`auth.user_permissions`), or `is_superuser` -- the same
+    superuser-bypasses-everything default `superuser_required` already
+    applies, kept consistent rather than special-cased here.
+    """
+    return permission_required(database_path, lambda user: user.is_superuser or codename in user_permissions(database_path, user), message=f"Permission denied: {codename!r} required.")

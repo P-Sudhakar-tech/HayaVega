@@ -12,12 +12,12 @@ class ScaffoldTests(unittest.TestCase):
     def test_startproject_creates_runnable_layout(self):
         with tempfile.TemporaryDirectory() as directory:
             root = startproject("demo", Path(directory))
-            self.assertTrue((root / "manage.py").is_file())
-            self.assertTrue((root / "project" / "urls.py").is_file())
-            self.assertTrue((root / "project" / "wsgi.py").is_file())
-            self.assertTrue((root / "project" / "asgi.py").is_file())
-            self.assertIn("from mangoo.management", (root / "manage.py").read_text(encoding="utf-8"))
-            self.assertIn("Welcome to Mangoo", (root / "project" / "urls.py").read_text(encoding="utf-8"))
+            self.assertTrue((root / "mango.py").is_file())
+            self.assertTrue((root / "config" / "routes.py").is_file())
+            self.assertTrue((root / "config" / "wsgi.py").is_file())
+            self.assertTrue((root / "config" / "asgi.py").is_file())
+            self.assertIn("from mangoo.management", (root / "mango.py").read_text(encoding="utf-8"))
+            self.assertIn("Welcome to Mangoo", (root / "config" / "routes.py").read_text(encoding="utf-8"))
 
     def test_generated_wsgi_module_exposes_a_working_wsgi_callable(self):
         """The wsgi.py a scaffolded project ships is what a real production
@@ -28,7 +28,7 @@ class ScaffoldTests(unittest.TestCase):
             root = startproject("demo_wsgi", Path(directory))
             sys.path.insert(0, str(root))
             try:
-                wsgi = importlib.import_module("project.wsgi")
+                wsgi = importlib.import_module("config.wsgi")
                 self.assertTrue(callable(wsgi.application))
 
                 captured = {}
@@ -42,7 +42,7 @@ class ScaffoldTests(unittest.TestCase):
                 self.assertIn(b"Welcome to Mangoo", body)
             finally:
                 sys.path.remove(str(root))
-                for name in ("project.wsgi", "project.urls", "project.settings", "project"):
+                for name in ("config.wsgi", "config.routes", "config.settings", "config"):
                     sys.modules.pop(name, None)
 
     def test_generated_asgi_module_exposes_a_working_asgi_callable(self):
@@ -54,7 +54,7 @@ class ScaffoldTests(unittest.TestCase):
             root = startproject("demo_asgi", Path(directory))
             sys.path.insert(0, str(root))
             try:
-                asgi = importlib.import_module("project.asgi")
+                asgi = importlib.import_module("config.asgi")
                 self.assertTrue(callable(asgi.application))
 
                 messages = []
@@ -73,13 +73,14 @@ class ScaffoldTests(unittest.TestCase):
                 self.assertIn(b"Welcome to Mangoo", body)
             finally:
                 sys.path.remove(str(root))
-                for name in ("project.asgi", "project.wsgi", "project.urls", "project.settings", "project"):
+                for name in ("config.asgi", "config.wsgi", "config.routes", "config.settings", "config"):
                     sys.modules.pop(name, None)
 
     def test_startapp_creates_conventional_files(self):
         with tempfile.TemporaryDirectory() as directory:
             root = startapp("blog", Path(directory))
             self.assertTrue((root / "views.py").is_file())
+            self.assertTrue((root / "routes.py").is_file())
             self.assertTrue((root / "migrations" / "__init__.py").is_file())
             self.assertIn("from mangoo import Response", (root / "views.py").read_text(encoding="utf-8"))
 

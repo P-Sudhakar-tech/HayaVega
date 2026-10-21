@@ -1,4 +1,4 @@
-"""Opt-in Rust-backed WSGI server, selected via `SERVER['ENGINE'] = 'rust'`
+"""Opt-in Rust-backed WSGI server, selected via `Settings.server.engine = 'rust'`
 in a project's settings module (default remains `'python'`, i.e. today's
 `wsgiref`-based `mangoo.runtime.serve`).
 
@@ -20,8 +20,8 @@ permanently shrinking the worker pool) -- see
 `crates/mangoo-python/src/server.rs`'s module docstring for the full list
 and `benchmarks/README.md` for the benchmarked, disclosed result.
 
-Optional TLS termination is supported (`SERVER['TLS_CERT']`/
-`SERVER['TLS_KEY']`, PEM file paths, via `rustls`) for local HTTPS
+Optional TLS termination is supported (`Settings.server.tls_cert`/
+`Settings.server.tls_key`, PEM file paths, via `rustls`) for local HTTPS
 development and testing. HTTP/2 remains explicitly out of scope: it is
 built around multiplexing many streams over one connection, which does not
 fit this server's synchronous thread-per-connection model without
@@ -63,14 +63,14 @@ def serve(urlpatterns, host: str = "127.0.0.1", port: int = 8000, *, hardening: 
     codebase (Signals' Rust dispatcher, `mango_list`) already handles by
     falling back to a pure-Python equivalent; a WSGI *server* has no
     equivalent fallback to fall back to within this same function, so the
-    caller (`SERVER['ENGINE'] = 'rust'` in settings, checked by
+    caller (`Settings.server.engine = 'rust'` in settings, checked by
     `mango launch`) is told plainly instead of silently starting the
     default Python server under a different name.
     """
     try:
         import mangoo_native
     except ImportError as error:
-        raise RustRuntimeUnavailableError("SERVER['ENGINE'] is 'rust' but mangoo_native was not built for this install. Rebuild with `cargo` on PATH (`pip install -e .` re-runs the build hook), or set SERVER['ENGINE'] to 'python' to use the standard runtime.") from error
+        raise RustRuntimeUnavailableError("Settings.server.engine is 'rust' but mangoo_native was not built for this install. Rebuild with `cargo` on PATH (`pip install -e .` re-runs the build hook), or set Settings.server.engine to 'python' to use the standard runtime.") from error
 
     application = create_application(urlpatterns, hardening=hardening, debug=debug)
     scheme = "https" if tls_cert else "http"

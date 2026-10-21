@@ -135,31 +135,23 @@ class RustRuntimeTlsTests(unittest.TestCase):
 
 
 class TlsSettingsValidationTests(unittest.TestCase):
-    def test_tls_cert_without_tls_key_is_rejected(self):
-        from types import ModuleType
+    def _module(self, server: dict) -> "ModuleType":
+        from types import ModuleType, SimpleNamespace
 
-        module = ModuleType("project.settings")
-        module.DATABASES = {"default": {"ENGINE": "sqlite3", "NAME": "mangoo.sqlite3"}}
-        module.SERVER = {"ENGINE": "rust", "TLS_CERT": "cert.pem"}
-        with self.assertRaisesRegex(ValueError, "TLS_CERT"):
-            load_settings_from_module(module)
+        module = ModuleType("config.settings")
+        module.settings = SimpleNamespace(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server=server)
+        return module
+
+    def test_tls_cert_without_tls_key_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "tls_cert"):
+            load_settings_from_module(self._module({"engine": "rust", "tls_cert": "cert.pem"}))
 
     def test_tls_settings_under_the_python_engine_are_rejected(self):
-        from types import ModuleType
-
-        module = ModuleType("project.settings")
-        module.DATABASES = {"default": {"ENGINE": "sqlite3", "NAME": "mangoo.sqlite3"}}
-        module.SERVER = {"ENGINE": "python", "TLS_CERT": "cert.pem", "TLS_KEY": "key.pem"}
         with self.assertRaisesRegex(ValueError, "rust"):
-            load_settings_from_module(module)
+            load_settings_from_module(self._module({"engine": "python", "tls_cert": "cert.pem", "tls_key": "key.pem"}))
 
     def test_tls_settings_under_the_rust_engine_are_accepted(self):
-        from types import ModuleType
-
-        module = ModuleType("project.settings")
-        module.DATABASES = {"default": {"ENGINE": "sqlite3", "NAME": "mangoo.sqlite3"}}
-        module.SERVER = {"ENGINE": "rust", "TLS_CERT": "cert.pem", "TLS_KEY": "key.pem"}
-        settings = load_settings_from_module(module)
+        settings = load_settings_from_module(self._module({"engine": "rust", "tls_cert": "cert.pem", "tls_key": "key.pem"}))
         self.assertEqual(settings.server_tls_cert, "cert.pem")
         self.assertEqual(settings.server_tls_key, "key.pem")
 

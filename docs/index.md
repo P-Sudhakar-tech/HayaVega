@@ -8,6 +8,9 @@ hide:
 
 <div class="mangoo-hero" markdown>
 
+Python web framework &middot; open source &middot; early and runnable
+{: .mangoo-eyebrow }
+
 # Mangoo
 
 A conventional, batteries-included project structure. Automatic, interactive API documentation, generated from your code. A Rust core where it actually wins the benchmark, and honestly disclosed where it doesn't.
@@ -64,11 +67,11 @@ A conventional, batteries-included project structure. Automatic, interactive API
 pip install -e .
 mangoo-admin newproject mysite
 cd mysite
-python manage.py newapp blog
-python manage.py launch
+python mango.py newapp blog
+python mango.py launch
 ```
 
-```python title="project/urls.py"
+```python title="config/routes.py"
 from mangoo import api_route, path
 
 

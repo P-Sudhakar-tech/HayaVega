@@ -10,58 +10,81 @@ def startproject(name: str, target: Path | None = None) -> Path:
     root = (target or Path.cwd()) / name
     if root.exists():
         raise FileExistsError(f"Project already exists: {root}")
-    _write(root / "manage.py", "from mangoo.management.commands import execute_from_command_line\n\nif __name__ == '__main__':\n    execute_from_command_line()\n")
-    _write(root / "project" / "__init__.py", "")
+    _write(root / "mango.py", "from mangoo.management.commands import execute_from_command_line\n\nif __name__ == '__main__':\n    execute_from_command_line()\n")
+    _write(root / "config" / "__init__.py", "")
     _write(
-        root / "project" / "settings.py",
-        "from pathlib import Path\nimport os\n\nBASE_DIR = Path(__file__).resolve().parent.parent\nSECRET_KEY = os.getenv('MANGOO_SECRET_KEY', 'change-this-in-production')\nDEBUG = os.getenv('MANGOO_DEBUG', 'true').lower() == 'true'\nALLOWED_HOSTS = ['127.0.0.1', 'localhost']\n\nINSTALLED_APPS = []\nMIDDLEWARE = []\nROOT_URLCONF = 'project.urls'\n\nDATABASES = {\n    'default': {\n        'ENGINE': 'sqlite3',\n        'NAME': BASE_DIR / 'mangoo.sqlite3',\n    },\n}\n\nSERVER = {\n    'HOST': '127.0.0.1',\n    'PORT': 8000,\n}\n",
+        root / "config" / "settings.py",
+        (
+            "from pathlib import Path\n"
+            "import os\n\n"
+            "BASE_DIR = Path(__file__).resolve().parent.parent\n\n\n"
+            "class Settings:\n"
+            "    base_dir = BASE_DIR\n"
+            "    secret_key = os.getenv('MANGOO_SECRET_KEY', 'change-this-in-production')\n"
+            "    debug = os.getenv('MANGOO_DEBUG', 'true').lower() == 'true'\n"
+            "    allowed_hosts = ['127.0.0.1', 'localhost']\n\n"
+            "    installed_apps = []\n"
+            "    middleware = []\n"
+            "    root_urlconf = 'config.routes'\n\n"
+            "    class database:\n"
+            "        engine = 'sqlite3'\n"
+            "        name = BASE_DIR / 'mangoo.sqlite3'\n\n"
+            "    class server:\n"
+            "        host = '127.0.0.1'\n"
+            "        port = 8000\n\n\n"
+            "settings = Settings()\n"
+        ),
     )
     _write(
-        root / "project" / "urls.py",
-        "from mangoo import Response, api_route, path\nfrom mangoo.auth_api import auth_routes\nfrom mangoo.graphql import Schema, graphql_view\nfrom .settings import DATABASES\n\ndef home(request):\n    return Response('<h1>Welcome to Mangoo</h1><p>Your Rust-backed project is running.</p>')\n\ndef health(request):\n    return {'status': 'ok'}\n\nschema = Schema(query={'greeting': lambda request: 'Hello from Mangoo GraphQL'})\n\nurlpatterns = [path('', home), api_route('api/health', health), path('graphql', graphql_view(schema), methods=('POST',)), *auth_routes(DATABASES['default'])]\n",
+        root / "config" / "routes.py",
+        "from mangoo import Response, api_route, path\nfrom mangoo.auth_api import auth_routes\nfrom mangoo.conf import load_settings\nfrom mangoo.graphql import Schema, graphql_view\n\n_settings = load_settings()\n\ndef home(request):\n    return Response('<h1>Welcome to Mangoo</h1><p>Your Rust-backed project is running.</p>')\n\ndef health(request):\n    return {'status': 'ok'}\n\nschema = Schema(query={'greeting': lambda request: 'Hello from Mangoo GraphQL'})\n\nurlpatterns = [path('', home), api_route('api/health', health), path('graphql', graphql_view(schema), methods=('POST',)), *auth_routes(_settings.database, secret_key=_settings.secret_key)]\n",
     )
     _write(
-        root / "project" / "wsgi.py",
+        root / "config" / "wsgi.py",
         (
             '"""WSGI entry point for production servers -- gunicorn, waitress, uWSGI, etc.\n\n'
-            "`mango launch`/`manage.py launch` is for development only; point a real\n"
+            "`mango launch`/`mango.py launch` is for development only; point a real\n"
             "server at the `application` object below instead. For example:\n\n"
-            "    gunicorn project.wsgi:application --workers 5 --bind 0.0.0.0:8000   # Linux/macOS\n"
-            "    waitress-serve --port=8000 project.wsgi:application                 # any platform, incl. Windows\n\n"
+            "    gunicorn config.wsgi:application --workers 5 --bind 0.0.0.0:8000   # Linux/macOS\n"
+            "    waitress-serve --port=8000 config.wsgi:application                 # any platform, incl. Windows\n\n"
             "See DEPLOYMENT.md for worker-count guidance and the gunicorn/waitress split.\n"
             '"""\n'
             "from mangoo.conf import load_settings\n"
             "from mangoo.hardening import HardeningOptions\n"
+            "from mangoo.middleware import load_middleware\n"
             "from mangoo.runtime import create_application\n\n"
-            "settings = load_settings('project.settings')\n"
+            "settings = load_settings('config.settings')\n"
             "urls = __import__(settings.root_urlconf, fromlist=['urlpatterns'])\n\n"
             "application = create_application(\n"
             "    urls.urlpatterns,\n"
             "    hardening=HardeningOptions.from_settings(allowed_hosts=settings.allowed_hosts, security=settings.security),\n"
             "    debug=settings.debug,\n"
+            "    middleware=load_middleware(settings.middleware),\n"
             ")\n"
         ),
     )
     _write(
-        root / "project" / "asgi.py",
+        root / "config" / "asgi.py",
         (
             '"""ASGI entry point -- opt in only if a view needs `async def` for\n'
-            "concurrent I/O; the WSGI path above (`project/wsgi.py`) remains the\n"
+            "concurrent I/O; the WSGI path above (`config/wsgi.py`) remains the\n"
             "default and does not require this file. Point an ASGI server at the\n"
             "`application` object below. For example:\n\n"
-            "    uvicorn project.asgi:application --workers 4 --host 0.0.0.0 --port 8000\n"
-            "    hypercorn project.asgi:application --workers 4 --bind 0.0.0.0:8000\n\n"
+            "    uvicorn config.asgi:application --workers 4 --host 0.0.0.0 --port 8000\n"
+            "    hypercorn config.asgi:application --workers 4 --bind 0.0.0.0:8000\n\n"
             "See DEPLOYMENT.md for when ASGI is worth the switch and when it isn't.\n"
             '"""\n'
             "from mangoo.asgi import create_asgi_application\n"
             "from mangoo.conf import load_settings\n"
-            "from mangoo.hardening import HardeningOptions\n\n"
-            "settings = load_settings('project.settings')\n"
+            "from mangoo.hardening import HardeningOptions\n"
+            "from mangoo.middleware import load_middleware\n\n"
+            "settings = load_settings('config.settings')\n"
             "urls = __import__(settings.root_urlconf, fromlist=['urlpatterns'])\n\n"
             "application = create_asgi_application(\n"
             "    urls.urlpatterns,\n"
             "    hardening=HardeningOptions.from_settings(allowed_hosts=settings.allowed_hosts, security=settings.security),\n"
             "    debug=settings.debug,\n"
+            "    middleware=load_middleware(settings.middleware),\n"
             ")\n"
         ),
     )
@@ -75,7 +98,7 @@ def startapp(name: str, target: Path | None = None) -> Path:
     _write(root / "__init__.py", "")
     _write(root / "apps.py", f"class {name.title()}Config:\n    name = '{name}'\n")
     _write(root / "views.py", "from mangoo import Response\n\ndef index(request):\n    return Response('<h1>App is ready</h1>')\n")
-    _write(root / "urls.py", "from mangoo import path\nfrom .views import index\n\nurlpatterns = [path('', index)]\n")
+    _write(root / "routes.py", "from mangoo import path\nfrom .views import index\n\nurlpatterns = [path('', index)]\n")
     _write(root / "models.py", "# Define application models here.\n")
     _write(root / "admin.py", "# Register models for the future admin here.\n")
     _write(root / "migrations" / "__init__.py", "")

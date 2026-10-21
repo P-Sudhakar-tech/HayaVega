@@ -11,21 +11,23 @@ This creates a familiar, conventional layout:
 
 ```text
 mysite/
-├── manage.py
-└── project/
+├── mango.py
+└── config/
     ├── settings.py
-    ├── urls.py
+    ├── routes.py
     ├── wsgi.py
     └── asgi.py
 ```
 
-`project/urls.py` already wires up a few working routes out of the box:
+`config/routes.py` already wires up a few working routes out of the box:
 
-```python title="project/urls.py"
+```python title="config/routes.py"
 from mangoo import Response, api_route, path
 from mangoo.auth_api import auth_routes
+from mangoo.conf import load_settings
 from mangoo.graphql import Schema, graphql_view
-from .settings import DATABASES
+
+_settings = load_settings()
 
 
 def home(request):
@@ -42,7 +44,7 @@ urlpatterns = [
     path("", home),
     api_route("api/health", health),
     path("graphql", graphql_view(schema), methods=("POST",)),
-    *auth_routes(DATABASES["default"]),
+    *auth_routes(_settings.database, secret_key=_settings.secret_key),
 ]
 ```
 
@@ -56,7 +58,7 @@ Notice three things already working with zero extra code:
 ## Run it
 
 ```bash
-python manage.py launch
+python mango.py launch
 ```
 
 ```text
@@ -70,11 +72,11 @@ to see `api/health` already documented.
 ## Add an app
 
 ```bash
-python manage.py newapp blog
+python mango.py newapp blog
 ```
 
-This scaffolds `apps/blog/` with its own `views.py`, `urls.py`, and
-`models.py`, ready to wire into `project/urls.py`.
+This scaffolds `apps/blog/` with its own `views.py`, `routes.py`, and
+`models.py`, ready to wire into `config/routes.py`.
 
 ## Add a route
 
@@ -83,7 +85,7 @@ def hello(request):
     return {"message": "Hello from Mangoo"}
 ```
 
-```python title="apps/blog/urls.py"
+```python title="apps/blog/routes.py"
 from mangoo import api_route
 from .views import hello
 
@@ -94,8 +96,8 @@ urlpatterns = [
 
 Wire it into the project:
 
-```python title="project/urls.py"
-from apps.blog.urls import urlpatterns as blog_urlpatterns
+```python title="config/routes.py"
+from apps.blog.routes import urlpatterns as blog_urlpatterns
 
 urlpatterns = [
     # ... existing routes

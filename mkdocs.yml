@@ -1,6 +1,8 @@
 site_name: Mangoo
 site_description: A structured Python web framework with automatic, interactive API documentation and a Rust-accelerated core
-site_url: https://mangoo-framework.readthedocs.io/
+# No site_url: this site isn't published anywhere (see README.md) -- it's
+# built and browsed entirely locally, so there's no real canonical URL to
+# claim for it.
 copyright: Released under the MIT License.
 
 docs_dir: docs
@@ -116,7 +118,12 @@ nav:
   - Topics:
       - topics/index.md
       - Routing: topics/routing.md
+      - Middleware: topics/middleware.md
       - Models & migrations: topics/models.md
+      - Forms: topics/forms.md
+      - File uploads: topics/file-uploads.md
+      - Email: topics/email.md
+      - Messages: topics/messages.md
       - Authentication: topics/auth.md
       - Admin: topics/admin.md
       - Templates: topics/templates.md

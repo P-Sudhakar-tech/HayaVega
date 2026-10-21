@@ -60,7 +60,7 @@ def execute_from_command_line(argv: list[str] | None = None) -> None:
         _diagnose()
     elif canonical == "runworker":
         _runworker()
-    else:
+    elif not _dispatch_custom_command(canonical, args[2:]):
         print(HELP_TEXT)
 
 
@@ -101,6 +101,18 @@ def _launch(args: list[str]) -> None:
         print("\nMangoo development server stopped.")
 
 
+def _load_password_validators(dotted_paths):
+    """Resolve `Settings.password_validators` the same dotted-path way
+    `job_handlers` already is in `_runworker` -- empty means "use the
+    default `validate_password`" (`create_superuser`'s own default)."""
+    validators = []
+    for dotted_path in dotted_paths:
+        module_path, _, attribute = dotted_path.rpartition(".")
+        module = __import__(module_path, fromlist=[attribute])
+        validators.append(getattr(module, attribute))
+    return validators or None
+
+
 def _createadmin(args: list[str], prompt=input, password_prompt=getpass) -> None:
     settings = load_settings()
     username = prompt("Username: ").strip()
@@ -111,7 +123,7 @@ def _createadmin(args: list[str], prompt=input, password_prompt=getpass) -> None
         print("Error: the passwords do not match.")
         return
     try:
-        user = create_superuser(settings.database, username, email, password)
+        user = create_superuser(settings.database, username, email, password, validators=_load_password_validators(getattr(settings, "password_validators", ())))
     except (UserAlreadyExistsError, ValueError) as error:
         print(f"Error: {error}")
         return
@@ -119,8 +131,9 @@ def _createadmin(args: list[str], prompt=input, password_prompt=getpass) -> None
 
 
 def _enable2fa(username: str) -> None:
+    settings = load_settings()
     try:
-        secret = enable_totp(load_settings().database, username)
+        secret = enable_totp(settings.database, username, secret_key=settings.secret_key)
     except ValueError as error:
         print(f"Error: {error}")
         return
@@ -147,7 +160,7 @@ def _migrationstatus() -> None:
 def _newmigration(app: str) -> None:
     settings = load_settings()
     if app not in settings.installed_apps:
-        print(f"Error: {app!r} is not in INSTALLED_APPS.")
+        print(f"Error: {app!r} is not in Settings.installed_apps.")
         return
     module = __import__(f"{app}.models", fromlist=["__file__"])
     app_module = __import__(app, fromlist=["__file__"])
@@ -175,6 +188,31 @@ def _runworker() -> None:
         run_worker(settings.database, handlers)
     except KeyboardInterrupt:
         print("\nMangoo job worker stopped.")
+
+
+def _dispatch_custom_command(name: str, extra_args: list[str]) -> bool:
+    """Check `Settings.commands` (dotted paths, resolved the same way
+    `job_handlers` already is in `_runworker`) for a project-registered
+    command named `name`, and run it if found.
+
+    Returns `False` for an unrecognized name *or* when settings can't
+    even be loaded (e.g. `mango.py` invoked outside a real project) --
+    the caller falls through to `HELP_TEXT` either way, so a project
+    with no `config.settings` module never sees an unrelated import
+    error where it previously just saw the help text.
+    """
+    try:
+        settings = load_settings()
+    except Exception:
+        return False
+    dotted_path = settings.commands.get(name)
+    if dotted_path is None:
+        return False
+    module_path, _, attribute = dotted_path.rpartition(".")
+    module = __import__(module_path, fromlist=[attribute])
+    handler = getattr(module, attribute)
+    handler(extra_args)
+    return True
 
 
 def _diagnose() -> None:

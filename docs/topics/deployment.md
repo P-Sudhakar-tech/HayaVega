@@ -4,14 +4,14 @@
 
 `mango launch`'s `wsgiref` dev server is explicitly single-threaded and
 dev-only &mdash; never put it behind real traffic. Every scaffolded project
-ships `project/wsgi.py`, a standard WSGI `application` object:
+ships `config/wsgi.py`, a standard WSGI `application` object:
 
 ```bash
 # Linux/macOS
-gunicorn project.wsgi:application --workers 5 --bind 0.0.0.0:8000
+gunicorn config.wsgi:application --workers 5 --bind 0.0.0.0:8000
 
 # Any platform, including Windows (gunicorn imports fcntl, POSIX-only)
-waitress-serve --port=8000 --threads=16 project.wsgi:application
+waitress-serve --port=8000 --threads=16 config.wsgi:application
 ```
 
 `create_application()`'s return value is a plain WSGI callable, verified
@@ -29,15 +29,15 @@ higher is always better.
 ## ASGI: only if a view needs `async def`
 
 ```bash
-uvicorn project.asgi:application --workers 4 --host 0.0.0.0 --port 8000
-hypercorn project.asgi:application --workers 4 --bind 0.0.0.0:8000
+uvicorn config.asgi:application --workers 4 --host 0.0.0.0 --port 8000
+hypercorn config.asgi:application --workers 4 --bind 0.0.0.0:8000
 ```
 
 See [ASGI](asgi.md) for when to reach for this over WSGI.
 
 ## The Rust runtime
 
-`SERVER['ENGINE'] = 'rust'` is development/load-testing tooling, not a
+`Settings.server.engine = 'rust'` is development/load-testing tooling, not a
 production-server recommendation of its own &mdash; see
 [Rust runtime](rust-runtime.md) for the full scope and its benchmarked
 result against `waitress`.
@@ -46,19 +46,19 @@ result against `waitress`.
 
 A real deployment terminates TLS and HTTP/2 at a reverse proxy (nginx,
 a cloud load balancer) in front of whichever application server you
-chose above &mdash; `TRUST_PROXY_HEADERS`/`TRUSTED_PROXY_IPS` in
-[`SECURITY`](security.md) tell Mangoo to trust that proxy's
+chose above &mdash; `trust_proxy_headers`/`trusted_proxy_ips` in the
+[`security`](security.md) section tell Mangoo to trust that proxy's
 `X-Forwarded-*` headers for `request.is_secure` and `REMOTE_ADDR`.
 
 ## Before deployment
 
-- [ ] `SECRET_KEY` is a real, environment-provided secret &mdash; not the
+- [ ] `Settings.secret_key` is a real, environment-provided secret &mdash; not the
       scaffolded placeholder
-- [ ] `DEBUG = False`
-- [ ] `ALLOWED_HOSTS` is your real domain list, not empty or `["*"]`
-- [ ] `SECURITY["FORCE_HTTPS"] = True`
-- [ ] `python manage.py diagnose` reports nothing at `error` severity
-- [ ] `python manage.py migrationstatus` shows nothing pending
+- [ ] `Settings.debug = False`
+- [ ] `Settings.allowed_hosts` is your real domain list, not empty or `["*"]`
+- [ ] `Settings.security.force_https = True`
+- [ ] `python mango.py diagnose` reports nothing at `error` severity
+- [ ] `python mango.py migrationstatus` shows nothing pending
 
 ## Migration deployment and rollback
 

@@ -22,13 +22,13 @@ for the full column-type reference.
 ## 2. Generate and apply a migration
 
 ```bash
-python manage.py newmigration blog
-python manage.py applymigrations
+python mango.py newmigration blog
+python mango.py applymigrations
 ```
 
 This generates a checksummed migration file from `Post`'s columns and
 applies it &mdash; transactionally, so a failed migration never leaves a
-half-applied schema. `python manage.py migrationstatus` shows what's
+half-applied schema. `python mango.py migrationstatus` shows what's
 pending.
 
 ## 3. Write a view
@@ -57,7 +57,7 @@ when to reach for `.fetch()` instead).
 
 ## 4. Wire the routes
 
-```python title="apps/blog/urls.py"
+```python title="apps/blog/routes.py"
 from mangoo import api_route
 from .views import create_post, list_posts
 
@@ -76,7 +76,7 @@ schema to maintain.
 import unittest
 from mangoo.runtime import create_application
 from mangoo.testing import TestClient
-from .urls import urlpatterns
+from .routes import urlpatterns
 
 
 class PostTests(unittest.TestCase):

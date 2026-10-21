@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import re
 from collections import OrderedDict
-from datetime import datetime
-from typing import Any, ClassVar
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from .db import connect, connect_readonly, normalize_config
+
+if TYPE_CHECKING:
+    from .addons.signals import SignalBus
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -85,10 +88,29 @@ class Toggle(Column):
 
 
 class Timestamp(Text):
+    """Always timezone-aware UTC -- not Django's opt-in ``USE_TZ``, just
+    the only behavior this column has. Stored as a plain ISO string
+    (SQL-param-safe across every engine and Python version -- sqlite3's
+    implicit ``datetime`` adapters are deprecated since 3.12 and gone in
+    3.14, so a raw ``datetime`` object is never handed to a driver
+    directly); reading it back through attribute access (`__get__`)
+    parses it into an aware UTC `datetime`, whether the string just came
+    from coercing a freshly-set value or from a fetched database row --
+    one consistent Python-side type either way.
+    """
+
     def coerce(self, value):
         if isinstance(value, datetime):
-            value = value.isoformat()
+            aware = value.astimezone(timezone.utc) if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+            value = aware.isoformat()
         return super().coerce(value)
+
+    def __get__(self, instance, owner):
+        value = super().__get__(instance, owner)
+        if isinstance(value, str) and value:
+            parsed = datetime.fromisoformat(value)
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        return value
 
 
 class EntityMeta(type):
@@ -128,8 +150,14 @@ class Entity(metaclass=EntityMeta):
         return dict(self._values)
 
     @classmethod
-    def collection(cls, database) -> Collection:
-        return Collection(cls, database)
+    def collection(cls, database, *, signals: SignalBus | None = None) -> Collection:
+        """`signals`, when given a `SignalBus`, publishes
+        `"<entity>.created"`/`"<entity>.updated"`/`"<entity>.deleted"`
+        from `append`/`revise`/`erase` -- opt-in, matching this
+        codebase's "opt-in, not on by default" policy elsewhere
+        (`Hardening`), so every existing caller's behavior is unchanged
+        when omitted. See `docs/topics/signals.md`."""
+        return Collection(cls, database, signals=signals)
 
 
 def _identifier(value: str) -> str:
@@ -142,9 +170,12 @@ _PREPARED_TABLES: set[tuple] = set()
 
 
 class Collection:
-    def __init__(self, entity: type[Entity], database):
-        self.entity, self.database = entity, database
+    def __init__(self, entity: type[Entity], database, *, signals: SignalBus | None = None):
+        self.entity, self.database, self.signals = entity, database, signals
         _identifier(entity.__table__)
+
+    def _event(self, suffix: str) -> str:
+        return f"{self.entity.__name__.lower()}.{suffix}"
 
     def _prepared_key(self) -> tuple:
         config = normalize_config(self.database)
@@ -194,6 +225,8 @@ class Collection:
             cursor = connection.execute(query + (" RETURNING id" if connection.engine == "postgresql" else ""), tuple(data.values()))
             connection.commit()
             entity.id = cursor.fetchone()["id"] if connection.engine == "postgresql" else cursor.lastrowid
+            if self.signals is not None:
+                self.signals.publish(self._event("created"), data={"id": entity.id})
             return entity
         finally:
             connection.close()
@@ -209,11 +242,18 @@ class Collection:
 
 
 class Selection:
-    def __init__(self, collection: Collection, clauses=(), ordering=(), limit: int | None = None, offset: int = 0):
-        self.collection, self.clauses, self.ordering, self.limit, self.offset = collection, tuple(clauses), tuple(ordering), limit, offset
+    def __init__(self, collection: Collection, clauses=(), ordering=(), limit: int | None = None, offset: int = 0, search_clause: tuple[tuple[str, ...], str] | None = None):
+        self.collection, self.clauses, self.ordering, self.limit, self.offset, self._search_clause = collection, tuple(clauses), tuple(ordering), limit, offset, search_clause
 
     def _copy(self, **changes) -> Selection:
-        return Selection(self.collection, changes.get("clauses", self.clauses), changes.get("ordering", self.ordering), changes.get("limit", self.limit), changes.get("offset", self.offset))
+        return Selection(
+            self.collection,
+            changes.get("clauses", self.clauses),
+            changes.get("ordering", self.ordering),
+            changes.get("limit", self.limit),
+            changes.get("offset", self.offset),
+            changes.get("search_clause", self._search_clause),
+        )
 
     def match(self, **criteria) -> Selection:
         clauses = list(self.clauses)
@@ -228,6 +268,22 @@ class Selection:
                 raise EntityError(f"Unknown selection operator: {modifier}")
             clauses.append((name, operator, f"%{value}%" if modifier == "contains" else value))
         return self._copy(clauses=clauses)
+
+    def search(self, *fields: str, query: str) -> Selection:
+        """OR a `LIKE` match across `fields` -- a narrow, single-purpose
+        capability for admin's `search_fields`, not a general `Q()`/OR
+        composition system. Combines with `match()`'s clauses via AND
+        (`seek(published=True).search("title", "body", query="rust")`
+        means *both*). An empty `query` is a no-op, so a blank search
+        box doesn't filter anything out.
+        """
+        for field in fields:
+            _identifier(field)
+            if field not in self.collection.entity._columns:
+                raise EntityError(f"Unknown column: {field}")
+        if not query:
+            return self
+        return self._copy(search_clause=(fields, query))
 
     def arrange(self, *fields: str) -> Selection:
         ordering = []
@@ -244,12 +300,24 @@ class Selection:
             raise EntityError("window count must be positive and skip cannot be negative")
         return self._copy(limit=count, offset=skip)
 
+    def _where(self) -> tuple[str, tuple]:
+        """Build just the `WHERE ...` clause (text + bind values, no
+        `ORDER BY`/`LIMIT`) -- shared by `_sql()` (which appends those)
+        and `revise()`/`erase()` (which never need them)."""
+        conditions = [f"{_identifier(name)} {operator} ?" for name, operator, _ in self.clauses]
+        values: list[Any] = [value for _, _, value in self.clauses]
+        if self._search_clause is not None:
+            search_fields, search_query = self._search_clause
+            conditions.append("(" + " OR ".join(f"{_identifier(field)} LIKE ?" for field in search_fields) + ")")
+            values.extend(f"%{search_query}%" for _ in search_fields)
+        if not conditions:
+            return "", ()
+        return " WHERE " + " AND ".join(conditions), tuple(values)
+
     def _sql(self, fields: str = "*") -> tuple[str, tuple]:
         table = _identifier(self.collection.entity.__table__)
-        query, values = f"SELECT {fields} FROM {table}", list[Any]()
-        if self.clauses:
-            query += " WHERE " + " AND ".join(f"{_identifier(name)} {operator} ?" for name, operator, _ in self.clauses)
-            values.extend(value for _, _, value in self.clauses)
+        where_sql, where_values = self._where()
+        query, values = f"SELECT {fields} FROM {table}{where_sql}", list(where_values)
         if self.ordering:
             query += " ORDER BY " + ", ".join(f"{_identifier(name)} {direction}" for name, direction in self.ordering)
         if self.limit is not None:
@@ -320,13 +388,18 @@ class Selection:
         self.collection.prepare()
         connection = connect(self.collection.database)
         try:
-            query = f"UPDATE {_identifier(self.collection.entity.__table__)} SET " + ", ".join(f"{_identifier(name)} = ?" for name in values)
-            where, criteria = self._sql()[0].partition(" WHERE ")[2], self._sql()[1]
-            if where:
-                where = where.split(" ORDER BY ")[0].split(" LIMIT ")[0]
-                query += " WHERE " + where
-            cursor = connection.execute(query, tuple(values.values()) + tuple(criteria[: len(self.clauses)]))
+            where_sql, where_values = self._where()
+            query = f"UPDATE {_identifier(self.collection.entity.__table__)} SET " + ", ".join(f"{_identifier(name)} = ?" for name in values) + where_sql
+            cursor = connection.execute(query, tuple(values.values()) + where_values)
             connection.commit()
+            if self.collection.signals is not None and cursor.rowcount:
+                # Field *names* set, not a true before/after diff -- a
+                # per-row fetch to compute one would cost an extra
+                # SELECT for every revise() call, for a Selection that
+                # may touch many rows at once. admin.py can afford a
+                # real diff because it already has one record loaded
+                # for its edit form; this is the general-purpose path.
+                self.collection.signals.publish(self.collection._event("updated"), data={"fields": sorted(values), "count": cursor.rowcount})
             return cursor.rowcount
         finally:
             connection.close()
@@ -335,13 +408,12 @@ class Selection:
         self.collection.prepare()
         connection = connect(self.collection.database)
         try:
-            query = f"DELETE FROM {_identifier(self.collection.entity.__table__)}"
-            values = ()
-            if self.clauses:
-                query += " WHERE " + " AND ".join(f"{_identifier(name)} {operator} ?" for name, operator, _ in self.clauses)
-                values = tuple(value for _, _, value in self.clauses)
-            cursor = connection.execute(query, values)
+            where_sql, where_values = self._where()
+            query = f"DELETE FROM {_identifier(self.collection.entity.__table__)}{where_sql}"
+            cursor = connection.execute(query, where_values)
             connection.commit()
+            if self.collection.signals is not None and cursor.rowcount:
+                self.collection.signals.publish(self.collection._event("deleted"), data={"count": cursor.rowcount})
             return cursor.rowcount
         finally:
             connection.close()

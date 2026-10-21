@@ -1,7 +1,7 @@
 """ASGI 3.0 application support -- additive to the WSGI runtime in ``runtime.py``.
 
-Deploy under an ASGI server: ``uvicorn project.asgi:application`` or
-``hypercorn project.asgi:application``. This is a second transport for the
+Deploy under an ASGI server: ``uvicorn config.asgi:application`` or
+``hypercorn config.asgi:application``. This is a second transport for the
 *same* ``Route``/``Request``/``Response``/``Hardening``/Signals/Metrics
 objects the WSGI path already uses -- nothing here changes
 ``create_application`` or the WSGI-only ``wsgiref``/gunicorn/waitress
@@ -31,6 +31,7 @@ from uuid import uuid4
 
 from . import db
 from .hardening import Hardening, HardeningOptions
+from .middleware import build_chain
 from .request import Request
 from .response import Response, json_response
 from .swagger import documentation_routes
@@ -228,6 +229,7 @@ def create_asgi_application(
     pool_connections: bool = False,
     max_sync_workers: int = 16,
     websocket_patterns: list[WebSocketRoute] | None = None,
+    middleware: list | None = None,
 ):
     """Build the ASGI application for a route list.
 
@@ -271,6 +273,14 @@ def create_asgi_application(
     ``hardening``'s ``allowed_hosts``/``allowed_origins`` to reject
     cross-origin WebSocket connections the same way HTTP requests already
     are, if either is configured.
+
+    ``middleware``, when given a list of already-resolved middleware
+    factories (``mangoo.middleware.load_middleware(Settings.middleware)``),
+    wraps route matching and the view call for HTTP requests the same way
+    ``runtime.create_application`` does -- after hardening, before the
+    matched view. A middleware's returned handler must be ``async def``
+    here (check ``inspect.iscoroutinefunction`` if it needs to support
+    both transports); it does not apply to WebSocket connections.
     """
     if pulse is not None:
         warnings.warn("`pulse=` is deprecated; use `signals=` instead.", DeprecationWarning, stacklevel=2)
@@ -286,6 +296,36 @@ def create_asgi_application(
     hardening_layer = Hardening(hardening) if hardening else None
     available_routes_html = _available_routes_html(route_list) if debug else ""
 
+    def _match(requested: str):
+        route = routes.get(requested)
+        if route is None:
+            route = next((item for item in wildcard_routes if requested.startswith(item.pattern.removesuffix("/<path>") + "/")), None)
+        return route
+
+    async def _dispatch(request) -> Response:
+        """Route matching, the view call, and error handling -- the one
+        part of the pipeline a middleware chain wraps. Hardening's
+        reject/preflight checks happen in the caller, before this is
+        reached, and can't be bypassed by a middleware here."""
+        requested = request.path.strip("/")
+        route = _match(requested)
+        if route is None:
+            not_found_body = f"<h1>404 Not Found</h1><p>No route matches '/{html.escape(requested)}'.</p>{available_routes_html}" if debug else "<h1>404 Not Found</h1>"
+            return Response(not_found_body, status=404)
+        if request.method not in route.methods:
+            return Response("<h1>405 Method Not Allowed</h1>", status=405, headers=(("Allow", ", ".join(route.methods)),))
+        try:
+            if inspect.iscoroutinefunction(route.view):
+                result = await route.view(request)
+            else:
+                result = await asyncio.get_running_loop().run_in_executor(sync_executor, route.view, request)
+            return result if isinstance(result, Response) else Response(str(result))
+        except Exception as exc:
+            LOGGER.exception("Unhandled request error path=%s", request.path)
+            return _error_response(route, exc, debug=debug)
+
+    dispatch = build_chain(middleware or (), _dispatch)
+
     async def application(scope: dict, receive, send) -> None:
         if scope["type"] == "lifespan":
             await _handle_lifespan(receive, send)
@@ -300,9 +340,7 @@ def create_asgi_application(
 
         started_at = perf_counter()
         requested = scope.get("path", "/").strip("/")
-        route = routes.get(requested)
-        if route is None:
-            route = next((item for item in wildcard_routes if requested.startswith(item.pattern.removesuffix("/<path>") + "/")), None)
+        route = _match(requested)
 
         size_rejection = hardening_layer.reject_content_length(_declared_content_length(scope)) if hardening_layer else None
         body = b"" if size_rejection is not None else await _read_body(receive)
@@ -317,21 +355,8 @@ def create_asgi_application(
             response = rejection
         elif preflight is not None:
             response = preflight
-        elif route is None:
-            not_found_body = f"<h1>404 Not Found</h1><p>No route matches '/{html.escape(requested)}'.</p>{available_routes_html}" if debug else "<h1>404 Not Found</h1>"
-            response = Response(not_found_body, status=404)
-        elif request.method not in route.methods:
-            response = Response("<h1>405 Method Not Allowed</h1>", status=405, headers=(("Allow", ", ".join(route.methods)),))
         else:
-            try:
-                if inspect.iscoroutinefunction(route.view):
-                    result = await route.view(request)
-                else:
-                    result = await asyncio.get_running_loop().run_in_executor(sync_executor, route.view, request)
-                response = result if isinstance(result, Response) else Response(str(result))
-            except Exception as exc:
-                LOGGER.exception("Unhandled request error path=%s", request.path)
-                response = _error_response(route, exc, debug=debug)
+            response = await dispatch(request)
         duration_ms = (perf_counter() - started_at) * 1000
         if signals is not None:
             signals.publish("request.finished", data={"method": request.method, "path": request.path, "status": response.status, "duration_ms": round(duration_ms, 2)})

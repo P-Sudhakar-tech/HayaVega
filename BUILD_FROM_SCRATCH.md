@@ -1,6 +1,6 @@
 # Mangoo: build-from-scratch guide
 
-Mangoo is a Django-inspired web framework experiment. Its application-facing syntax is Python-like, while its intended high-throughput runtime is Rust through PyO3 native bindings.
+Mangoo is an early web framework experiment with its own conventional project structure. Its application-facing syntax is Python-like, while its intended high-throughput runtime is Rust through PyO3 native bindings.
 
 This guide describes the project as it exists today, how to run it from a clean machine, and how to extend it safely.
 
@@ -8,9 +8,9 @@ This guide describes the project as it exists today, how to run it from a clean 
 
 | Area | Current state |
 |---|---|
-| Project and app scaffolding | Implemented: `newproject`, `newapp`, `manage.py` layout (`startproject`/`startapp` still work as deprecated aliases) |
+| Project and app scaffolding | Implemented: `newproject`, `newapp`, `mango.py` layout (`startproject`/`startapp` still work as deprecated aliases) |
 | Development server | Implemented: WSGI server, route dispatch, autoreload, `Ctrl+C` shutdown |
-| Settings | Implemented: Django-like `settings.py`, typed loader, structured database/server settings |
+| Settings | Implemented: a conventional `settings.py`, typed loader, structured database/server settings |
 | REST | Implemented: JSON routes, method checks, example health endpoint |
 | GraphQL | Implemented: arguments, variables, nested selections, mutations, depth/field limits, off-by-default introspection |
 | UI framework | Implemented: `mangoo.ui` server-rendered components and a first-party `mangoo-ui.js` hypermedia runtime (`hx-*` swaps, `mgo-boost` routing), no build step; no client-side reactive/signals layer in this version; a Node.js/npm-based SPA framework (JSX, virtual DOM, bundler) is not yet scoped |
@@ -106,7 +106,7 @@ With the environment active:
 ```powershell
 mango newproject mysite
 cd mysite
-python manage.py newapp blog
+python mango.py newapp blog
 mango launch 8000
 ```
 
@@ -114,45 +114,51 @@ Generated projects have this shape:
 
 ```text
 mysite/
-|- manage.py
-|- project/
+|- mango.py
+|- config/
 |  |- settings.py
-|  `- urls.py
+|  `- routes.py
 `- blog/
    |- views.py
-   |- urls.py
+   |- routes.py
    |- models.py
    `- migrations/
 ```
 
 ## 7. Project settings
 
-`project/settings.py` intentionally resembles Django but uses Mangoo-specific runtime sections.
+`config/settings.py` is a single `Settings` class with explicit, typed sections, rather than Django's flat `ALL_CAPS` module globals or configuration scattered across the codebase.
 
 ```python
 from pathlib import Path
 import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = os.getenv("MANGOO_SECRET_KEY", "change-this-in-production")
-DEBUG = os.getenv("MANGOO_DEBUG", "true").lower() == "true"
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
-INSTALLED_APPS = []
-MIDDLEWARE = []
-ROOT_URLCONF = "project.urls"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "sqlite3",
-        "NAME": BASE_DIR / "mangoo.sqlite3",
-    },
-}
+class Settings:
+    base_dir = BASE_DIR
+    secret_key = os.getenv("MANGOO_SECRET_KEY", "change-this-in-production")
+    debug = os.getenv("MANGOO_DEBUG", "true").lower() == "true"
+    allowed_hosts = ["127.0.0.1", "localhost"]
 
-SERVER = {"HOST": "127.0.0.1", "PORT": 8000}
+    installed_apps = []
+    middleware = []
+    root_urlconf = "config.routes"
+
+    class database:
+        engine = "sqlite3"
+        name = BASE_DIR / "mangoo.sqlite3"
+
+    class server:
+        host = "127.0.0.1"
+        port = 8000
+
+
+settings = Settings()
 ```
 
-Never commit a production `SECRET_KEY` or database password. Use environment variables.
+`mangoo.conf.load_settings()` imports `config.settings`, validates `settings`, and returns a `ProjectSettings` with everything resolved (`settings.database`, `settings.server_port`, etc.) -- the same object `config/wsgi.py`, `config/asgi.py`, and every `mango.py` command already load. Never commit a production `Settings.secret_key` or database password. Use environment variables.
 
 ## 8. REST APIs
 
@@ -293,8 +299,8 @@ measurement and a worked example.
 ### Create a superuser
 
 ```powershell
-python manage.py createadmin
-python manage.py enable2fa admin
+python mango.py createadmin
+python mango.py enable2fa admin
 ```
 
 `enable2fa` prints a TOTP secret. Add it to an authenticator app and keep it private.
@@ -315,12 +321,15 @@ Successful login also sets a host-only, `HttpOnly`, `SameSite=Lax` `mangoo_sessi
 
 ### Permissions and admin base
 
-Use `login_required`, `superuser_required`, or `permission_required` to protect a view. The built-in admin base can be enabled with `*admin_routes(DATABASES['default'])`; it always provides administrator-only `/admin` and `/admin/users` pages, and can additionally manage your own entities. Authenticate the browser session first by calling the login endpoint.
+Use `login_required`, `superuser_required`, or `permission_required` to protect a view. The built-in admin base can be enabled with `*admin_routes(_settings.database)`; it always provides administrator-only `/admin` and `/admin/users` pages, and can additionally manage your own entities. Authenticate the browser session first by calling the login endpoint.
 
 ```python
 from mangoo import admin_routes, login_required, path
 from mangoo.admin import ModelAdmin
+from mangoo.conf import load_settings
 from mangoo.models import Entity, Integer, Text
+
+_settings = load_settings()
 
 
 class Product(Entity):
@@ -328,14 +337,14 @@ class Product(Entity):
     price = Integer()
 
 
-@login_required(DATABASES["default"])
+@login_required(_settings.database)
 def account(request):
     return {"detail": "private"}
 
 
 urlpatterns = [
     path("account", account),
-    *admin_routes(DATABASES["default"], models=[ModelAdmin(Product)]),
+    *admin_routes(_settings.database, models=[ModelAdmin(Product)]),
 ]
 ```
 
@@ -360,7 +369,9 @@ elsewhere.
 No additional driver is needed:
 
 ```python
-DATABASES = {"default": {"ENGINE": "sqlite3", "NAME": BASE_DIR / "mangoo.sqlite3"}}
+class database:
+    engine = "sqlite3"
+    name = BASE_DIR / "mangoo.sqlite3"
 ```
 
 ### PostgreSQL
@@ -370,16 +381,13 @@ uv add "psycopg[binary]"
 ```
 
 ```python
-DATABASES = {
-    "default": {
-        "ENGINE": "postgresql",
-        "NAME": "mangoo",
-        "HOST": "localhost",
-        "PORT": 5432,
-        "USER": "mangoo",
-        "PASSWORD": os.getenv("MANGOO_DATABASE_PASSWORD"),
-    }
-}
+class database:
+    engine = "postgresql"
+    name = "mangoo"
+    host = "localhost"
+    port = 5432
+    user = "mangoo"
+    password = os.getenv("MANGOO_DATABASE_PASSWORD")
 ```
 
 ### MySQL or MariaDB
@@ -392,17 +400,16 @@ uv add pymysql cryptography
 default `caching_sha2_password` plugin -- every connection fails without it.
 
 ```python
-DATABASES = {
-    "default": {
-        "ENGINE": "mysql",
-        "NAME": "mangoo",
-        "HOST": "localhost",
-        "PORT": 3306,
-        "USER": "mangoo",
-        "PASSWORD": os.getenv("MANGOO_DATABASE_PASSWORD"),
-    }
-}
+class database:
+    engine = "mysql"
+    name = "mangoo"
+    host = "localhost"
+    port = 3306
+    user = "mangoo"
+    password = os.getenv("MANGOO_DATABASE_PASSWORD")
 ```
+
+Each of these is the `database` section inside `class Settings:` in `config/settings.py`.
 
 SQLite is fully exercised by the existing test suite. PostgreSQL and MySQL/MariaDB use the adapter and require integration testing against real servers before production use.
 
@@ -464,32 +471,31 @@ The test suite covers routing, REST, GraphQL starter behavior, authentication, T
 
 ## 16. Production checklist
 
-- Configure a `SECURITY` section in `settings.py`. Mangoo applies trusted-host validation, security headers, structured audit logs, an explicit CORS allow-list, and an in-memory per-client/per-path rate limit through this configuration.
-- Keep `ALLOWED_ORIGINS` empty unless a browser application must call the API from another origin. Never use a wildcard for authenticated browser APIs.
+- Configure a `security` section in `class Settings:`. Mangoo applies trusted-host validation, security headers, structured audit logs, an explicit CORS allow-list, and an in-memory per-client/per-path rate limit through this configuration.
+- Keep `allowed_origins` empty unless a browser application must call the API from another origin. Never use a wildcard for authenticated browser APIs.
 - The bundled rate limiter is process-local. Replace or complement it with a shared edge or Redis-backed limiter when running more than one server process.
 - Use PostgreSQL or another externally managed production database.
 - Set a unique, secret `MANGOO_SECRET_KEY`.
 - Set `MANGOO_DEBUG=false`.
 - Use HTTPS and a reverse proxy.
-- Store database credentials and TOTP encryption material in a secret manager.
+- Store database credentials in a secret manager. `Settings.secret_key` itself doubles as TOTP-encryption-at-rest key material when `cryptography` is installed (`uv add cryptography`) and passed to `enable_totp`/`authenticate`/`auth_routes` as `secret_key=` -- see [Authentication](docs/topics/auth.md#two-factor-authentication-totp) -- so treat it with the same care as a database password, not as a throwaway string.
 - Enable `secure_cookies=True` for session and CSRF cookies when serving HTTPS. Add CORS rules, audit logs, password reset, email verification, and rate limiting at the edge.
 - Perform database-specific integration tests and a security review.
 
 Example hardening configuration:
 
 ```python
-SECURITY = {
-    "ALLOWED_ORIGINS": ["https://app.example.com"],
-    "RATE_LIMIT": 120,
-    "RATE_WINDOW_SECONDS": 60,
-    "SECURITY_HEADERS": True,
-    "FORCE_HTTPS": True,
-    "TRUST_PROXY_HEADERS": True,  # only behind your trusted reverse proxy
-    "MAX_REQUEST_BYTES": 1_048_576,
-}
+class security:
+    allowed_origins = ["https://app.example.com"]
+    rate_limit = 120
+    rate_window_seconds = 60
+    security_headers = True
+    force_https = True
+    trust_proxy_headers = True  # only behind your trusted reverse proxy
+    max_request_bytes = 1_048_576
 ```
 
-The runtime rejects requests whose `Host` is not in `ALLOWED_HOSTS`, rejects oversized request bodies before reading them, responds to trusted CORS preflight requests, and adds CSP, frame, MIME-sniffing, referrer-policy, permissions-policy, and cross-origin isolation headers. `FORCE_HTTPS` redirects plain HTTP and enables HSTS on secure requests. Set `TRUST_PROXY_HEADERS` only when a trusted reverse proxy removes client-supplied forwarding headers. Audit records are emitted to the `mangoo.audit` logger without request bodies, credentials, or query strings.
+The runtime rejects requests whose `Host` is not in `Settings.allowed_hosts`, rejects oversized request bodies before reading them, responds to trusted CORS preflight requests, and adds CSP, frame, MIME-sniffing, referrer-policy, permissions-policy, and cross-origin isolation headers. `force_https` redirects plain HTTP and enables HSTS on secure requests. Set `trust_proxy_headers` only when a trusted reverse proxy removes client-supplied forwarding headers. Audit records are emitted to the `mangoo.audit` logger without request bodies, credentials, or query strings.
 
 ## 17. Current limitations
 

@@ -4,7 +4,7 @@
 mindmap
   root((Mangoo))
     Purpose
-      Django-like Python web framework
+      Python web framework with its own conventional structure
       Rust core and optional native extensions
       Dependency-light application development
     Application layer

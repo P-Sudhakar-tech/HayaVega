@@ -7,19 +7,19 @@ one-thread-per-request model can't overlap as cheaply.
 
 ## Setup
 
-```python title="project/asgi.py"
+```python title="config/asgi.py"
 from mangoo.asgi import create_asgi_application
-from .urls import urlpatterns
+from .routes import urlpatterns
 
 application = create_asgi_application(urlpatterns, api_title="My API", api_version="1.0.0")
 ```
 
 ```bash
-uvicorn project.asgi:application --host 0.0.0.0 --port 8000
+uvicorn config.asgi:application --host 0.0.0.0 --port 8000
 ```
 
 `mango newproject` scaffolds this file automatically alongside
-`project/wsgi.py`.
+`config/wsgi.py`.
 
 ## Sync and async views, unmodified
 

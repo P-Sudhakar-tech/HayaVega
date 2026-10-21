@@ -1,6 +1,6 @@
 """Proactive diagnostics for a Mangoo project.
 
-`mango diagnose` / `manage.py diagnose` reports unsafe settings, use of
+`mango diagnose` / `mango.py diagnose` reports unsafe settings, use of
 deprecated (Pulse-era) APIs, and pending migrations before a developer
 hits any of them at runtime -- the same category of tool Django's own
 `manage.py check` provides, under a name that doesn't collide with it
@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import crypto
 from .migrations import migration_directories
 from .migrations import status as migration_status
 
@@ -70,34 +71,40 @@ def _settings_checks(settings) -> list[CheckMessage]:
     module_name = getattr(settings, "module_name", "your settings module")
     debug = bool(getattr(settings, "debug", False))
     if debug:
-        messages.append(CheckMessage("warning", "DEBUG is enabled.", f"Set DEBUG = False in {module_name} before deploying to production."))
+        messages.append(CheckMessage("warning", "DEBUG is enabled.", f"Set Settings.debug = False in {module_name} before deploying to production."))
     secret_key = getattr(settings, "secret_key", "")
     if not secret_key or secret_key in {"change-this-in-production", "changeme", "secret"}:
-        messages.append(CheckMessage("error" if not debug else "warning", "SECRET_KEY is unset or a known placeholder value.", f"Set SECRET_KEY to a unique, environment-provided value in {module_name}."))
+        messages.append(CheckMessage("error" if not debug else "warning", "SECRET_KEY is unset or a known placeholder value.", f"Set Settings.secret_key to a unique, environment-provided value in {module_name}."))
     allowed_hosts = getattr(settings, "allowed_hosts", ())
     if not debug and (not allowed_hosts or "*" in allowed_hosts):
-        messages.append(CheckMessage("error", "ALLOWED_HOSTS is empty or allows any host.", f"Set ALLOWED_HOSTS to your real domain(s) in {module_name}."))
+        messages.append(CheckMessage("error", "ALLOWED_HOSTS is empty or allows any host.", f"Set Settings.allowed_hosts to your real domain(s) in {module_name}."))
     security = getattr(settings, "security", {})
     if not debug and not security.get("FORCE_HTTPS", False):
-        messages.append(CheckMessage("warning", "SECURITY['FORCE_HTTPS'] is not enabled.", f"Set SECURITY['FORCE_HTTPS'] = True in {module_name} for production."))
+        messages.append(CheckMessage("warning", "SECURITY['FORCE_HTTPS'] is not enabled.", f"Set Settings.security.force_https = True in {module_name} for production."))
     if not debug and not security.get("SECURE_COOKIES", False):
-        messages.append(CheckMessage("warning", "SECURITY['SECURE_COOKIES'] is not enabled.", f"Set SECURITY['SECURE_COOKIES'] = True in {module_name} for production."))
+        messages.append(CheckMessage("warning", "SECURITY['SECURE_COOKIES'] is not enabled.", f"Set Settings.security.secure_cookies = True in {module_name} for production."))
     return messages
+
+
+def _crypto_checks() -> list[CheckMessage]:
+    if crypto.available():
+        return []
+    return [CheckMessage("info", "`cryptography` is not installed; any `enable_totp()` secret is stored in plaintext instead of encrypted.", "Run `uv add cryptography` (or `pip install cryptography`) to encrypt TOTP secrets at rest.")]
 
 
 def _pending_migration_checks(settings) -> list[CheckMessage]:
     try:
         records = migration_status(settings.database, migration_directories(settings))
     except Exception as error:
-        return [CheckMessage("error", f"Could not determine migration status: {error}", "Verify DATABASES['default'] in your settings module is reachable.")]
+        return [CheckMessage("error", f"Could not determine migration status: {error}", "Verify Settings.database in your settings module is reachable.")]
     pending = [record.name for record in records if not record.applied]
     if not pending:
         return []
-    return [CheckMessage("warning", f"{len(pending)} pending migration(s): {', '.join(pending)}.", "Run `manage.py applymigrations` to apply them.")]
+    return [CheckMessage("warning", f"{len(pending)} pending migration(s): {', '.join(pending)}.", "Run `mango.py applymigrations` to apply them.")]
 
 
 def run_checks(settings) -> list[CheckMessage]:
     """Run every proactive diagnostic and return the findings, most severe first."""
-    messages = [*_settings_checks(settings), *_pending_migration_checks(settings), *_scan_deprecated_usage(Path(getattr(settings, "base_dir", ".")))]
+    messages = [*_settings_checks(settings), *_crypto_checks(), *_pending_migration_checks(settings), *_scan_deprecated_usage(Path(getattr(settings, "base_dir", ".")))]
     order = {"error": 0, "warning": 1, "info": 2}
     return sorted(messages, key=lambda message: order.get(message.level, 3))

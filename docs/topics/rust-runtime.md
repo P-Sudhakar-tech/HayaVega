@@ -6,12 +6,15 @@ install or run.
 
 ## Enabling it
 
-```python title="project/settings.py"
-SERVER = {"HOST": "127.0.0.1", "PORT": 8000, "ENGINE": "rust"}  # default: "python"
+```python title="config/settings.py"
+class server:
+    host = "127.0.0.1"
+    port = 8000
+    engine = "rust"  # default: "python"
 ```
 
 ```bash
-python manage.py launch
+python mango.py launch
 ```
 
 If `mangoo_native` wasn't built for this install, `mango launch` reports
@@ -43,12 +46,17 @@ unchanged Python request-handling code via the standard WSGI contract.
 
 ## TLS
 
-```python title="project/settings.py"
-SERVER = {"HOST": "127.0.0.1", "PORT": 8443, "ENGINE": "rust", "TLS_CERT": "cert.pem", "TLS_KEY": "key.pem"}
+```python title="config/settings.py"
+class server:
+    host = "127.0.0.1"
+    port = 8443
+    engine = "rust"
+    tls_cert = "cert.pem"
+    tls_key = "key.pem"
 ```
 
 Uses `rustls` (the `ring` crypto provider). Both settings must be
-provided together, and are only accepted with `SERVER['ENGINE'] = 'rust'`
+provided together, and are only accepted with `Settings.server.engine = 'rust'`
 &mdash; rejected under the Python engine rather than silently ignored,
 since that would otherwise be a real security footgun (expecting HTTPS,
 silently getting plaintext). Overhead is modest (roughly 0&ndash;12%
