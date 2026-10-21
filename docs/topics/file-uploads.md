@@ -34,7 +34,7 @@ file, if more than one was submitted under the same field name.
 fields, exactly like it already does for urlencoded forms:
 
 ```python
-request.form()   # {"title": "My photo"}
+request.form()  # {"title": "My photo"}
 request.files()  # {"avatar": UploadedFile(...)}
 ```
 

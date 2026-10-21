@@ -49,7 +49,10 @@ entirely:
 from mangoo.auth import common_password_validator, create_user, min_length_validator
 
 create_user(
-    DATABASE, "alice", "alice@example.com", "a-different-policy-pw",
+    DATABASE,
+    "alice",
+    "alice@example.com",
+    "a-different-policy-pw",
     validators=[min_length_validator(8), common_password_validator(["password123", "qwerty123456"])],
 )
 ```

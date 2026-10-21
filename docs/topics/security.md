@@ -8,6 +8,7 @@ standard every request path in Mangoo is held to.
 ```python title="config/settings.py"
 import os
 
+
 class Settings:
     secret_key = os.getenv("MANGOO_SECRET_KEY", "change-this-in-production")
 ```
