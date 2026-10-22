@@ -13,7 +13,7 @@ import unittest
 import uuid
 from unittest.mock import patch
 
-from mangoo.cache import CacheBackendError, RedisCache
+from mangoo.cache import CacheBackendError, RedisCache, cache_from_settings
 
 
 class RedisCacheMissingDependencyTests(unittest.TestCase):
@@ -84,6 +84,13 @@ class RedisCacheIntegrationTests(unittest.TestCase):
         self.assertEqual(self.cache.get_or_set("key", factory), "computed")
         self.assertEqual(self.cache.get_or_set("key", factory), "computed")
         self.assertEqual(len(calls), 1)
+
+    def test_cache_from_settings_builds_a_working_redis_cache(self):
+        cache = cache_from_settings({"BACKEND": "redis", "REDIS_URL": self.redis_url, "KEY_PREFIX": self.prefix})
+        self.addCleanup(cache.clear)
+        cache.set("key", "built from settings")
+        self.assertEqual(cache.get("key"), "built from settings")
+        self.assertEqual(cache.get("key"), self.cache.get("key"))  # same prefix as self.cache -> shared keyspace
 
 
 if __name__ == "__main__":

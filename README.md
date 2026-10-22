@@ -280,6 +280,24 @@ else. Nothing invalidates a cached entry except its `ttl` expiring or an
 explicit `cache.delete()`/`cache.clear()` call, so pick `ttl` deliberately
 for data that changes.
 
+Build a cache from `Settings.cache` instead of hardcoding a backend:
+
+```python title="config/settings.py"
+class Settings:
+    class cache:
+        backend = "redis"  # "in_memory" (default) or "redis"
+        redis_url = "redis://cache.internal:6379/0"
+        default_ttl = 300
+```
+
+```python
+from mangoo.cache import cache_from_settings
+
+cache = cache_from_settings(settings.cache)
+```
+
+See [Caching](docs/topics/caching.md) for the full option list.
+
 ## Observability
 
 Every response carries an `X-Request-ID`; a valid incoming ID is preserved,

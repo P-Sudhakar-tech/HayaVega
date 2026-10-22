@@ -161,6 +161,22 @@ class RedisCache:
         return value
 
 
+def cache_from_settings(cache: dict):
+    """Build the cache backend `Settings.cache` configures.
+
+    ``cache["BACKEND"]`` selects ``"in_memory"`` (default) or ``"redis"``.
+    ``MAX_ENTRIES``/``DEFAULT_TTL`` apply to the in-memory backend;
+    ``REDIS_URL``/``DEFAULT_TTL``/``KEY_PREFIX`` apply to the Redis one --
+    the same `backend_from_settings()` shape `mangoo.mail` already uses.
+    """
+    backend = str(cache.get("BACKEND", "in_memory")).lower()
+    if backend == "in_memory":
+        return InMemoryCache(max_entries=int(cache.get("MAX_ENTRIES", 10_000)), default_ttl=cache.get("DEFAULT_TTL"))
+    if backend == "redis":
+        return RedisCache(redis_url=cache.get("REDIS_URL", "redis://localhost:6379/0"), default_ttl=cache.get("DEFAULT_TTL"), key_prefix=cache.get("KEY_PREFIX", "mangoo:cache:"))
+    raise ValueError(f"Settings.cache.backend must be 'in_memory' or 'redis' -- got {backend!r}.")
+
+
 def _default_cache_key(request: Request) -> str:
     return f"{request.path}?{request.raw_query}"
 

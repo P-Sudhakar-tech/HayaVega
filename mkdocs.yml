@@ -124,6 +124,7 @@ nav:
       - File uploads: topics/file-uploads.md
       - Email: topics/email.md
       - Messages: topics/messages.md
+      - Caching: topics/caching.md
       - Authentication: topics/auth.md
       - Admin: topics/admin.md
       - Templates: topics/templates.md

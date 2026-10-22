@@ -84,6 +84,16 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.security["FORCE_HTTPS"], True)
         self.assertEqual(settings.security["CUSTOM_FLAG"], "x")
 
+    def test_cache_section_passes_through_to_the_uppercase_dict_cache_from_settings_consumes(self):
+        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={}, cache={"backend": "redis", "redis_url": "redis://cache.internal:6379/1"})
+        settings = load_settings_from_module(module)
+        self.assertEqual(settings.cache["BACKEND"], "redis")
+        self.assertEqual(settings.cache["REDIS_URL"], "redis://cache.internal:6379/1")
+
+    def test_cache_section_defaults_to_empty_when_unset(self):
+        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={})
+        self.assertEqual(load_settings_from_module(module).cache, {})
+
 
 class LoadDatabaseTests(unittest.TestCase):
     """A project with more than one database (e.g. a secondary 'analytics'

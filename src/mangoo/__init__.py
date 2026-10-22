@@ -29,6 +29,7 @@ from .auth import (
     validate_password,
     verify_email,
 )
+from .cache import CacheBackendError, InMemoryCache, RedisCache, cache_from_settings, cached_view
 from .collections import MangoList, mango_list
 from .forms import BooleanField, CharField, DecimalField, EmailField, Field, Form, IntegerField, entity_form
 from .hardening import HardeningOptions
@@ -56,6 +57,7 @@ from .uploads import save_uploaded_file
 __all__ = [
     "AsyncTestClient",
     "BooleanField",
+    "CacheBackendError",
     "CharField",
     "ConsoleEmailBackend",
     "Decimal",
@@ -70,6 +72,7 @@ __all__ = [
     "Form",
     "Group",
     "HardeningOptions",
+    "InMemoryCache",
     "Integer",
     "IntegerField",
     "JsonFormatter",
@@ -78,6 +81,7 @@ __all__ = [
     "Message",
     "MetricsRegistry",
     "ModelAdmin",
+    "RedisCache",
     "Response",
     "SMTPEmailBackend",
     "Serializer",
@@ -96,6 +100,8 @@ __all__ = [
     "authenticate",
     "authenticate_session",
     "backend_from_settings",
+    "cache_from_settings",
+    "cached_view",
     "common_password_validator",
     "configure_logging",
     "consume_messages",

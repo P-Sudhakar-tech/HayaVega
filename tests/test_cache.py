@@ -3,7 +3,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from mangoo.cache import CacheBackendError, InMemoryCache, RedisCache, cached_view
+from mangoo.cache import CacheBackendError, InMemoryCache, RedisCache, cache_from_settings, cached_view
 from mangoo.response import Response, json_response
 
 
@@ -107,6 +107,29 @@ class RedisCacheMissingDependencyTests(unittest.TestCase):
         with patch.dict(sys.modules, {"redis": None}):
             with self.assertRaises(CacheBackendError):
                 RedisCache()
+
+
+class CacheFromSettingsTests(unittest.TestCase):
+    def test_defaults_to_in_memory(self):
+        self.assertIsInstance(cache_from_settings({}), InMemoryCache)
+
+    def test_in_memory_backend_honors_max_entries_and_default_ttl(self):
+        cache = cache_from_settings({"BACKEND": "in_memory", "MAX_ENTRIES": 5, "DEFAULT_TTL": 30})
+        self.assertEqual(cache.max_entries, 5)
+        self.assertEqual(cache.default_ttl, 30)
+
+    def test_redis_backend_is_attempted_with_the_configured_url_and_prefix(self):
+        """Confirms the dict -> kwargs plumbing reaches RedisCache correctly
+        without requiring the real `redis` package -- the missing-dependency
+        path (CacheBackendError) still proves the right branch ran, since a
+        wrong branch would raise something else (KeyError, TypeError)."""
+        with patch.dict(sys.modules, {"redis": None}):
+            with self.assertRaises(CacheBackendError):
+                cache_from_settings({"BACKEND": "redis", "REDIS_URL": "redis://cache.internal:6379/1"})
+
+    def test_rejects_an_unknown_backend(self):
+        with self.assertRaisesRegex(ValueError, "in_memory.*redis"):
+            cache_from_settings({"BACKEND": "memcached"})
 
 
 class CachedViewTests(unittest.TestCase):

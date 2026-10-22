@@ -26,6 +26,7 @@ class ProjectSettings:
     security: dict
     job_handlers: dict
     email: dict
+    cache: dict
     commands: dict
     password_validators: tuple[str, ...]
     module_name: str = "config.settings"
@@ -141,6 +142,7 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
         security=_section(config, "security"),
         job_handlers=dict(getattr(config, "job_handlers", {})),
         email=_section(config, "email"),
+        cache=_section(config, "cache"),
         commands=dict(getattr(config, "commands", {})),
         password_validators=tuple(getattr(config, "password_validators", [])),
         module_name=module.__name__,
