@@ -270,25 +270,48 @@ identical behavior and error messages on both paths. `execute()`'s
 own logic past parsing (binding variables, depth/field-count limits,
 calling resolvers, projecting results) is completely unchanged.
 
-### Phase 7 — Authentication internals
-`auth.py` (701 lines, the single largest module). State upfront,
-honestly: the actual expensive operations (`scrypt`/`pbkdf2_hmac` via
-`hashlib`, HMAC-SHA1 for TOTP) are already C/OpenSSL calls — this
-phase will not speed up password hashing itself, by design (scrypt is
-*supposed* to be slow). What's worth migrating is the surrounding
-session/permission-check logic as a vertical slice (validate token →
-look up user → check permissions, one call), and only if a future
-multi-worker deployment needs genuinely shared, in-process session
-state beyond what the existing `_INITIALIZED_AUTH_DBS` cache (this
-session's fix) already provides.
+### Phase 7 — Authentication internals ❌ skipped, reasoned (not built)
+`auth.py` (701 lines, the single largest module), read in full before
+deciding. Every operation in it is SQL plus already-C crypto
+(`scrypt`/`pbkdf2_hmac`, HMAC-SHA1 for TOTP) plus thin Python glue --
+none of it has the "substantial, self-contained work per crossing"
+shape the two real wins (`SerializedConnection`, the GraphQL parser)
+share. The one candidate this entry originally flagged as plausible --
+`authenticate_session`'s "validate token → look up user → check
+permissions" vertical slice -- turns out, on inspection, to be a
+single indexed-row SQL lookup plus a small JSON-list union: SQL does
+the real work, Rust would just be paying the fixed FFI cost on trivial
+glue around it, the same shape that already lost five times
+(`compile_selection`, `normalize_path`, ASGI headers, `_plain()`, the
+general template engine). Its own motivating condition -- "only if a
+future multi-worker deployment needs genuinely shared, in-process
+session state" -- also isn't a stated need today, just a hypothetical.
+Not built; this is a reasoned skip, not an unrun guess, matching the
+discipline every other rejected candidate got.
 
-### Phase 8 — Remaining modules (lowest priority, smallest value)
-Admin (`admin.py`, 496 lines — UI rendering, typically low request
-volume relative to API/data paths), forms (`forms.py`, 204 lines),
-migrations (`migrations.py`, 299 lines — not a per-request hot path at
-all), CLI/management/scaffold (~500 lines combined — dev-time tooling,
-never in a production request path). Revisit only after Phases 1-7
-are shipped and measured; these are not where request time goes.
+### Phase 8 — Remaining modules ❌ skipped, reasoned (not built)
+Checked each area rather than assuming:
+
+- **Admin** (`admin.py`, 496 lines) -- its list-page table renderer
+  (`_render_list`) does hand-rolled per-row HTML escaping/formatting,
+  structurally the *same shape* as `render_post_list_page`'s real win
+  (substantial, batched work per call, not a trivial wrapped
+  operation). Not pursued anyway: admin UI is low-traffic relative to
+  API/data paths in a typical deployment, so the realistic throughput
+  gain is small even if the microbenchmark would show a win -- the one
+  candidate here where the skip is about deployment value, not
+  structural infeasibility.
+- **Forms** (`forms.py`, 204 lines) -- one factory function
+  (`entity_form`) producing per-field validators; called once per
+  submission, small per-field work, the trivial-wrapped-operation
+  shape that loses.
+- **Migrations** (`migrations.py`, 299 lines) -- DDL, not a
+  per-request hot path at all; no throughput to win.
+- **CLI/management/scaffold** (~500 lines combined) -- dev-time
+  tooling, never in a production request path; Rust-izing it would add
+  compile-time cost to contributor workflows for zero runtime benefit,
+  regardless of what a benchmark would show (see "What stays Python
+  regardless" below).
 
 ## What stays Python regardless of how far this goes
 
@@ -316,31 +339,37 @@ not smaller just because the first few moved quickly. Treat the
 original estimate as directionally right for the phases still ahead,
 not as disproven by how fast the first few went.
 
+## Status: every phase resolved
+
+| Phase | Result |
+|---|---|
+| 0 — Foundations | ✅ done |
+| 1 — Routing | Null result (0.95x-1.005x at HTTP level) — not wired in |
+| 2 — Request/Response core | Deprioritized — thin wrapper types, same logic as Phase 1's wash |
+| 3 — DB execution | ✅ **Native 1.5-1.7x** — `SerializedConnection`, wired in |
+| 4 — Serialization | Closed — nothing to fold in, confirmed via Phase 3's own research |
+| 5 — Templates | ❌ Python 2.49-2.93x faster (general engine) — rejected |
+| 6 — GraphQL lexer+parser | ✅ **Native 2.71-3.92x** — wired into `Schema.execute()` |
+| 7 — Authentication internals | ❌ Skipped, reasoned — no candidate matches the winning shape |
+| 8 — Admin/forms/migrations/CLI | ❌ Skipped, reasoned — see Phase 8's entry (admin is structurally plausible but low-value; the rest are trivial-shaped or dev-only) |
+
+**Two real, decisive, reproducible wins out of nine phases** (`SerializedConnection`,
+the GraphQL lexer+parser) — both because they do substantial,
+self-contained work per Rust/Python FFI crossing, the same shape
+`render_post_list_page` (this project's original native-server-era
+win) already had. Every rejection shares the opposite shape: wrapping
+one small operation while paying a fixed crossing cost with nothing to
+amortize it against. This was never a "rewrite everything in Rust"
+project in practice, despite the name — it became **benchmark-gated
+selective migration**, which is exactly what the execution principles
+at the top of this document asked for from the start.
+
 ## Next step
 
-**Phase 0, Phase 1, Phase 3, Phase 4, and Phase 6 are done; Phase 5
-was tried and rejected.** Phase 1: a null result (routing's dict
-lookup, benchmarked at HTTP level -- a single FFI crossing per request
-turned out to be close to free, which reframed every later phase's
-real question from "can we afford to cross into Rust" to "does the
-Rust side do real work once there." Phase 3 (narrowed from the full
-DB-execution vertical slice to a specific, different architecture --
-one Rust-serialized connection): a real, decisive, reproducible
-~1.5-1.7x win, wired in as `mangoo.db.SerializedConnection`. Phase 4:
-closed, no work needed. Phase 5 (templates): the *general* engine this
-phase would need to ship already existed, unwired and unrun, before
-this session looked for it -- run for the first time here, it lost
-decisively (2.49x-2.93x), the same per-node-crossing wall `_plain()`
-already hit. Not pursued further; see Phase 5's entry above. Phase 6
-(GraphQL lexer+parser, not the executor): a real, decisive win
-(2.71x-3.92x), wired into `Schema.execute()` with full fallback parity
--- see Phase 6's entry above.
-
-Phase 2 (Request/Response core) remains lower-value in isolation, by
-the same logic that made Phase 1 a wash -- thin wrapper types, not
-real computational work. **Phase 7 (Authentication internals) is the
-next candidate**, with the same scoping caveat already stated in its
-entry: the actual expensive crypto (`scrypt`/`pbkdf2_hmac`, HMAC-SHA1)
-is already C/OpenSSL and won't get faster in Rust by design -- only
-the surrounding session/permission-check logic is in scope, and only
-if a concrete need for shared in-process state emerges.
+No further phase is queued. Revisit Phase 7 or Phase 8's admin
+candidate only if a concrete, measured need arises (a profiler
+pointing at `authenticate_session` or an admin list page under real
+production load) — not speculatively. New candidates outside this
+list should be held to the same gate every phase here was: benchmark
+first, wire in only on a decisive win, document a loss as thoroughly
+as a win.
