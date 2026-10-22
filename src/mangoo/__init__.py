@@ -29,9 +29,11 @@ from .auth import (
     validate_password,
     verify_email,
 )
+from .auth_api import auth_routes
 from .cache import CacheBackendError, InMemoryCache, RedisCache, SqliteCache, cache_from_settings, cached_view
 from .collections import MangoList, mango_list
 from .forms import BooleanField, CharField, DecimalField, EmailField, Field, Form, IntegerField, entity_form
+from .graphql import Schema, graphql_view
 from .hardening import HardeningOptions
 from .i18n import Catalog, LanguageCatalog, catalog_from_settings, resolve_language, translator_for
 from .logging import JsonFormatter, configure_logging
@@ -88,6 +90,7 @@ __all__ = [
     "RedisCache",
     "Response",
     "SMTPEmailBackend",
+    "Schema",
     "Serializer",
     "SqliteCache",
     "TestClient",
@@ -105,6 +108,7 @@ __all__ = [
     "api_route",
     "apply_migrations",
     "audit_events",
+    "auth_routes",
     "authenticate",
     "authenticate_session",
     "backend_from_settings",
@@ -128,6 +132,7 @@ __all__ = [
     "generate_migration",
     "get_group_by_name",
     "get_user_by_username",
+    "graphql_view",
     "has_permission_required",
     "health_routes",
     "json_response",
