@@ -717,6 +717,48 @@ serialization point -- benchmark your own deployment, the same
 caveat `enable_connection_pooling()`'s own docstring already carries).
 See `docs/topics/models.md` for the full API and trade-off.
 
+## The general template engine: already built, already lost, run for the first time here
+
+`benchmarks/native_template_engine.py` existed in this repo before
+this session looked for it -- a complete wire-format bridge from
+`templates.py`'s real parsed node tree (via its private
+`_compile_cached`) into Rust `TemplateNode`/`TemplateExpr`
+(`crates/mangoo-core/src/lib.rs`), correctness-verified byte-for-byte
+against `render_template()`'s real output, including a variant that
+decodes the wire format once and caches the result (isolating that
+cost from the actual render). It had never been run. Running it now:
+
+```powershell
+python benchmarks/native_template_engine.py
+```
+
+**Result: Python wins, decisively, on every shape tested:**
+
+| Template | Python | Native | Python is faster by |
+|---|---:|---:|---:|
+| `page.html` (variables + for, 20 rows) | 184.6 us/call | 459.9 us/call | 2.49x |
+| `page.html`, wire-decode cached once | 148.9 us/call | 436.1 us/call | 2.93x |
+| `if_heavy.html` (if/elif/else + for, 20 rows) | 223.6 us/call | 585.4 us/call | 2.62x |
+
+**This matters specifically because of the 16-20x win earlier in this
+document** (`render_post_list_page`, the hand-compiled, one-template-
+only function): that win was never evidence a *general* engine would
+win too, and this is the direct test of that question, not a
+hypothetical one. The result confirms the same pattern every rejected
+candidate in this document already shares: `TemplateNode`/`TemplateExpr`
+evaluation calls back across the FFI boundary at every `{{ }}`/`{% if %}`/
+`{% for %}` node, the same shape that already sank `_plain()`'s
+object-graph walk and the ASGI header candidates. More nodes (a bigger
+template, more loop iterations) doesn't amortize that cost away -- it
+multiplies it, the same lesson `_plain()`'s 30-row list already taught.
+
+**Decision: not pursued further.** `mangoo_native.render_compiled_template`/
+`CompiledNativeTemplate` stay in the codebase, unwired, next to
+`render_post_list_page` itself -- the hardcoded win remains real and
+documented for what it actually is (one exact template, not a general
+solution), and the general engine's loss is now a published,
+reproducible result too, not an unrun script sitting in the repo.
+
 ## Fixing `template_render` in Python: a real, modest win
 
 The Rust investigation above (both the hardcoded and general engines) came

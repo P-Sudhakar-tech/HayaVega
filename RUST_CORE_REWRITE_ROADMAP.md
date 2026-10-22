@@ -215,18 +215,30 @@ walk loses, and Phase 3's research additionally found `Selection.values()`
 graph walk at all -- it already goes dict → `msgspec.json.encode()`
 directly, nothing to fold in. No further work here.
 
-### Phase 5 — Template engine
-`templates.py` (703 lines, the largest single pure-Python module).
-Builds on an already-proven result: the hardcoded `render_post_list_page`
-candidate won 16-20x (`benchmarks/README.md`'s second native-function
-benchmark) by doing real per-row work in one call — but it only
-handles one exact template shape. `UPCOMING_IMPROVEMENT_ROADMAP.md`
-already flags "a genuine Rust template compiler" as a scoped follow-up
-with a measured ceiling to justify it; this phase is that follow-up,
-built properly: full `{% if %}`/`{% for %}`/`{% extends %}`/`{% block %}`
-support, not a hand-compiled single-template stand-in. Highest
-implementation complexity of any phase (a real parser + compiler, not
-a wrapped data transform).
+### Phase 5 — Template engine ❌ tried (as a general engine), rejected
+`templates.py` (703 lines, the largest single pure-Python module). The
+16-20x precedent (`render_post_list_page`) was always specifically the
+*hardcoded*, one-template-only function -- what this phase would
+actually need to ship is a *general* engine, and that candidate
+already existed, fully built, before this session looked for it:
+`benchmarks/native_template_engine.py` is a complete wire-format
+bridge from `templates.py`'s real parsed node tree into Rust
+`TemplateNode`/`TemplateExpr` (`crates/mangoo-core/src/lib.rs`),
+correctness-verified byte-for-byte. Running it (for the first time
+this session) gave a clear, decisive result:
+
+| Candidate | Result |
+|---|---:|
+| `page.html` (variables + for, 20 rows) | Python 2.49x faster |
+| `page.html`, wire-decode cached once | Python 2.93x faster |
+| `if_heavy.html` (if/elif/else + for, 20 rows) | Python 2.62x faster |
+
+Same structural reason as `_plain()`/the ASGI headers: real per-node
+work, but still dominated by the FFI crossing cost at every
+if/for/variable node rather than one crossing for the whole template
+-- the same wall `_plain()`'s rejection already crossed, just not
+checked here until it was. **Not pursued further.** See
+`benchmarks/README.md`'s own section for the full writeup.
 
 ### Phase 6 — GraphQL
 `graphql.py` (498 lines, a complete hand-rolled tokenizer/parser/
@@ -285,26 +297,28 @@ not as disproven by how fast the first few went.
 
 ## Next step
 
-**Phase 0, Phase 1, Phase 3, and Phase 4 are done.** Phase 1: a null
-result (routing's dict lookup, benchmarked at HTTP level -- a single
-FFI crossing per request turned out to be close to free, which
-reframed every later phase's real question from "can we afford to
-cross into Rust" to "does the Rust side do real work once there."
-Phase 3 (narrowed from the full DB-execution vertical slice to a
-specific, different architecture -- one Rust-serialized connection):
-a real, decisive, reproducible ~1.5-1.7x win, wired in as
-`mangoo.db.SerializedConnection`. Phase 4: closed, no work needed.
+**Phase 0, Phase 1, Phase 3, and Phase 4 are done; Phase 5 was tried
+and rejected.** Phase 1: a null result (routing's dict lookup,
+benchmarked at HTTP level -- a single FFI crossing per request turned
+out to be close to free, which reframed every later phase's real
+question from "can we afford to cross into Rust" to "does the Rust
+side do real work once there." Phase 3 (narrowed from the full
+DB-execution vertical slice to a specific, different architecture --
+one Rust-serialized connection): a real, decisive, reproducible
+~1.5-1.7x win, wired in as `mangoo.db.SerializedConnection`. Phase 4:
+closed, no work needed. Phase 5 (templates): the *general* engine this
+phase would need to ship already existed, unwired and unrun, before
+this session looked for it -- run for the first time here, it lost
+decisively (2.49x-2.93x), the same per-node-crossing wall `_plain()`
+already hit. Not pursued further; see Phase 5's entry above.
 
 Phase 2 (Request/Response core) remains lower-value in isolation, by
 the same logic that made Phase 1 a wash -- thin wrapper types, not
-real computational work. The live candidates now are **Phase 6
-(GraphQL)** and **Phase 5 (templates)**: both are pure in-process
-computation with no external C-library I/O ceiling to run into (unlike
-DB execution, which hit SQLite's own file-I/O cost as a hard floor),
-and both do substantial, real work per call -- parsing/executing a
-whole query, or rendering a whole template -- the same shape Phase 3's
-win and the original `render_post_list_page` win share. Templates has
-the stronger existing precedent (16-20x, already measured, needs
-generalizing from one hardcoded template to the real grammar); GraphQL
-has smaller existing precedent but a structurally promising shape.
-Either is a reasonable next pick.
+real computational work. **Phase 6 (GraphQL) is the live candidate
+now**, and genuinely untried (unlike templates, which turned out to
+already have a rejected attempt sitting in the repo) -- its lexer/
+parser (query string in, parsed AST out, zero Python callbacks
+mid-parse) has the same "real work per crossing" shape Phase 3's win
+and the original `render_post_list_page` win share. Its full executor
+does not share that shape (field resolvers are arbitrary user Python,
+can never move to Rust), so only the parsing step is in scope.
