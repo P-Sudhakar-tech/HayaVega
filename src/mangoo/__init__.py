@@ -29,7 +29,7 @@ from .auth import (
     validate_password,
     verify_email,
 )
-from .cache import CacheBackendError, InMemoryCache, RedisCache, cache_from_settings, cached_view
+from .cache import CacheBackendError, InMemoryCache, RedisCache, SqliteCache, cache_from_settings, cached_view
 from .collections import MangoList, mango_list
 from .forms import BooleanField, CharField, DecimalField, EmailField, Field, Form, IntegerField, entity_form
 from .hardening import HardeningOptions
@@ -85,6 +85,7 @@ __all__ = [
     "Response",
     "SMTPEmailBackend",
     "Serializer",
+    "SqliteCache",
     "TestClient",
     "Text",
     "Timestamp",

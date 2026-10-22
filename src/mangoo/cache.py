@@ -1,13 +1,16 @@
 """A small, pluggable cache abstraction for Mangoo.
 
-Two backends share one interface (``get``/``set``/``delete``/``clear``/
+Three backends share one interface (``get``/``set``/``delete``/``clear``/
 ``get_or_set``): ``InMemoryCache``, a thread-safe, TTL-aware, bounded LRU
 cache for a single process (no dependency, mirrors ``hardening.RateLimiter``'s
-design), and ``RedisCache``, which shares cached values across every process
-that points at the same Redis instance -- the same opt-in, already-a-
-dependency-for-rate-limiting Redis story ``hardening.RedisRateLimiter`` uses.
-Pick whichever matches your deployment; nothing else in this module assumes
-one over the other.
+design); ``SqliteCache``, which shares cached values across every process on
+one machine via a local SQLite file (no dependency, no separate server --
+Redis's actual value for a single-host deployment, reusing ``db.connect()``);
+and ``RedisCache``, which shares cached values across every process that
+points at the same Redis instance, on any number of machines -- the same
+opt-in, already-a-dependency-for-rate-limiting Redis story
+``hardening.RedisRateLimiter`` uses. Pick whichever matches your deployment;
+nothing else in this module assumes one over the other.
 """
 
 from __future__ import annotations
@@ -16,11 +19,13 @@ import inspect
 import time
 from collections import OrderedDict
 from functools import wraps
+from pathlib import Path
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 import msgspec
 
+from .db import connect
 from .response import Response
 
 if TYPE_CHECKING:
@@ -161,20 +166,116 @@ class RedisCache:
         return value
 
 
+class SqliteCache:
+    """Cache shared across every process pointed at the same local SQLite
+    file -- the same problem ``RedisCache`` solves, without a separate
+    server process or a new dependency: reuses ``db.connect()``, the exact
+    connection layer ``mangoo.jobs``/``mangoo.migrations`` already use.
+
+    WAL mode is enabled on first use, so readers never block a writer and
+    vice versa -- the same locking model ``mangoo_jobs``'s poll loop
+    already relies on sharing a database file safely with request-handling
+    connections. Values are JSON-encoded via ``msgspec``, the same
+    JSON-safety constraint ``RedisCache`` has, so only JSON-safe values
+    (``dict``/``list``/``str``/``int``/``float``/``bool``/``None``)
+    round-trip correctly.
+
+    This only shares state across processes on **one machine** -- SQLite
+    has no network protocol, so unlike Redis it cannot be shared across
+    multiple hosts. For several WSGI/ASGI worker processes on a single box
+    (the common case for a small-to-medium deployment), this gives Redis's
+    actual value -- one shared cache instead of one per worker -- without
+    running a separate service. Reach for ``RedisCache`` once a deployment
+    spans more than one machine.
+
+    An expired entry is only purged when it's next read (the same lazy
+    behavior ``InMemoryCache`` has) or on an explicit ``delete()``/
+    ``clear()`` -- a key that's set once and never read again stays on
+    disk past its ``ttl`` until one of those happens.
+    """
+
+    def __init__(self, path: str | Path = "mangoo_cache.sqlite3", *, default_ttl: float | None = None):
+        self.path = str(path)
+        self.default_ttl = default_ttl
+        connection = connect(self.path)
+        try:
+            connection.raw.execute("PRAGMA journal_mode=WAL")
+            connection.execute("CREATE TABLE IF NOT EXISTS mangoo_cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, expires_at REAL)")
+            connection.commit()
+        finally:
+            connection.close()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        connection = connect(self.path)
+        try:
+            row = connection.execute("SELECT value, expires_at FROM mangoo_cache WHERE key = ?", (key,)).fetchone()
+            if row is None:
+                return default
+            if row["expires_at"] is not None and row["expires_at"] <= time.time():
+                connection.execute("DELETE FROM mangoo_cache WHERE key = ?", (key,))
+                connection.commit()
+                return default
+            return msgspec.json.decode(row["value"])
+        finally:
+            connection.close()
+
+    def set(self, key: str, value: Any, ttl: float | None = None) -> None:
+        ttl = self.default_ttl if ttl is None else ttl
+        expires_at = None if ttl is None else time.time() + ttl
+        encoded = msgspec.json.encode(value).decode("utf-8")
+        connection = connect(self.path)
+        try:
+            connection.execute(
+                "INSERT INTO mangoo_cache (key, value, expires_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at",
+                (key, encoded, expires_at),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def delete(self, key: str) -> bool:
+        connection = connect(self.path)
+        try:
+            cursor = connection.execute("DELETE FROM mangoo_cache WHERE key = ?", (key,))
+            connection.commit()
+            return cursor.rowcount > 0
+        finally:
+            connection.close()
+
+    def clear(self) -> None:
+        connection = connect(self.path)
+        try:
+            connection.execute("DELETE FROM mangoo_cache")
+            connection.commit()
+        finally:
+            connection.close()
+
+    def get_or_set(self, key: str, default_factory, ttl: float | None = None) -> Any:
+        value = self.get(key, _MISSING)
+        if value is not _MISSING:
+            return value
+        value = default_factory()
+        self.set(key, value, ttl=ttl)
+        return value
+
+
 def cache_from_settings(cache: dict):
     """Build the cache backend `Settings.cache` configures.
 
-    ``cache["BACKEND"]`` selects ``"in_memory"`` (default) or ``"redis"``.
-    ``MAX_ENTRIES``/``DEFAULT_TTL`` apply to the in-memory backend;
+    ``cache["BACKEND"]`` selects ``"in_memory"`` (default), ``"sqlite"``,
+    or ``"redis"``. ``MAX_ENTRIES``/``DEFAULT_TTL`` apply to the in-memory
+    backend; ``PATH``/``DEFAULT_TTL`` apply to the SQLite one;
     ``REDIS_URL``/``DEFAULT_TTL``/``KEY_PREFIX`` apply to the Redis one --
     the same `backend_from_settings()` shape `mangoo.mail` already uses.
     """
     backend = str(cache.get("BACKEND", "in_memory")).lower()
     if backend == "in_memory":
         return InMemoryCache(max_entries=int(cache.get("MAX_ENTRIES", 10_000)), default_ttl=cache.get("DEFAULT_TTL"))
+    if backend == "sqlite":
+        return SqliteCache(path=cache.get("PATH", "mangoo_cache.sqlite3"), default_ttl=cache.get("DEFAULT_TTL"))
     if backend == "redis":
         return RedisCache(redis_url=cache.get("REDIS_URL", "redis://localhost:6379/0"), default_ttl=cache.get("DEFAULT_TTL"), key_prefix=cache.get("KEY_PREFIX", "mangoo:cache:"))
-    raise ValueError(f"Settings.cache.backend must be 'in_memory' or 'redis' -- got {backend!r}.")
+    raise ValueError(f"Settings.cache.backend must be 'in_memory', 'sqlite', or 'redis' -- got {backend!r}.")
 
 
 def _default_cache_key(request: Request) -> str:

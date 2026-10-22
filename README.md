@@ -247,21 +247,30 @@ rate limiter for coordinated limits across multiple application instances.
 ## Caching
 
 `mangoo.cache` gives you a small, pluggable cache behind one interface --
-`get`/`set`/`delete`/`clear`/`get_or_set` -- with two backends:
+`get`/`set`/`delete`/`clear`/`get_or_set` -- with three backends:
 
 ```python
-from mangoo.cache import InMemoryCache, RedisCache
+from mangoo.cache import InMemoryCache, RedisCache, SqliteCache
 
 cache = InMemoryCache(max_entries=10_000)  # one process, no dependency
-cache = RedisCache("redis://localhost:6379/0")  # shared across every process pointed at it
+cache = SqliteCache("cache.sqlite3")  # every process on one machine, no dependency, no server
+cache = RedisCache("redis://localhost:6379/0")  # shared across every process pointed at it, any number of machines
 ```
 
 `InMemoryCache` is a thread-safe, TTL-aware, bounded LRU cache -- the same
 design as `hardening.RateLimiter`, just for arbitrary values instead of
 request counts; it stores Python objects directly, no serialization.
-`RedisCache` JSON-encodes values via `msgspec` (already a core dependency),
-so only JSON-safe values round-trip; it shares state across processes the
-same way `hardening.RedisRateLimiter` does, and requires `uv add redis`.
+`SqliteCache` is Redis's actual value (one cache shared across every
+worker process instead of one per worker) for a single-machine deployment,
+with no separate server and no new dependency -- it reuses `db.connect()`,
+the same connection layer `mangoo.jobs`/`mangoo.migrations` already use,
+with WAL mode enabled so a writer never blocks a reader. It can't share
+state across *multiple* machines, though -- SQLite has no network
+protocol, so a deployment spanning more than one host still needs
+`RedisCache`. `RedisCache` JSON-encodes values via `msgspec` (already a
+core dependency, same JSON-safety constraint `SqliteCache` has), so only
+JSON-safe values round-trip; it shares state across processes the same
+way `hardening.RedisRateLimiter` does, and requires `uv add redis`.
 
 Cache a whole view's response with `cached_view`:
 
@@ -285,8 +294,8 @@ Build a cache from `Settings.cache` instead of hardcoding a backend:
 ```python title="config/settings.py"
 class Settings:
     class cache:
-        backend = "redis"  # "in_memory" (default) or "redis"
-        redis_url = "redis://cache.internal:6379/0"
+        backend = "sqlite"  # "in_memory" (default), "sqlite", or "redis"
+        path = BASE_DIR / "cache.sqlite3"
         default_ttl = 300
 ```
 

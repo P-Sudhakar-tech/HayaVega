@@ -1,9 +1,11 @@
 import sys
+import tempfile
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from mangoo.cache import CacheBackendError, InMemoryCache, RedisCache, cache_from_settings, cached_view
+from mangoo.cache import CacheBackendError, InMemoryCache, RedisCache, SqliteCache, cache_from_settings, cached_view
 from mangoo.response import Response, json_response
 
 
@@ -102,6 +104,94 @@ class InMemoryCacheTests(unittest.TestCase):
         self.assertEqual(cache.stats(), {"tracked_keys": 1, "max_entries": 5})
 
 
+class SqliteCacheTests(unittest.TestCase):
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tempdir.cleanup)
+        self.path = str(Path(self._tempdir.name) / "cache.sqlite3")
+
+    def test_get_returns_default_for_missing_key(self):
+        cache = SqliteCache(self.path)
+        self.assertIsNone(cache.get("missing"))
+        self.assertEqual(cache.get("missing", "fallback"), "fallback")
+
+    def test_set_then_get_round_trips_json_safe_values(self):
+        cache = SqliteCache(self.path)
+        cache.set("key", {"a": [1, 2, 3], "b": "text", "c": None})
+        self.assertEqual(cache.get("key"), {"a": [1, 2, 3], "b": "text", "c": None})
+
+    def test_set_overwrites_an_existing_key(self):
+        cache = SqliteCache(self.path)
+        cache.set("key", "first")
+        cache.set("key", "second")
+        self.assertEqual(cache.get("key"), "second")
+
+    def test_delete_removes_the_entry(self):
+        cache = SqliteCache(self.path)
+        cache.set("key", "value")
+        self.assertTrue(cache.delete("key"))
+        self.assertIsNone(cache.get("key"))
+
+    def test_delete_missing_key_returns_false(self):
+        cache = SqliteCache(self.path)
+        self.assertFalse(cache.delete("missing"))
+
+    def test_clear_removes_everything(self):
+        cache = SqliteCache(self.path)
+        cache.set("a", 1)
+        cache.set("b", 2)
+        cache.clear()
+        self.assertIsNone(cache.get("a"))
+        self.assertIsNone(cache.get("b"))
+
+    def test_ttl_expires_the_entry(self):
+        cache = SqliteCache(self.path)
+        now = time.time()
+        with patch("mangoo.cache.time.time", side_effect=[now, now, now + 10]):
+            cache.set("key", "value", ttl=1)
+            self.assertEqual(cache.get("key"), "value")
+            self.assertIsNone(cache.get("key"))
+
+    def test_default_ttl_applies_when_not_overridden(self):
+        cache = SqliteCache(self.path, default_ttl=1)
+        now = time.time()
+        with patch("mangoo.cache.time.time", side_effect=[now, now, now + 10]):
+            cache.set("key", "value")
+            self.assertEqual(cache.get("key"), "value")
+            self.assertIsNone(cache.get("key"))
+
+    def test_per_call_ttl_overrides_default_ttl(self):
+        cache = SqliteCache(self.path, default_ttl=1)
+        cache.set("key", "value", ttl=None)
+        self.assertEqual(cache.get("key"), "value")
+
+    def test_get_or_set_computes_once_on_miss(self):
+        cache = SqliteCache(self.path)
+        calls = []
+
+        def factory():
+            calls.append(1)
+            return "computed"
+
+        self.assertEqual(cache.get_or_set("key", factory), "computed")
+        self.assertEqual(cache.get_or_set("key", factory), "computed")
+        self.assertEqual(len(calls), 1)
+
+    def test_two_instances_pointed_at_the_same_file_share_state(self):
+        """The scenario this backend exists for: two Mangoo worker processes
+        on the same machine, both pointed at the same SQLite file, see each
+        other's writes -- Redis's actual value, no separate server."""
+        first = SqliteCache(self.path)
+        second = SqliteCache(self.path)
+        first.set("key", "written by the first instance")
+        self.assertEqual(second.get("key"), "written by the first instance")
+
+    def test_non_json_safe_value_raises_on_set(self):
+        cache = SqliteCache(self.path)
+        with self.assertRaises(TypeError):
+            cache.set("key", object())
+
+
 class RedisCacheMissingDependencyTests(unittest.TestCase):
     def test_missing_redis_package_raises_backend_error(self):
         with patch.dict(sys.modules, {"redis": None}):
@@ -118,6 +208,14 @@ class CacheFromSettingsTests(unittest.TestCase):
         self.assertEqual(cache.max_entries, 5)
         self.assertEqual(cache.default_ttl, 30)
 
+    def test_sqlite_backend_honors_path_and_default_ttl(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "cache.sqlite3")
+            cache = cache_from_settings({"BACKEND": "sqlite", "PATH": path, "DEFAULT_TTL": 30})
+            self.assertIsInstance(cache, SqliteCache)
+            self.assertEqual(cache.path, path)
+            self.assertEqual(cache.default_ttl, 30)
+
     def test_redis_backend_is_attempted_with_the_configured_url_and_prefix(self):
         """Confirms the dict -> kwargs plumbing reaches RedisCache correctly
         without requiring the real `redis` package -- the missing-dependency
@@ -128,7 +226,7 @@ class CacheFromSettingsTests(unittest.TestCase):
                 cache_from_settings({"BACKEND": "redis", "REDIS_URL": "redis://cache.internal:6379/1"})
 
     def test_rejects_an_unknown_backend(self):
-        with self.assertRaisesRegex(ValueError, "in_memory.*redis"):
+        with self.assertRaisesRegex(ValueError, "in_memory.*sqlite.*redis"):
             cache_from_settings({"BACKEND": "memcached"})
 
 
