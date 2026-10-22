@@ -22,6 +22,9 @@ htmlcov/
 # Generated on each run by native_template_engine.py; not meant to be committed.
 /benchmarks/native_template_engine_fixtures/
 
+# Generated on each run by compiled_template_engine.py; not meant to be committed.
+/benchmarks/compiled_template_engine_fixtures/
+
 # Personal editor config, not shared project configuration.
 /.vscode/
 
