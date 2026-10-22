@@ -7,6 +7,11 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 
+try:
+    from mangoo_native import SerializedConnection as _NativeSerializedConnection
+except ImportError:
+    _NativeSerializedConnection = None
+
 
 class DatabaseConfigurationError(ValueError):
     pass
@@ -366,6 +371,75 @@ def _open_readonly(config: dict) -> Connection | None:
         return None
     raw.row_factory = sqlite3.Row
     return Connection(raw, "sqlite3")
+
+
+class _FallbackSerializedConnection:
+    """Pure-Python equivalent of `mangoo_native.SerializedConnection` --
+    one read-only connection, one lock serializing every caller's access
+    to it, used automatically when `mangoo_native` isn't built. Slower
+    than the Rust version (a real OS lock, not a dedicated worker thread
+    and channel), but architecturally the same idea: one connection,
+    never contended for concurrently."""
+
+    def __init__(self, path: str):
+        self._lock = threading.Lock()
+        self._connection: sqlite3.Connection | None = sqlite3.connect(f"file:{path}?mode=ro", uri=True, check_same_thread=False)
+        self._connection.row_factory = sqlite3.Row
+
+    def execute(self, sql: str, params=()) -> list[dict]:
+        with self._lock:
+            if self._connection is None:
+                raise RuntimeError("SerializedConnection is closed")
+            return [dict(row) for row in self._connection.execute(sql, params).fetchall()]
+
+    def close(self) -> None:
+        with self._lock:
+            if self._connection is not None:
+                self._connection.close()
+                self._connection = None
+
+
+class SerializedConnection:
+    """One read-only SQLite connection, shared across every caller via
+    serialized access instead of a connection per thread -- an opt-in
+    alternative to `connect_readonly()`/`enable_readonly_connection_pooling()`
+    for a hot, read-heavy path, backed by `mangoo_native.SerializedConnection`
+    (a dedicated Rust worker thread) when built, or `_FallbackSerializedConnection`
+    (a Python lock) otherwise -- same interface either way, no configuration
+    required to get the faster path when it's available.
+
+    **Measured, disclosed trade-off, not a universal win** -- benchmark your
+    own deployment before reaching for this, the same way
+    `enable_connection_pooling()`'s own docstring already asks. Measured
+    (`benchmarks/serialized_connection_vs_python.py`) at a real, consistent
+    ~1.5-1.7x throughput improvement over both the unpooled default and
+    `enable_readonly_connection_pooling()` for a `SELECT ... LIMIT ? OFFSET ?`-
+    shaped read under WSGI/waitress contention -- but every query now queues
+    behind whichever one is currently running, trading SQLite's own
+    per-connection lock contention for a single serialization point. A
+    read pattern with occasional genuinely slow queries could see those
+    queue up behind each other in a way N independent connections wouldn't.
+
+    SQLite only; read-only only (no `.commit()`/write support) -- use
+    `connect()`/`enable_connection_pooling()` for writes. Not currently
+    integrated into `Selection`/`Entity` -- call `.execute(sql, params)`
+    directly with raw SQL and get back a `list[dict]`, already materialized
+    (not a cursor, unlike every other `Connection` in this module).
+    """
+
+    def __init__(self, database: str | Path | dict):
+        config = normalize_config(database)
+        engine = str(config.get("ENGINE", "sqlite3")).lower()
+        if engine not in {"sqlite", "sqlite3"}:
+            raise DatabaseConfigurationError(f"SerializedConnection only supports sqlite3 -- got {engine!r}.")
+        path = str(config["NAME"])
+        self._impl = _NativeSerializedConnection(path) if _NativeSerializedConnection is not None else _FallbackSerializedConnection(path)
+
+    def execute(self, sql: str, params=()) -> list[dict]:
+        return self._impl.execute(sql, params)
+
+    def close(self) -> None:
+        self._impl.close()
 
 
 def _open(config: dict) -> Connection:

@@ -160,6 +160,42 @@ regression for WSGI on this project's own benchmark environment; see
 [Performance](../performance.md) for the numbers and reasoning before
 enabling either for your deployment.
 
+## `SerializedConnection`: one connection, Rust-serialized, for a hot read path
+
+```python
+from mangoo.db import SerializedConnection
+
+reads = SerializedConnection(DATABASE)  # SQLite, read-only
+rows = reads.execute("SELECT id, title, views FROM posts WHERE published = ? ORDER BY id LIMIT ? OFFSET ?", (True, 20, 0))
+# -> list[dict], already materialized -- not a cursor, unlike connect()/connect_readonly()
+```
+
+A different trade-off than the pooling options above: instead of each
+thread holding (or sharing) its own connection, every call goes
+through **one** connection, serialized by a dedicated Rust worker
+thread when `mangoo_native` is built (a pure-Python lock-based fallback
+otherwise -- same interface, no configuration needed either way).
+Measured (`benchmarks/serialized_connection_vs_python.py`) at a real,
+consistent **~1.5-1.7x** throughput improvement over both the unpooled
+default and `enable_readonly_connection_pooling()`, for a
+`SELECT ... LIMIT ? OFFSET ?`-shaped read under WSGI/waitress
+contention -- the first Rust-acceleration candidate in this project to
+clear a decisive win since the native WSGI server/Signals dispatcher
+(see `RUST_CORE_REWRITE_ROADMAP.md` for the others that didn't).
+
+**Benchmark your own deployment before reaching for this, same as
+every option above** -- every query now queues behind whichever one is
+currently running on the one connection, trading SQLite's own
+per-connection lock contention for a single serialization point. A
+read pattern with occasional genuinely slow queries could see those
+queue up behind each other in a way independent connections wouldn't.
+
+SQLite only, read-only only (no `.commit()`/write support -- use
+`connect()`/`enable_connection_pooling()` for writes). Not integrated
+into `Selection`/`Entity` -- call `.execute(sql, params)` directly with
+your own raw SQL for a specific hot path, not as a general `Selection`
+replacement.
+
 ## Supported databases
 
 SQLite (the default, zero-config), PostgreSQL, and MySQL/MariaDB &mdash;

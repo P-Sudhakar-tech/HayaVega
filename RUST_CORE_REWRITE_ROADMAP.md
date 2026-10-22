@@ -161,27 +161,59 @@ later phase pass through, so they need to be Rust-native before DB/
 template phases can avoid round-tripping through Python wrapper
 objects.
 
-### Phase 3 — Database execution + ORM (highest-value target)
-`db.py` (435 lines) + `models.py` (419 lines). This is where the
-project's own benchmarks show the real time goes
-(`db_list`/`template_render` costing 4-6x `json_echo`). **This is the
-one phase most likely to actually win**, because it's naturally a
-vertical slice already: connect → execute → materialize rows →
-return — do all of it in one Rust call (including what `_plain()`/
-serialization would otherwise do as a separate crossing, folding
-Phase 4 into this call rather than chaining two FFI crossings).
-Must preserve: the existing connection-pooling behavior and its
-documented WSGI-regression/ASGI-win split (`db.py:135-166`'s
-benchmark-backed warning), the stale-connection retry logic, and the
-`_PREPARED_TABLES`-style caching this session's own `auth.py` fix just
-added a second instance of.
+### Phase 3 — Database execution ✅ done, narrowed, a real win, wired in
+Originally scoped as the full `db.py`+`models.py` vertical slice
+(connect → execute → materialize → serialize). Research before
+building found that scope would likely have been a third null/loss
+result: `Selection.values()` already goes straight to
+`msgspec.json.encode()` with nothing for Rust to consolidate (Phase 4
+was already folded in here and had nothing left to do), and `db.py`'s
+own docstring already states the real cost is SQLite's own C-level
+file I/O, "paid identically by both frameworks" -- not Python wrapper
+overhead a rewrite removes. Narrowed twice, with the user's input each
+time (see this repo's own session history), down to the one genuinely
+different, untested architecture: **`mangoo_native.SerializedConnection`**
+-- one Rust-owned read-only connection, every query serialized through
+a single worker thread, instead of N threads each holding (or
+pooling) their own. Modeled directly on `SignalDispatcher`'s existing
+architecture (one `mpsc` channel, a dedicated OS thread calling back
+into Python via `Python::attach`); no new Rust dependency -- the
+worker thread calls Python's own `sqlite3` module, just through one
+connection instead of several.
 
-### Phase 4 — Serialization (folded into Phase 3, not standalone)
-`serializers.py` (84 lines). Explicitly **not** a standalone phase —
-this session's `plain_value` rejection showed exactly why a standalone
-object-graph-walk function loses. Only pursue this as part of Phase
-3's single DB-to-JSON call, where the serialization work is amortized
-against the DB execution crossing instead of paying its own.
+**Result: a real, decisive, reproducible win** -- the first since the
+WSGI server/Signals dispatcher/`mango_list`. Benchmarked
+(`benchmarks/serialized_connection_vs_python.py`) at full HTTP level
+against both Python options for this exact question: **~1.5-1.7x
+faster than the unpooled default, ~1.6x faster than
+`enable_readonly_connection_pooling()`** (Python's own existing best
+option, already independently confirmed via this same benchmark run's
+built-in sanity check to be a null result against the unpooled
+default, 0.97x-1.03x -- exactly matching what `db.py`'s own docstring
+already documented, which also validates the benchmark methodology
+itself). Two consecutive runs, consistent both times.
+
+**Wired in** as `mangoo.db.SerializedConnection` -- a documented,
+opt-in primitive (not integrated into `Selection`/`Entity`; call
+`.execute(sql, params)` directly with raw SQL, get back an already-
+materialized `list[dict]`), with a pure-Python fallback
+(`threading.Lock` + one connection) when `mangoo_native` isn't built,
+matching every other native feature's zero-configuration-required
+convention. SQLite only, read-only only. Documented, with the
+disclosed trade-off (every query now queues behind whichever one is
+running), in `docs/topics/models.md` and `benchmarks/README.md`.
+**Not** integrated into the ORM itself -- that remains a distinct,
+larger, unscoped follow-up if more query shapes than this one
+benchmarked case (`SELECT ... LIMIT ? OFFSET ?`) prove out the same
+way.
+
+### Phase 4 — Serialization: closed, no standalone work needed
+`serializers.py` (84 lines). Already settled by research, not deferred:
+`plain_value`'s standalone rejection showed why a bare object-graph
+walk loses, and Phase 3's research additionally found `Selection.values()`
+(the actual call `db_list` makes) never calls `_plain()`/any object-
+graph walk at all -- it already goes dict → `msgspec.json.encode()`
+directly, nothing to fold in. No further work here.
 
 ### Phase 5 — Template engine
 `templates.py` (703 lines, the largest single pure-Python module).
@@ -239,27 +271,40 @@ are shipped and measured; these are not where request time goes.
 
 ## Timeline honesty
 
-This is a multi-month, likely 6-12+ month effort at a realistic pace,
-given ~8,864 lines of existing Python core logic to match in
-behavior, ~7,913 lines of tests to keep green, and each phase needing
-its own PyO3 binding design, GIL-discipline review, and full
-HTTP-level benchmark — not a rewrite that fits in further single
-sessions. Phase 0-3 (foundations through DB execution, the
-highest-value target) is the realistic first milestone; everything
-past that depends on what Phase 3's actual measured result is.
+Originally estimated at 6-12+ months for a human team working at a
+realistic pace, given ~8,864 lines of existing Python core logic to
+match in behavior and ~7,913 lines of tests to keep green. Phases 0,
+1, 3, and 4 (foundations through DB execution, the originally-flagged
+highest-value target) shipped faster than that estimate implies in
+practice -- each phase is still its own real PyO3 binding design,
+GIL-discipline review, and full HTTP-level benchmark, and the
+remaining phases (templates/GraphQL's real parsers, auth, admin) are
+not smaller just because the first few moved quickly. Treat the
+original estimate as directionally right for the phases still ahead,
+not as disproven by how fast the first few went.
 
 ## Next step
 
-**Phase 0 and Phase 1 are done** (`benchmarks/_vertical_slice_harness.py`;
-`mangoo_native.Router`, benchmarked at HTTP level, null result, not
-wired in -- see Phase 1's entry above and `benchmarks/README.md`).
-What Phase 1 actually proved: a single FFI crossing per request is
-close to free, which shifts the open question for every later phase
-from "can we afford to cross into Rust" to "does the Rust side do
-real work once there." Phase 3 (DB execution + ORM) is where that
-question gets a real test -- substantial work (connect, execute,
-materialize rows) in one call, not a dict lookup. Phase 2 (Request/
-Response core) is lower-value on its own by the same logic that made
-Phase 1 a wash (thin wrapper types, not real work), so the next
-concrete step is **Phase 3**, built on `Router` as its routing
-starting point, not Phase 2 in isolation.
+**Phase 0, Phase 1, Phase 3, and Phase 4 are done.** Phase 1: a null
+result (routing's dict lookup, benchmarked at HTTP level -- a single
+FFI crossing per request turned out to be close to free, which
+reframed every later phase's real question from "can we afford to
+cross into Rust" to "does the Rust side do real work once there."
+Phase 3 (narrowed from the full DB-execution vertical slice to a
+specific, different architecture -- one Rust-serialized connection):
+a real, decisive, reproducible ~1.5-1.7x win, wired in as
+`mangoo.db.SerializedConnection`. Phase 4: closed, no work needed.
+
+Phase 2 (Request/Response core) remains lower-value in isolation, by
+the same logic that made Phase 1 a wash -- thin wrapper types, not
+real computational work. The live candidates now are **Phase 6
+(GraphQL)** and **Phase 5 (templates)**: both are pure in-process
+computation with no external C-library I/O ceiling to run into (unlike
+DB execution, which hit SQLite's own file-I/O cost as a hard floor),
+and both do substantial, real work per call -- parsing/executing a
+whole query, or rendering a whole template -- the same shape Phase 3's
+win and the original `render_post_list_page` win share. Templates has
+the stronger existing precedent (16-20x, already measured, needs
+generalizing from one hardcoded template to the real grammar); GraphQL
+has smaller existing precedent but a structurally promising shape.
+Either is a reasonable next pick.

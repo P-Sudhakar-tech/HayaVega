@@ -657,6 +657,66 @@ once there, to come out ahead" -- which is exactly the question Phase
 is positioned to answer. `mangoo_native.Router` stays in the codebase,
 unwired, as the concrete starting point that phase needs.
 
+## `SerializedConnection`: a real win, and the first one wired in since the native server/Signals dispatcher
+
+The full DB-execution vertical slice this section's predecessor
+pointed at was itself investigated before being built, and found
+likely to be a third null/loss result: `Selection.values()` (the
+method `db_list` actually calls) already goes straight to
+`msgspec.json.encode()` with no object-graph walk to fold in, and
+`db.py`'s own docstring already states the real ~35-50ms/request cost
+is SQLite's own C-level file I/O, "paid identically by both
+frameworks" -- not Python wrapper overhead a rewrite removes. Even the
+natural fallback idea -- "Rust-accelerate the existing connection
+pool's bookkeeping" -- turned out to be pointless too, once
+`db.py`'s own pooling docstring was read closely: the documented WSGI
+regression is confirmed, in its own words, to come from "an isolated
+multi-threaded microbenchmark with no framework code involved at
+all" -- SQLite's own internal lock contention when many persistent
+connections hold one file open, identical regardless of which
+language holds the connection handle.
+
+What survived both of those findings: **one single connection, Rust-
+serialized access, instead of N concurrent per-thread connections** --
+a genuinely different architecture from "the same pool, written in
+Rust," built on `SignalDispatcher`'s exact existing pattern (one
+`mpsc` channel, a dedicated OS thread, `Python::attach` to call back
+into Python) rather than a new Rust SQLite dependency: the worker
+thread calls Python's own `sqlite3` module, just through one
+connection instead of several.
+
+```powershell
+python benchmarks/serialized_connection_vs_python.py
+```
+
+**Result (two runs shown) -- a real, decisive, reproducible win:**
+
+| Comparison | Run 1 | Run 2 |
+|---|---:|---:|
+| `SerializedConnection` vs. no pooling (default) | 1.67x | 1.51x |
+| `SerializedConnection` vs. `enable_readonly_connection_pooling()` | 1.63x | 1.56x |
+| `enable_readonly_connection_pooling()` vs. no pooling (sanity check) | 1.03x | 0.97x |
+
+The sanity-check row is doing real work here, not just filler: it
+independently reproduces `db.py`'s own already-documented finding for
+`enable_readonly_connection_pooling()` (measured there as "neither a
+real win nor a real loss" against the unpooled default) using this
+benchmark's own methodology -- confirming the methodology itself is
+trustworthy before trusting the headline numbers above it.
+
+**Decision: wired in**, as `mangoo.db.SerializedConnection` -- the
+first Rust-acceleration candidate to clear the decisive-win bar since
+the native WSGI server and Signals dispatcher. Shipped as a
+documented, opt-in primitive (not folded into `Selection`/`Entity`):
+SQLite only, read-only only, raw SQL in, an already-materialized
+`list[dict]` out -- not a drop-in replacement for the ORM's query
+path, and not a universal win by construction (every query now queues
+behind whichever one is currently running on the one connection,
+trading SQLite's per-connection lock contention for a single
+serialization point -- benchmark your own deployment, the same
+caveat `enable_connection_pooling()`'s own docstring already carries).
+See `docs/topics/models.md` for the full API and trade-off.
+
 ## Fixing `template_render` in Python: a real, modest win
 
 The Rust investigation above (both the hardcoded and general engines) came

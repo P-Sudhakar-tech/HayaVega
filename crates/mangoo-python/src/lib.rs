@@ -401,6 +401,115 @@ impl PySignalDispatcher {
     }
 }
 
+/// One query request, and the channel its result comes back on.
+struct QueryJob {
+    sql: String,
+    params: Py<PyAny>,
+    respond_to: Sender<PyResult<Py<PyAny>>>,
+}
+
+fn run_query_job(connection: &Py<PyAny>, job: QueryJob) {
+    let result = Python::attach(|py| -> PyResult<Py<PyAny>> {
+        let cursor = connection.bind(py).call_method1("execute", (job.sql, job.params))?;
+        let rows = cursor.call_method0("fetchall")?;
+        let dict_ctor = py.import("builtins")?.getattr("dict")?;
+        let result_list = PyList::empty(py);
+        for row in rows.try_iter()? {
+            result_list.append(dict_ctor.call1((row?,))?)?;
+        }
+        Ok(result_list.into_any().unbind())
+    });
+    let _ = job.respond_to.send(result);
+}
+
+fn close_connection(connection: &Py<PyAny>) {
+    Python::attach(|py| {
+        let _ = connection.bind(py).call_method0("close");
+    });
+}
+
+/// Phase 3 of `RUST_CORE_REWRITE_ROADMAP.md`: one Python `sqlite3`
+/// read-only connection (opened the same way `db.py`'s `_open_readonly`
+/// does, `row_factory = sqlite3.Row`), owned by a single dedicated native
+/// thread, serializing every query through one `mpsc` channel instead of
+/// each caller thread holding its own connection -- the genuinely
+/// different architecture from Python's existing per-thread pooling (see
+/// `db.py`'s `enable_readonly_connection_pooling`), not a Rust port of
+/// that pool's bookkeeping. No new Rust SQLite dependency: the worker
+/// thread calls back into the same C-level `sqlite3` module already in
+/// use, via `Python::attach`, exactly the way `run_signal_job` calls a
+/// subscriber -- what's different is there is only ever one connection.
+///
+/// `execute()` releases the GIL (`py.detach`) while waiting for the
+/// worker's response -- required, not optional: the worker thread's own
+/// `Python::attach` call (needed to actually run the query) would
+/// otherwise deadlock against the calling thread still holding the GIL
+/// while blocked in `response.recv()`.
+///
+/// Benchmarked at full HTTP level against both Python options (no
+/// pooling, `enable_readonly_connection_pooling()`) -- see
+/// `benchmarks/serialized_connection_vs_python.py`; not wired into
+/// `db.py` unless that benchmark shows a decisive win over both.
+#[pyclass(name = "SerializedConnection")]
+struct PySerializedConnection {
+    sender: Option<Sender<QueryJob>>,
+}
+
+#[pymethods]
+impl PySerializedConnection {
+    #[new]
+    fn new(py: Python<'_>, path: String) -> PyResult<Self> {
+        let sqlite3 = py.import("sqlite3")?;
+        let uri = format!("file:{path}?mode=ro");
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("uri", true)?;
+        // The connection is opened on the thread that calls SerializedConnection(...)
+        // but only ever used afterward on this struct's own dedicated worker
+        // thread -- different threads, by design. Python's sqlite3 module's
+        // default check_same_thread=True would reject that as unsafe cross-
+        // thread use; it's safe here specifically because this type's own
+        // serialization guarantees only one thread (the worker) ever touches
+        // the connection, and always one query at a time, never concurrently.
+        kwargs.set_item("check_same_thread", false)?;
+        let raw_connection = sqlite3.call_method("connect", (uri,), Some(&kwargs))?;
+        raw_connection.setattr("row_factory", sqlite3.getattr("Row")?)?;
+        let connection: Py<PyAny> = raw_connection.unbind();
+
+        let (sender, receiver) = channel::<QueryJob>();
+        thread::spawn(move || {
+            while let Ok(job) = receiver.recv() {
+                run_query_job(&connection, job);
+            }
+            // The sender was dropped (close() called, or this object was
+            // garbage collected) -- close the connection deterministically
+            // here rather than leaving it to whenever Py<PyAny>'s own drop
+            // happens to run, so a file handle this type held open is
+            // actually released by the time close() returns.
+            close_connection(&connection);
+        });
+        Ok(Self { sender: Some(sender) })
+    }
+
+    fn execute(&self, py: Python<'_>, sql: String, params: Py<PyAny>) -> PyResult<Py<PyAny>> {
+        let Some(sender) = &self.sender else {
+            return Err(pyo3::exceptions::PyRuntimeError::new_err("SerializedConnection is closed"));
+        };
+        let (respond_to, response) = channel();
+        sender
+            .send(QueryJob { sql, params, respond_to })
+            .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("SerializedConnection worker is no longer running"))?;
+        py.detach(move || response.recv())
+            .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("SerializedConnection worker is no longer running"))?
+    }
+
+    /// Stop the worker thread and close the underlying connection. Safe to
+    /// call more than once; `execute()` after `close()` raises clearly
+    /// rather than hanging.
+    fn close(&mut self) {
+        self.sender = None;
+    }
+}
+
 #[pymodule]
 fn mangoo_native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(normalize_path, module)?)?;
@@ -416,6 +525,7 @@ fn mangoo_native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyRouter>()?;
     module.add_class::<PyMangoList>()?;
     module.add_class::<PySignalDispatcher>()?;
+    module.add_class::<PySerializedConnection>()?;
     server::register(module)?;
     Ok(())
 }

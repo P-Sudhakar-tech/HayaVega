@@ -103,7 +103,7 @@ def print_scenario_results(results: dict[str, ScenarioResult]) -> None:
 def print_summary(label: str, all_results: dict[str, dict[str, ScenarioResult]], *, baseline_name: str, candidate_name: str, scenarios: list[tuple[str, str]] = DEFAULT_SCENARIOS) -> None:
     """Print a ratio summary (candidate req/s / baseline req/s) for every
     scenario both targets completed."""
-    if len(all_results) != 2:
+    if baseline_name not in all_results or candidate_name not in all_results:
         return
     print(f"--- Summary ({label}) ---")
     candidate = all_results.get(candidate_name, {})

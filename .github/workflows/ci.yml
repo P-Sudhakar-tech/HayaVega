@@ -100,7 +100,7 @@ jobs:
       - name: Confirm the native extension loaded, then run the tests it backs
         run: |
           python -c "import mangoo_native; print(mangoo_native.SignalDispatcher)"
-          pytest tests/test_collections.py tests/test_signals_addon.py tests/test_signals_integration.py tests/test_rust_runtime.py tests/test_rust_runtime_hardening.py tests/test_rust_runtime_tls.py --no-cov -v
+          pytest tests/test_collections.py tests/test_signals_addon.py tests/test_signals_integration.py tests/test_rust_runtime.py tests/test_rust_runtime_hardening.py tests/test_rust_runtime_tls.py tests/test_db.py --no-cov -v
 
   postgresql-integration:
     runs-on: ubuntu-latest

@@ -8,6 +8,7 @@ from unittest import mock
 from mangoo.db import (
     Connection,
     DatabaseConfigurationError,
+    SerializedConnection,
     _is_stale_connection_error,
     close_pooled_connections,
     close_pooled_readonly_connections,
@@ -325,3 +326,83 @@ class StaleConnectionReconnectTests(unittest.TestCase):
 
     def test_sqlite_is_never_eligible_for_reconnect(self):
         self.assertFalse(_is_stale_connection_error("sqlite3", RuntimeError("anything")))
+
+
+class SerializedConnectionTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.database = Path(self.directory.name) / "data.sqlite3"
+        connection = connect(self.database)
+        try:
+            connection.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, name TEXT)")
+            connection.execute("INSERT INTO sample (name) VALUES (?), (?), (?)", ("a", "b", "c"))
+            connection.commit()
+        finally:
+            connection.close()
+
+    def test_execute_returns_materialized_dicts_matching_connect_readonly(self):
+        reference = connect_readonly(self.database)
+        try:
+            expected = [dict(row) for row in reference.execute("SELECT id, name FROM sample ORDER BY id").fetchall()]
+        finally:
+            reference.close()
+        serialized = SerializedConnection(self.database)
+        self.addCleanup(serialized.close)
+        self.assertEqual(serialized.execute("SELECT id, name FROM sample ORDER BY id"), expected)
+
+    def test_execute_accepts_bind_parameters(self):
+        serialized = SerializedConnection(self.database)
+        self.addCleanup(serialized.close)
+        self.assertEqual(serialized.execute("SELECT id, name FROM sample WHERE name = ?", ("b",)), [{"id": 2, "name": "b"}])
+
+    def test_non_sqlite_engine_is_rejected(self):
+        with self.assertRaisesRegex(DatabaseConfigurationError, "sqlite3"):
+            SerializedConnection({"ENGINE": "postgresql", "NAME": "x"})
+
+    def test_close_then_execute_raises_rather_than_hangs(self):
+        serialized = SerializedConnection(self.database)
+        serialized.close()
+        with self.assertRaises(RuntimeError):
+            serialized.execute("SELECT 1")
+
+    def test_many_concurrent_callers_all_get_correct_results(self):
+        """The one correctness property this type's whole design depends
+        on: every caller thread gets back exactly its own query's result,
+        never another thread's, however many are submitted concurrently."""
+        serialized = SerializedConnection(self.database)
+        self.addCleanup(serialized.close)
+        errors = []
+
+        def worker(expected_id: int):
+            try:
+                for _ in range(20):
+                    rows = serialized.execute("SELECT id, name FROM sample WHERE id = ?", (expected_id,))
+                    if rows != [{"id": expected_id, "name": {1: "a", 2: "b", 3: "c"}[expected_id]}]:
+                        errors.append((expected_id, rows))
+            except Exception as exc:  # noqa: BLE001 -- collected and asserted on below
+                errors.append((expected_id, exc))
+
+        threads = [threading.Thread(target=worker, args=(expected_id,)) for expected_id in (1, 2, 3) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+        self.assertFalse(any(thread.is_alive() for thread in threads), "a worker thread never completed -- possible deadlock")
+        self.assertEqual(errors, [])
+
+    def test_uses_the_native_implementation_when_mangoo_native_is_built(self):
+        from mangoo.db import _NativeSerializedConnection
+
+        if _NativeSerializedConnection is None:
+            self.skipTest("mangoo_native is not built in this environment")
+        serialized = SerializedConnection(self.database)
+        self.addCleanup(serialized.close)
+        self.assertIsInstance(serialized._impl, _NativeSerializedConnection)
+
+    def test_falls_back_to_pure_python_when_mangoo_native_is_unavailable(self):
+        with mock.patch("mangoo.db._NativeSerializedConnection", None):
+            serialized = SerializedConnection(self.database)
+            self.addCleanup(serialized.close)
+            self.assertEqual(type(serialized._impl).__name__, "_FallbackSerializedConnection")
+            self.assertEqual(serialized.execute("SELECT id, name FROM sample ORDER BY id"), [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}, {"id": 3, "name": "c"}])
