@@ -3,6 +3,7 @@ use pyo3::types::{PyBytes, PyDict, PyList, PySet, PyTuple};
 
 use mangoo_core::{JsonValue, MangoList as CoreMangoList, TemplateExpr, TemplateNode};
 
+use std::collections::HashMap;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -238,6 +239,55 @@ impl PyCompiledNativeTemplate {
     }
 }
 
+/// Mirrors `runtime.py`/`asgi.py`'s `_match()` exactly: an exact-pattern
+/// lookup, falling back to a linear scan over routes whose pattern ends in
+/// `/<path>` (the trailing-wildcard convention `routing.py` documents --
+/// there is no `<id>`-style named capture group anywhere in this
+/// framework's routing). Built once per application (mirroring
+/// `create_application`'s own `routes = {...}`/`wildcard_routes = [...]`
+/// construction at `runtime.py:130-131`), reused for every request.
+///
+/// Phase 1 of `RUST_CORE_REWRITE_ROADMAP.md`. Benchmarked at full HTTP
+/// level, not as a microbenchmark -- see `benchmarks/native_router_vs_python.py`
+/// and that file's own docstring for why a microbenchmark would just
+/// reproduce `normalize_path`'s already-rejected result instead of testing
+/// anything new.
+#[pyclass(name = "Router")]
+struct PyRouter {
+    exact: HashMap<String, Py<PyAny>>,
+    // (prefix, route) -- prefix already has the trailing "/<path>" suffix
+    // stripped and a "/" appended, matching `item.pattern.removesuffix("/<path>") + "/"` exactly.
+    wildcard: Vec<(String, Py<PyAny>)>,
+}
+
+#[pymethods]
+impl PyRouter {
+    /// `routes`: `(pattern, route_object)` pairs, in the same order
+    /// `create_application`'s own `route_list` is -- a route whose pattern
+    /// ends in `/<path>` is treated as a wildcard; every other pattern is
+    /// an exact match, exactly mirroring `runtime.py:130-131`'s split.
+    #[new]
+    fn new(routes: Vec<(String, Py<PyAny>)>) -> Self {
+        let mut exact = HashMap::with_capacity(routes.len());
+        let mut wildcard = Vec::new();
+        for (pattern, route) in routes {
+            if let Some(stripped) = pattern.strip_suffix("/<path>") {
+                wildcard.push((format!("{stripped}/"), route));
+            } else {
+                exact.insert(pattern, route);
+            }
+        }
+        Self { exact, wildcard }
+    }
+
+    fn match_path(&self, py: Python<'_>, requested: &str) -> Option<Py<PyAny>> {
+        if let Some(route) = self.exact.get(requested) {
+            return Some(route.clone_ref(py));
+        }
+        self.wildcard.iter().find(|(prefix, _)| requested.starts_with(prefix.as_str())).map(|(_, route)| route.clone_ref(py))
+    }
+}
+
 #[pyclass(name = "MangoList")]
 struct PyMangoList {
     values: CoreMangoList<Py<PyAny>>,
@@ -363,6 +413,7 @@ fn mangoo_native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(encode_response_headers, module)?)?;
     module.add_function(wrap_pyfunction!(render_compiled_template, module)?)?;
     module.add_class::<PyCompiledNativeTemplate>()?;
+    module.add_class::<PyRouter>()?;
     module.add_class::<PyMangoList>()?;
     module.add_class::<PySignalDispatcher>()?;
     server::register(module)?;

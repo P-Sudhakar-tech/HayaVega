@@ -44,6 +44,21 @@ only for the view function's own business logic" has a real chance of
 winning, because it's structurally the same shape as the one candidate
 that already did.
 
+**Update from Phase 1 (see its entry below): the table above is all
+microbenchmarks** (a Python op vs. the same op behind one FFI call, in
+a tight `timeit` loop). Phase 1 tested the same tiny operation
+(routing's dict lookup) a different way -- once per real HTTP request,
+not in a loop -- and got a *different kind* of result: 0.95x-1.005x,
+a null result, not a loss. That doesn't overturn the table above (a
+tight loop really does pay the crossing cost every iteration, and that
+cost is real), but it refines the thesis: at HTTP level, where a
+request already pays for socket I/O and WSGI protocol handling
+regardless, *one* FFI crossing's cost turned out to be noise-level even
+for trivial work. The open question for Phase 3 onward isn't "can a
+request afford one more Rust crossing" (Phase 1 suggests yes) -- it's
+whether the Rust side does enough real computational work, once
+there, to come out ahead on top of that.
+
 **The ceiling this doesn't remove**: a view that runs real Python
 business logic (most real applications) still has to cross back into
 Python for that logic regardless of how much framework-side work moves
@@ -118,14 +133,26 @@ everything else runs GIL-free).
 **Size**: small in Rust lines, but the architectural decisions here
 constrain every later phase — do not rush it.
 
-### Phase 1 — Routing + request dispatch core
-`routing.py` (18 lines) plus the `_match()`/dispatch logic currently
-duplicated in `runtime.py` and `asgi.py` (~208 + 383 lines, not all
-dispatch-related). Smallest standalone piece, and everything else
-depends on having a route resolved before it can do anything.
-**Vertical-slice shape**: parse the incoming path once, match it,
-return the resolved handler reference to Python in one call — not
-"accelerate the dict lookup" (already shown to lose on its own).
+### Phase 1 — Routing + request dispatch core ✅ done, null result, not wired in
+`routing.py` (18 lines) plus the `_match()`/dispatch logic duplicated in
+`runtime.py` and `asgi.py`. `mangoo_native.Router` built and benchmarked
+at full HTTP level (not a microbenchmark -- see
+`benchmarks/native_router_vs_python.py` and `benchmarks/README.md`'s
+"A Rust router" section for the full result): **0.95x-1.005x average
+across two runs, every scenario within normal run-to-run variance,
+including `json_echo`, the scenario built to isolate routing
+specifically.** Not wired in -- the gate requires a decisive win, and a
+coin-flip result doesn't clear it -- but this is a genuine null result,
+not a repeat of the four microbenchmark rejections' decisive losses.
+**What it actually establishes**: a single FFI crossing per request is
+close to free at HTTP level, so later phases' real question isn't
+"can we afford to cross into Rust," it's "does the Rust side do enough
+actual computational work once there" -- exactly what Phase 3 is
+positioned to test. `Router` stays in `lib.rs`, unwired, as Phase 3's
+starting point. The duplicate-`_match()`-call fix found along the way
+(`runtime.py`/`asgi.py` call it twice per request, once for metrics
+labeling) remains an open, Rust-independent cleanup, not yet applied to
+the real framework code (only to the benchmark's own duplicated copy).
 
 ### Phase 2 — Request/Response core
 `request.py` (125 lines, including multipart parsing) and
@@ -223,9 +250,16 @@ past that depends on what Phase 3's actual measured result is.
 
 ## Next step
 
-Phase 0 + Phase 1 design, in a dedicated follow-up: the shared request-
-context type, the vertical-slice benchmark harness, and routing/
-dispatch migrated as the first proof that the "bigger unit of work per
-crossing" thesis actually holds at HTTP level, not just in theory.
-Everything past that is sequenced on what that first measurement
-shows.
+**Phase 0 and Phase 1 are done** (`benchmarks/_vertical_slice_harness.py`;
+`mangoo_native.Router`, benchmarked at HTTP level, null result, not
+wired in -- see Phase 1's entry above and `benchmarks/README.md`).
+What Phase 1 actually proved: a single FFI crossing per request is
+close to free, which shifts the open question for every later phase
+from "can we afford to cross into Rust" to "does the Rust side do
+real work once there." Phase 3 (DB execution + ORM) is where that
+question gets a real test -- substantial work (connect, execute,
+materialize rows) in one call, not a dict lookup. Phase 2 (Request/
+Response core) is lower-value on its own by the same logic that made
+Phase 1 a wash (thin wrapper types, not real work), so the next
+concrete step is **Phase 3**, built on `Router` as its routing
+starting point, not Phase 2 in isolation.

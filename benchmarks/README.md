@@ -600,6 +600,63 @@ there are -- more rows don't amortize it away, they multiply it.
 `serialize_json`/`compile_selection`/`normalize_path`, as a published,
 reproducible rejection rather than quietly discarded code.
 
+## A Rust router (HTTP-level, not a microbenchmark): a null result, not a loss
+
+Every candidate above was measured as a microbenchmark -- the same
+Python operation called in a tight loop, with and without a PyO3
+crossing wrapped around it. `RUST_CORE_REWRITE_ROADMAP.md`'s Phase 1
+tests a different question: does an FFI crossing's cost, which
+dominated every microbenchmark above, still dominate when it only
+happens *once per real HTTP request* instead of once per loop
+iteration? `mangoo_native.Router` mirrors `runtime.py`/`asgi.py`'s
+`_match()` exactly (exact-pattern lookup, falling back to a wildcard
+scan) -- structurally the same tiny operation `normalize_path` already
+lost on as a microbenchmark. This time the comparison is two real WSGI
+applications, same app (`benchmarks/mangoo_app`), same server
+(`waitress`, both sides -- only the matching logic differs), via
+`benchmarks/native_router_vs_python.py`:
+
+```powershell
+python benchmarks/native_router_vs_python.py
+```
+
+**Result (two runs shown) -- a genuine null result, not a loss:**
+
+| Scenario | Run 1 | Run 2 | Average |
+|---|---:|---:|---:|
+| `json_echo` (isolates routing specifically -- see its own scenario description) | 0.99x | 0.98x | 0.985x |
+| `db_list` | 1.11x | 0.88x | 0.995x |
+| `template_render` | 0.93x | 0.97x | 0.95x |
+| `static_file` | 0.98x | 1.03x | 1.005x |
+
+Every scenario lands within normal run-to-run variance on this machine
+(this doc's own cross-framework section already documents 5-15%
+variance as ordinary) -- including `json_echo`, the one scenario built
+specifically to isolate routing/dispatch overhead from everything
+else. There is no consistent direction across the two runs in either
+direction. This is categorically different from the four candidates
+above, which lost decisively and reproducibly (1.3x-22.4x, same
+direction every time) -- here, a Rust crossing that happens exactly
+once per request is cheap enough that its cost (or saving) is
+statistically invisible against everything else a request already
+pays for (socket I/O, WSGI protocol handling, `Request`/`Response`
+construction).
+
+**Decision: not wired in -- the gate requires a decisive win, the same
+bar `mango_list`/`SignalDispatcher`/the Rust WSGI server all cleared by
+wide, consistent margins, and a coin-flip result doesn't clear it.**
+But this is worth separating from the four rejections above in how
+it's understood: those four say "don't wrap *this specific tiny
+operation* in Rust." This one says something more useful for everything
+that comes after it in `RUST_CORE_REWRITE_ROADMAP.md`: a single FFI
+crossing per request is close to free at HTTP level, so the open
+question for later phases isn't "can we afford to cross into Rust
+once," it's "does the Rust side do enough *actual* computational work,
+once there, to come out ahead" -- which is exactly the question Phase
+3 (DB execution, real I/O and row materialization, not a dict lookup)
+is positioned to answer. `mangoo_native.Router` stays in the codebase,
+unwired, as the concrete starting point that phase needs.
+
 ## Fixing `template_render` in Python: a real, modest win
 
 The Rust investigation above (both the hardcoded and general engines) came
