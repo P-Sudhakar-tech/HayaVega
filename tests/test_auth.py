@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from mangoo import auth as auth_module
 from mangoo import crypto
 from mangoo.audit import audit_events
 from mangoo.auth import (
@@ -19,6 +20,7 @@ from mangoo.auth import (
     create_user,
     enable_totp,
     hash_password,
+    initialize_auth_db,
     min_length_validator,
     reset_password,
     revoke_session,
@@ -218,3 +220,39 @@ class PasswordValidatorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_password("short")
         validate_password(PASSWORD)
+
+
+class InitializeAuthDbCachingTests(unittest.TestCase):
+    """`initialize_auth_db` is called from every auth operation -- a second
+    call against an already-initialized database must skip the
+    CREATE TABLE/PRAGMA/ALTER TABLE round trip entirely, the same way
+    `models.Collection.prepare()`'s `_PREPARED_TABLES` cache already does."""
+
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+
+    def test_a_second_call_against_the_same_database_skips_the_ddl_round_trip(self):
+        database = Path(self.temporary_directory.name) / "users.sqlite3"
+        with patch("mangoo.auth._connect", wraps=auth_module._connect) as connect_spy:
+            initialize_auth_db(database)
+            initialize_auth_db(database)
+        self.assertEqual(connect_spy.call_count, 1)
+
+    def test_a_different_database_gets_its_own_independent_cache_entry(self):
+        first = Path(self.temporary_directory.name) / "first.sqlite3"
+        second = Path(self.temporary_directory.name) / "second.sqlite3"
+        with patch("mangoo.auth._connect", wraps=auth_module._connect) as connect_spy:
+            initialize_auth_db(first)
+            initialize_auth_db(second)
+        self.assertEqual(connect_spy.call_count, 2)
+
+    def test_the_database_is_actually_usable_after_the_cached_call(self):
+        """The cache must never cause a real caller to skip genuine
+        initialization -- create_user (which calls initialize_auth_db
+        itself) must still work normally after a prior direct call."""
+        database = Path(self.temporary_directory.name) / "users.sqlite3"
+        initialize_auth_db(database)
+        initialize_auth_db(database)
+        user = create_user(database, "alice", "alice@example.com", PASSWORD)
+        self.assertEqual(user.username, "alice")

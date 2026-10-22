@@ -18,7 +18,7 @@ from pathlib import Path
 
 from . import crypto
 from .audit import record_audit_event
-from .db import connect, user_id_definition
+from .db import connect, normalize_config, user_id_definition
 
 SCRYPT_N = 2**14
 SCRYPT_R = 8
@@ -75,8 +75,32 @@ def _connect(database_path: str | Path | dict):
     return connect(database_path)
 
 
+_INITIALIZED_AUTH_DBS: set[tuple] = set()
+
+
+def _auth_db_key(database_path: str | Path | dict) -> tuple:
+    config = normalize_config(database_path)
+    return tuple(sorted((key, str(value)) for key, value in config.items()))
+
+
 def initialize_auth_db(database_path: str | Path | dict) -> None:
-    """Create or upgrade the authentication schema without external services."""
+    """Create or upgrade the authentication schema without external services.
+
+    Called from every auth operation in this module (login, session checks,
+    user/group creation, ...), so the "already initialized" case -- true for
+    nearly every call after the first -- must not pay for a connection and a
+    full CREATE TABLE/PRAGMA/ALTER TABLE round trip every time. Cached per
+    (normalized database config) for the life of the process instead, the
+    same pattern `models.Collection.prepare()`'s `_PREPARED_TABLES` cache
+    already uses: a schema doesn't change without a migration, a separate,
+    deliberate operation this cache has no effect on. The cache is only
+    populated after the DDL actually succeeds (added below, outside the
+    try/finally), so a failed attempt is never mistaken for a completed one
+    and the next call retries it.
+    """
+    key = _auth_db_key(database_path)
+    if key in _INITIALIZED_AUTH_DBS:
+        return
     connection = _connect(database_path)
     try:
         connection.execute(
@@ -155,6 +179,7 @@ def initialize_auth_db(database_path: str | Path | dict) -> None:
         connection.commit()
     finally:
         connection.close()
+    _INITIALIZED_AUTH_DBS.add(key)
 
 
 def validate_password(password: str) -> None:
