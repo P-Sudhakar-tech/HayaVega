@@ -597,6 +597,42 @@ supported, and undefined variables render as empty text by default; pass
 non-iterable loop target, or a block a child defines that the base template
 never declares, instead of silently rendering nothing.
 
+## i18n
+
+`mangoo.i18n` does translations with plain JSON catalogs, not gettext --
+no `.po`/`.mo` files, no `msgfmt` compiler, no `makemessages`/
+`compilemessages`-equivalent command. A project hand-edits
+`locale/en.json`/`locale/es.json` directly:
+
+```json title="locale/en.json"
+{"welcome": "Welcome!", "item_count": {"one": "{count} item", "other": "{count} items"}}
+```
+
+```python
+from mangoo.i18n import catalog_from_settings, translator_for
+
+catalog = catalog_from_settings(settings.i18n)  # Settings.i18n.languages/default_language/locale_dir
+
+
+def home(request):
+    t = translator_for(request, catalog)  # negotiates Accept-Language, q= values, falls back cleanly
+    return Response(render_template("home.html", {"t": t}))
+```
+
+```django title="templates/home.html"
+<h1>{{ t.welcome }}</h1>
+```
+
+`translator_for` isn't `Request`-state or middleware-based -- it's a
+plain function a view calls, returning a `LanguageCatalog` that exposes
+translations through dotted-path attribute access
+(`templates.py`'s expression grammar has no function-call syntax) or as a
+callable with interpolation (`t("item_count", count=3)`) for use in view
+code. A missing key returns the key itself, never raises. Built-in error
+messages (`forms.py`, `auth.py`'s `validate_password`, ...) are not
+translated automatically. See [i18n](docs/topics/i18n.md) for language
+negotiation details, pluralization, and an explicit `?lang=`-style override.
+
 ## UI framework
 
 `mangoo.ui` is a server-rendered component system plus a first-party

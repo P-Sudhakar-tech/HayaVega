@@ -81,6 +81,23 @@ def posts_page(request):
 
 See [Messages](messages.md) for the full API.
 
+## Translations
+
+The expression grammar above supports only dotted-path lookups -- no
+function calls, no filters -- so a translated string renders the same
+way any other context value does, via plain attribute access:
+
+```python
+return Response(render_template("home.html", {"t": translator_for(request, catalog)}))
+```
+
+```django title="templates/home.html"
+<h1>{{ t.welcome }}</h1>
+```
+
+See [i18n](i18n.md) for catalogs, language negotiation, and
+pluralization.
+
 ## Caching
 
 Templates are parsed once and cached per file, invalidated by mtime &mdash;

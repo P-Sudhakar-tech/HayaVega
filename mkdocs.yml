@@ -128,6 +128,7 @@ nav:
       - Authentication: topics/auth.md
       - Admin: topics/admin.md
       - Templates: topics/templates.md
+      - i18n: topics/i18n.md
       - REST & OpenAPI: topics/rest-api.md
       - GraphQL: topics/graphql.md
       - ASGI: topics/asgi.md

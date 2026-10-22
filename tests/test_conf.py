@@ -94,6 +94,16 @@ class SettingsTests(unittest.TestCase):
         module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={})
         self.assertEqual(load_settings_from_module(module).cache, {})
 
+    def test_i18n_section_passes_through_to_the_uppercase_dict_catalog_from_settings_consumes(self):
+        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={}, i18n={"languages": ["en", "es"], "default_language": "en"})
+        settings = load_settings_from_module(module)
+        self.assertEqual(settings.i18n["LANGUAGES"], ["en", "es"])
+        self.assertEqual(settings.i18n["DEFAULT_LANGUAGE"], "en")
+
+    def test_i18n_section_defaults_to_empty_when_unset(self):
+        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={})
+        self.assertEqual(load_settings_from_module(module).i18n, {})
+
 
 class LoadDatabaseTests(unittest.TestCase):
     """A project with more than one database (e.g. a secondary 'analytics'
