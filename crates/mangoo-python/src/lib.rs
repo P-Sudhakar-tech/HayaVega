@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyList, PySet, PyTuple};
 
 use mangoo_core::{JsonValue, MangoList as CoreMangoList, TemplateExpr, TemplateNode};
 
@@ -57,6 +57,62 @@ fn to_json_value(value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
 #[pyfunction]
 fn serialize_json(value: Bound<'_, PyAny>) -> PyResult<String> {
     Ok(to_json_value(&value)?.encode())
+}
+
+/// Mirrors `mangoo.serializers._plain()` exactly: recursively reduce an
+/// arbitrary value (an `Entity` with `.as_dict()`, a `Mapping`, a
+/// `list`/`tuple`/`set`, a `date`/`datetime`, or anything else passed
+/// through unchanged) to a plain Python structure `msgspec.json.encode`
+/// can serialize. Returns a Python object graph, not a JSON string --
+/// `_plain()`'s own result still goes through `msgspec.json.encode`
+/// afterward, same as the pure-Python path.
+///
+/// Benchmarked, not wired in: `benchmarks/native_plain_value.py` measured
+/// Python 1.33-1.59x faster across a flat dict, a single Entity, and a
+/// 30-row Entity list -- the same per-node-FFI-crossing cost that already
+/// sank `render_fragment_items`'s general case applies here too, since
+/// this is a recursive Python-callback walk at every level. Kept
+/// alongside `serialize_json`/`compile_selection`/`normalize_path` as a
+/// documented, benchmarked rejection, not removed -- see
+/// `UPCOMING_IMPROVEMENT_ROADMAP.md`.
+fn plain_value_inner<'py>(py: Python<'py>, value: &Bound<'py, PyAny>) -> PyResult<Py<PyAny>> {
+    if value.hasattr("as_dict")? {
+        let fields = value.call_method0("as_dict")?;
+        let fields = fields.cast::<PyDict>().map_err(|_| pyo3::exceptions::PyTypeError::new_err("as_dict() must return a dict"))?;
+        let result = PyDict::new(py);
+        for (key, item) in fields.iter() {
+            result.set_item(key, plain_value_inner(py, &item)?)?;
+        }
+        return Ok(result.into_any().unbind());
+    }
+    if let Ok(mapping) = value.cast::<PyDict>() {
+        let result = PyDict::new(py);
+        for (key, item) in mapping.iter() {
+            result.set_item(key.str()?.to_string(), plain_value_inner(py, &item)?)?;
+        }
+        return Ok(result.into_any().unbind());
+    }
+    if let Ok(list) = value.cast::<PyList>() {
+        let items = list.iter().map(|item| plain_value_inner(py, &item)).collect::<PyResult<Vec<_>>>()?;
+        return Ok(PyList::new(py, items)?.into_any().unbind());
+    }
+    if let Ok(tuple) = value.cast::<PyTuple>() {
+        let items = tuple.iter().map(|item| plain_value_inner(py, &item)).collect::<PyResult<Vec<_>>>()?;
+        return Ok(PyList::new(py, items)?.into_any().unbind());
+    }
+    if let Ok(set) = value.cast::<PySet>() {
+        let items = set.iter().map(|item| plain_value_inner(py, &item)).collect::<PyResult<Vec<_>>>()?;
+        return Ok(PyList::new(py, items)?.into_any().unbind());
+    }
+    if value.hasattr("isoformat")? {
+        return Ok(value.call_method0("isoformat")?.unbind());
+    }
+    Ok(value.clone().unbind())
+}
+
+#[pyfunction]
+fn plain_value(py: Python<'_>, value: Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    plain_value_inner(py, &value)
 }
 
 /// Benchmark-only: renders `benchmarks/mangoo_app/templates/page.html`'s exact
@@ -300,6 +356,7 @@ fn mangoo_native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(normalize_path, module)?)?;
     module.add_function(wrap_pyfunction!(compile_selection, module)?)?;
     module.add_function(wrap_pyfunction!(serialize_json, module)?)?;
+    module.add_function(wrap_pyfunction!(plain_value, module)?)?;
     module.add_function(wrap_pyfunction!(render_post_list_page, module)?)?;
     module.add_function(wrap_pyfunction!(render_fragment_items, module)?)?;
     module.add_function(wrap_pyfunction!(decode_request_headers, module)?)?;

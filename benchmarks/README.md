@@ -561,6 +561,45 @@ template compiler is now backed by a real measured ceiling instead of a
 guess. See `INDUSTRY_LEADERSHIP_ROADMAP.md`'s Phase 3 for the follow-up
 item this created.
 
+## A third native-function benchmark: `_plain()`, the API-serialization object-graph walk
+
+`serializers.py`'s `_plain()` recursively reduces an arbitrary value --
+an `Entity` with `.as_dict()`, a `Mapping`, a `list`/`tuple`/`set`, a
+`date`/`datetime` -- to a plain structure, on every field of every row
+of every API response, *before* `msgspec.json.encode` ever runs. Unlike
+the three functions above, this one wasn't competing against an
+already-optimized C library: there's no C equivalent of "walk an
+arbitrary Entity/dict/list graph" to lose to, so it looked like the
+first genuinely promising native candidate outside the hardcoded
+template-rendering case. `mangoo_native.plain_value` mirrors `_plain()`
+exactly; `benchmarks/native_plain_value.py` benchmarks it against
+realistic payload shapes (not a trivial single-field case):
+
+```powershell
+python benchmarks/native_plain_value.py
+```
+
+**Result: Python wins all three shapes:**
+
+| Payload | Python | Native | Python is faster by |
+|---|---:|---:|---:|
+| Flat dict (6 fields) | 7.975 us/call | 11.003 us/call | 1.38x |
+| Single Entity (`as_dict` + a Timestamp field) | 3.454 us/call | 4.608 us/call | 1.33x |
+| 30-row Entity list (matches `db_list`'s own row count) | 104.660 us/call | 166.371 us/call | 1.59x |
+
+**Decision: not wired in.** The reason is structural, not a repeat of
+the "already-optimized C library" finding above -- it's the same wall
+the ASGI header candidates and the general template engine hit:
+`_plain()` is a recursive walk that calls back into Python
+(`hasattr`/`isinstance`-equivalent checks, attribute access) at *every
+node* of the graph, so it pays one FFI crossing per node rather than
+one crossing for the whole call. A 30-row Entity list means dozens of
+crossings, and that per-node cost dominates regardless of how many rows
+there are -- more rows don't amortize it away, they multiply it.
+`mangoo_native.plain_value` stays in the codebase, unwired, alongside
+`serialize_json`/`compile_selection`/`normalize_path`, as a published,
+reproducible rejection rather than quietly discarded code.
+
 ## Fixing `template_render` in Python: a real, modest win
 
 The Rust investigation above (both the hardcoded and general engines) came
