@@ -33,6 +33,7 @@ from .cache import CacheBackendError, InMemoryCache, RedisCache, SqliteCache, ca
 from .collections import MangoList, mango_list
 from .forms import BooleanField, CharField, DecimalField, EmailField, Field, Form, IntegerField, entity_form
 from .hardening import HardeningOptions
+from .i18n import Catalog, LanguageCatalog, catalog_from_settings, resolve_language, translator_for
 from .logging import JsonFormatter, configure_logging
 from .mail import ConsoleEmailBackend, EmailMessage, FileEmailBackend, SMTPEmailBackend, backend_from_settings, mail_notifier, send_mail
 from .messages import Message, add_message, consume_messages
@@ -59,6 +60,7 @@ __all__ = [
     "AsyncTestClient",
     "BooleanField",
     "CacheBackendError",
+    "Catalog",
     "CharField",
     "ConsoleEmailBackend",
     "Decimal",
@@ -78,6 +80,7 @@ __all__ = [
     "IntegerField",
     "JsonFormatter",
     "Key",
+    "LanguageCatalog",
     "MangoList",
     "Message",
     "MetricsRegistry",
@@ -107,6 +110,7 @@ __all__ = [
     "backend_from_settings",
     "cache_from_settings",
     "cached_view",
+    "catalog_from_settings",
     "common_password_validator",
     "configure_logging",
     "consume_messages",
@@ -141,6 +145,7 @@ __all__ = [
     "remove_user_from_group",
     "render_template",
     "reset_password",
+    "resolve_language",
     "revoke_all_sessions",
     "revoke_session",
     "rotate_session",
@@ -148,6 +153,7 @@ __all__ = [
     "send_mail",
     "static_routes",
     "superuser_required",
+    "translator_for",
     "user_permissions",
     "validate_password",
     "validate_production",
