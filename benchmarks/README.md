@@ -1414,3 +1414,63 @@ pool size explicitly (`Tortoise.init(..., connections={"default": {...,
 benchmarking a different configuration than the library's own documented
 default was not this comparison's question.
 (comparison 2), not just a theoretical property asserted in a docstring.
+
+
+## GraphQL lexer+parser: a real win, wired into `Schema.execute()`
+
+Phase 6 of `RUST_CORE_REWRITE_ROADMAP.md`. `mangoo.graphql`'s
+`Schema.execute()` has two halves with very different Rust
+candidacy: field *resolution* (`_resolve_root_field` calling
+arbitrary, user-defined Python resolvers) can never move to Rust --
+the same ceiling every "what stays Python" section in the roadmap
+already states. But tokenizing and parsing a query string into a
+`_FieldNode`/`_VariableDefinition` tree needs **zero** Python
+callbacks mid-parse, a query string goes in and a complete parsed
+structure comes out in one call -- the same "real, substantial work
+per crossing" shape `render_post_list_page` and `SerializedConnection`
+both have, not the "wrap one small operation" shape that's lost five
+times over in this file.
+
+`mangoo_native.parse_graphql_document` is a faithful Rust port of
+`_tokenize`/`_Parser.parse_document()` (same punctuation set, same
+name/number/string literal lexing, same rejection of `@` directives
+and `.` fragments, same 64-deep structural nesting guard), living in
+`mangoo-core` with its own `cargo test` coverage, with a thin PyO3
+wrapper in `mangoo-python` converting its result into a wire format
+(nested tuples/lists/dicts; a 2-tuple `("$", name)` for variable
+references, since real GraphQL list/object values are always Python
+lists/dicts on this bridge and never tuples) that `graphql.py` decodes
+back into the same `_FieldNode`/`_VariableDefinition` objects the pure-
+Python path produces. Correctness-verified field-for-field against
+the real parser's output before any timing.
+
+```
+python benchmarks/native_graphql_parser.py
+```
+
+### Results (`timeit`, 100,000 calls, decode included)
+
+| Query shape | Python | Native | Result |
+|---|---:|---:|---:|
+| Small (`{ greeting }`) | 7.611 us/call | 2.811 us/call | **Native 2.71x faster** |
+| Complex (variables, arguments, nested selections) | 122.895 us/call | 31.338 us/call | **Native 3.92x faster** |
+
+The complex shape's margin is wider than the small shape's -- expected,
+since lexing/parsing cost scales with query size while the fixed FFI
+crossing cost stays constant, so a bigger single call amortizes that
+fixed cost further. Both numbers include the Python-side decode step
+(reconstructing `_FieldNode`/`_VariableDefinition` from the wire
+format), the real cost `Schema.execute()` pays, not just the raw Rust
+call in isolation.
+
+### Decision: wired in
+
+A decisive, reproducible win on both a trivial and a realistic query
+shape. `Schema.execute()` now calls `mangoo.graphql._parse_document()`,
+which tries `mangoo_native.parse_graphql_document` first and falls
+back to `_Parser(_tokenize(query)).parse_document()` when
+`mangoo_native` isn't built -- identical behavior, including error
+messages for malformed queries, on both paths (`tests/test_graphql.py`'s
+`NativeParserBridgeTests` exercises both explicitly). `execute()`'s own
+logic past parsing -- binding variables, depth/field-count limits,
+calling resolvers, projecting results -- is completely unchanged.

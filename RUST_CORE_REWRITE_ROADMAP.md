@@ -24,6 +24,9 @@ way, for the same structural reason:
 | ASGI header decode/encode | Python 1.4-2.7x faster | Same |
 | `_plain()` object-graph walk | Python 1.3-1.6x faster | A recursive walk crossing into Python at every node |
 | `render_post_list_page` (hardcoded template) | **Native 16-20x faster** | The one exception: real, amortizable work (escaping/formatting 20 rows) *per crossing* |
+| General template engine (Phase 5) | Python 2.49-2.93x faster | Per-node crossing, same wall as `_plain()` -- see Phase 5 |
+| `SerializedConnection` (Phase 3) | **Native 1.5-1.7x faster** | A different architecture, not a wrapped function -- one Rust-owned connection serializing access |
+| GraphQL lexer+parser (Phase 6) | **Native 2.7-3.9x faster** | Whole-query parse per crossing -- real, substantial, self-contained work, same shape as the template win |
 
 The pattern is consistent: **a Rust function wins only when it does
 substantial work per PyO3 boundary crossing.** Every rejected
@@ -240,14 +243,32 @@ if/for/variable node rather than one crossing for the whole template
 checked here until it was. **Not pursued further.** See
 `benchmarks/README.md`'s own section for the full writeup.
 
-### Phase 6 — GraphQL
+### Phase 6 — GraphQL ✅ done/win (lexer+parser only)
 `graphql.py` (498 lines, a complete hand-rolled tokenizer/parser/
-executor). A plausible winner unlike the four rejected candidates:
-parsing and executing a whole query is substantial, non-trivial work
-per call, the same "real work per crossing" shape the template-render
-win had. Lower priority than Phases 1-5 since GraphQL is one API
-surface among several (REST, admin, templates), not every request's
-path.
+executor). Field *resolution* (`_resolve_root_field` calling arbitrary
+Python resolvers) can never move to Rust -- that ceiling is real and
+stayed in scope-out. But tokenizing and parsing a query string into a
+parsed structure needs zero Python callbacks mid-parse, the same
+"real work per crossing" shape the template-render win had.
+
+Built as a faithful Rust port of `_tokenize`/`_Parser.parse_document()`
+(`mangoo_native.parse_graphql_document`, same grammar, same rejected
+constructs — directives, fragments) in `mangoo-core`/`mangoo-python`,
+correctness-verified field-for-field against the real Python parser
+before any timing. Measured (`benchmarks/native_graphql_parser.py`,
+including the Python-side decode back into `_FieldNode`/
+`_VariableDefinition`):
+
+| Query shape | Result |
+|---|---:|
+| Small (`{ greeting }`) | **Native 2.71x faster** |
+| Complex (variables, arguments, nested selections) | **Native 3.92x faster** |
+
+A decisive, reproducible win -- wired into `Schema.execute()` as a
+try-native-else-Python-fallback (`mangoo.graphql._parse_document`),
+identical behavior and error messages on both paths. `execute()`'s
+own logic past parsing (binding variables, depth/field-count limits,
+calling resolvers, projecting results) is completely unchanged.
 
 ### Phase 7 — Authentication internals
 `auth.py` (701 lines, the single largest module). State upfront,
@@ -297,12 +318,12 @@ not as disproven by how fast the first few went.
 
 ## Next step
 
-**Phase 0, Phase 1, Phase 3, and Phase 4 are done; Phase 5 was tried
-and rejected.** Phase 1: a null result (routing's dict lookup,
-benchmarked at HTTP level -- a single FFI crossing per request turned
-out to be close to free, which reframed every later phase's real
-question from "can we afford to cross into Rust" to "does the Rust
-side do real work once there." Phase 3 (narrowed from the full
+**Phase 0, Phase 1, Phase 3, Phase 4, and Phase 6 are done; Phase 5
+was tried and rejected.** Phase 1: a null result (routing's dict
+lookup, benchmarked at HTTP level -- a single FFI crossing per request
+turned out to be close to free, which reframed every later phase's
+real question from "can we afford to cross into Rust" to "does the
+Rust side do real work once there." Phase 3 (narrowed from the full
 DB-execution vertical slice to a specific, different architecture --
 one Rust-serialized connection): a real, decisive, reproducible
 ~1.5-1.7x win, wired in as `mangoo.db.SerializedConnection`. Phase 4:
@@ -310,15 +331,16 @@ closed, no work needed. Phase 5 (templates): the *general* engine this
 phase would need to ship already existed, unwired and unrun, before
 this session looked for it -- run for the first time here, it lost
 decisively (2.49x-2.93x), the same per-node-crossing wall `_plain()`
-already hit. Not pursued further; see Phase 5's entry above.
+already hit. Not pursued further; see Phase 5's entry above. Phase 6
+(GraphQL lexer+parser, not the executor): a real, decisive win
+(2.71x-3.92x), wired into `Schema.execute()` with full fallback parity
+-- see Phase 6's entry above.
 
 Phase 2 (Request/Response core) remains lower-value in isolation, by
 the same logic that made Phase 1 a wash -- thin wrapper types, not
-real computational work. **Phase 6 (GraphQL) is the live candidate
-now**, and genuinely untried (unlike templates, which turned out to
-already have a rejected attempt sitting in the repo) -- its lexer/
-parser (query string in, parsed AST out, zero Python callbacks
-mid-parse) has the same "real work per crossing" shape Phase 3's win
-and the original `render_post_list_page` win share. Its full executor
-does not share that shape (field resolvers are arbitrary user Python,
-can never move to Rust), so only the parsing step is in scope.
+real computational work. **Phase 7 (Authentication internals) is the
+next candidate**, with the same scoping caveat already stated in its
+entry: the actual expensive crypto (`scrypt`/`pbkdf2_hmac`, HMAC-SHA1)
+is already C/OpenSSL and won't get faster in Rust by design -- only
+the surrounding session/permission-check logic is in scope, and only
+if a concrete need for shared in-process state emerges.

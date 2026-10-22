@@ -24,6 +24,11 @@ from typing import Any, cast
 
 from .response import json_response
 
+try:
+    from mangoo_native import parse_graphql_document as _native_parse_graphql_document
+except ImportError:
+    _native_parse_graphql_document = None
+
 LOGGER = logging.getLogger("mangoo.graphql")
 
 _MAX_STRUCTURAL_DEPTH = 64
@@ -283,6 +288,48 @@ class _Parser:
         raise GraphQLSyntaxError("Expected a value.")
 
 
+# ---------------------------------------------------------------------------
+# Native lexing+parsing bridge. `mangoo_native.parse_graphql_document` is a
+# faithful Rust port of `_tokenize`/`_Parser.parse_document()` above (same
+# grammar, same rejected constructs) -- measured at a real 2.7-3.9x win
+# (benchmarks/native_graphql_parser.py) since parsing is self-contained,
+# substantial-enough work per call to be worth one Rust/Python FFI crossing,
+# unlike field *resolution* (arbitrary Python callables), which stays here.
+# ---------------------------------------------------------------------------
+
+
+def _decode_native_value(wire):
+    if isinstance(wire, tuple) and len(wire) == 2 and wire[0] == "$":
+        return _VariableRef(wire[1])
+    if isinstance(wire, list):
+        return [_decode_native_value(item) for item in wire]
+    if isinstance(wire, dict):
+        return {key: _decode_native_value(item) for key, item in wire.items()}
+    return wire
+
+
+def _decode_native_fields(wire) -> list[_FieldNode]:
+    return [
+        _FieldNode(
+            name=name,
+            arguments={arg_name: _decode_native_value(arg_value) for arg_name, arg_value in arguments},
+            selection_set=_decode_native_fields(selection_set) if selection_set is not None else None,
+        )
+        for name, arguments, selection_set in wire
+    ]
+
+
+def _parse_document(query: str):
+    if _native_parse_graphql_document is None:
+        return _Parser(_tokenize(query)).parse_document()
+    try:
+        operation_type, operation_name, variable_definitions_wire, selection_set_wire = _native_parse_graphql_document(query)
+    except ValueError as exc:
+        raise GraphQLSyntaxError(str(exc)) from exc
+    variable_definitions = {name: _VariableDefinition(required=required, default=_decode_native_value(default), has_default=has_default) for name, required, default, has_default in variable_definitions_wire}
+    return operation_type, operation_name, variable_definitions, _decode_native_fields(selection_set_wire)
+
+
 def _bind(value, variables: dict):
     if isinstance(value, _VariableRef):
         if value.name in variables:
@@ -356,7 +403,7 @@ class Schema:
 
     def execute(self, query: str, request, *, variables: Mapping | None = None, operation_name: str | None = None) -> dict:
         try:
-            operation_type, parsed_name, variable_definitions, selection_set = _Parser(_tokenize(query)).parse_document()
+            operation_type, parsed_name, variable_definitions, selection_set = _parse_document(query)
         except GraphQLSyntaxError as exc:
             return {"errors": [{"message": str(exc)}]}
 

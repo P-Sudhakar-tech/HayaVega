@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from mangoo.graphql import GraphQLSyntaxError, Schema, _Parser, _tokenize, graphql_view
 
@@ -300,6 +301,53 @@ class GraphQLViewTests(unittest.TestCase):
         schema = Schema(query={"greeting": lambda request: "hi"}, introspection=True)
         result = schema.execute("{ __type }", None)
         self.assertIn("minimal introspection", result["errors"][0]["message"])
+
+
+class NativeParserBridgeTests(unittest.TestCase):
+    """`Schema.execute()` parses via `mangoo_native.parse_graphql_document`
+    when built (benchmarks/native_graphql_parser.py measured a 2.7-3.9x win),
+    falling back to `_Parser`/`_tokenize` otherwise -- same result either way."""
+
+    _QUERY = """
+        query ListPosts($limit: Int! = 10, $tags: [String!]) {
+            posts(limit: $limit, tags: $tags, extra: { active: true, score: 3.5 }) {
+                id
+                title
+                author { name }
+            }
+        }
+    """
+
+    def test_uses_the_native_parser_when_mangoo_native_is_built(self):
+        from mangoo.graphql import _native_parse_graphql_document
+
+        if _native_parse_graphql_document is None:
+            self.skipTest("mangoo_native is not built in this environment")
+        seen = {}
+        schema = Schema(query={"posts": lambda request, **kwargs: seen.update(kwargs) or []})
+        result = schema.execute(self._QUERY, None, variables={"tags": ["a", "b"]})
+        self.assertEqual(result, {"data": {"posts": []}})
+        self.assertEqual(seen, {"limit": 10, "tags": ["a", "b"], "extra": {"active": True, "score": 3.5}})
+
+    def test_falls_back_to_pure_python_when_mangoo_native_is_unavailable(self):
+        with mock.patch("mangoo.graphql._native_parse_graphql_document", None):
+            seen = {}
+            schema = Schema(query={"posts": lambda request, **kwargs: seen.update(kwargs) or []})
+            result = schema.execute(self._QUERY, None, variables={"tags": ["a", "b"]})
+            self.assertEqual(result, {"data": {"posts": []}})
+            self.assertEqual(seen, {"limit": 10, "tags": ["a", "b"], "extra": {"active": True, "score": 3.5}})
+
+    def test_native_and_fallback_paths_report_the_same_syntax_error(self):
+        from mangoo.graphql import _native_parse_graphql_document
+
+        if _native_parse_graphql_document is None:
+            self.skipTest("mangoo_native is not built in this environment")
+        schema = Schema(query={"greeting": lambda request: "hi"})
+        native_result = schema.execute("{ greeting @skip }", None)
+        with mock.patch("mangoo.graphql._native_parse_graphql_document", None):
+            fallback_result = schema.execute("{ greeting @skip }", None)
+        self.assertIn("errors", native_result)
+        self.assertIn("errors", fallback_result)
 
 
 if __name__ == "__main__":

@@ -387,9 +387,380 @@ impl<T> MangoList<T> {
     pub fn into_vec(self) -> Vec<T> { self.items }
 }
 
+// ---------------------------------------------------------------------------
+// GraphQL: lexing + parsing only. Field resolution calls arbitrary Python
+// callables and can never move here -- see RUST_CORE_REWRITE_ROADMAP.md.
+// Mirrors src/mangoo/graphql.py's `_tokenize`/`_Parser` grammar exactly
+// (same punctuation set, same literal lexing, same rejected constructs).
+// ---------------------------------------------------------------------------
+
+const GRAPHQL_MAX_STRUCTURAL_DEPTH: u32 = 64;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GraphQLValue {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    String(String),
+    Variable(String),
+    List(Vec<GraphQLValue>),
+    Object(Vec<(String, GraphQLValue)>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GraphQLVariableDefinition {
+    pub name: String,
+    pub required: bool,
+    pub default: Option<GraphQLValue>,
+    pub has_default: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GraphQLField {
+    pub name: String,
+    pub arguments: Vec<(String, GraphQLValue)>,
+    pub selection_set: Option<Vec<GraphQLField>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GraphQLDocument {
+    pub operation_type: String,
+    pub operation_name: Option<String>,
+    pub variable_definitions: Vec<GraphQLVariableDefinition>,
+    pub selection_set: Vec<GraphQLField>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum GqlToken {
+    Punct(char),
+    Name(String),
+    Int(i64),
+    Float(f64),
+    Str(String),
+    Eof,
+}
+
+fn decode_graphql_string(raw: &str) -> Result<String, String> {
+    // `raw` includes the surrounding quotes.
+    let inner = &raw[1..raw.len() - 1];
+    let mut result = String::new();
+    let mut chars = inner.chars();
+    while let Some(character) = chars.next() {
+        if character != '\\' {
+            result.push(character);
+            continue;
+        }
+        match chars.next() {
+            Some('"') => result.push('"'),
+            Some('\\') => result.push('\\'),
+            Some('/') => result.push('/'),
+            Some('b') => result.push('\u{0008}'),
+            Some('f') => result.push('\u{000C}'),
+            Some('n') => result.push('\n'),
+            Some('r') => result.push('\r'),
+            Some('t') => result.push('\t'),
+            Some('u') => {
+                let hex: String = chars.by_ref().take(4).collect();
+                if hex.len() != 4 {
+                    return Err("Invalid \\u escape in string literal.".to_owned());
+                }
+                let code = u32::from_str_radix(&hex, 16).map_err(|_| "Invalid \\u escape in string literal.".to_owned())?;
+                result.push(char::from_u32(code).ok_or_else(|| "Invalid \\u escape in string literal.".to_owned())?);
+            }
+            _ => return Err("Invalid escape sequence in string literal.".to_owned()),
+        }
+    }
+    Ok(result)
+}
+
+fn tokenize_graphql(source: &str) -> Result<Vec<GqlToken>, String> {
+    let chars: Vec<char> = source.chars().collect();
+    let length = chars.len();
+    let mut index = 0;
+    let mut tokens = Vec::new();
+    while index < length {
+        let character = chars[index];
+        if character.is_whitespace() || character == ',' || character == '\u{FEFF}' {
+            index += 1;
+            continue;
+        }
+        if character == '#' {
+            while index < length && chars[index] != '\n' && chars[index] != '\r' {
+                index += 1;
+            }
+            continue;
+        }
+        if character == '"' {
+            let start = index;
+            let mut end = index + 1;
+            while end < length && chars[end] != '"' {
+                end += if chars[end] == '\\' { 2 } else { 1 };
+            }
+            if end >= length {
+                return Err("Unterminated string literal.".to_owned());
+            }
+            let raw: String = chars[start..=end].iter().collect();
+            tokens.push(GqlToken::Str(decode_graphql_string(&raw)?));
+            index = end + 1;
+            continue;
+        }
+        if "{}():$[]!=".contains(character) {
+            tokens.push(GqlToken::Punct(character));
+            index += 1;
+            continue;
+        }
+        if character.is_ascii_alphabetic() || character == '_' {
+            let start = index;
+            while index < length && (chars[index].is_ascii_alphanumeric() || chars[index] == '_') {
+                index += 1;
+            }
+            tokens.push(GqlToken::Name(chars[start..index].iter().collect()));
+            continue;
+        }
+        if character.is_ascii_digit() || (character == '-' && index + 1 < length && chars[index + 1].is_ascii_digit()) {
+            let start = index;
+            index += 1;
+            let mut is_float = false;
+            while index < length && chars[index].is_ascii_digit() {
+                index += 1;
+            }
+            if index < length && chars[index] == '.' {
+                is_float = true;
+                index += 1;
+                while index < length && chars[index].is_ascii_digit() {
+                    index += 1;
+                }
+            }
+            if index < length && (chars[index] == 'e' || chars[index] == 'E') {
+                is_float = true;
+                index += 1;
+                if index < length && (chars[index] == '+' || chars[index] == '-') {
+                    index += 1;
+                }
+                while index < length && chars[index].is_ascii_digit() {
+                    index += 1;
+                }
+            }
+            let raw: String = chars[start..index].iter().collect();
+            if is_float {
+                tokens.push(GqlToken::Float(raw.parse().map_err(|_| format!("Invalid number literal: {raw}"))?));
+            } else {
+                tokens.push(GqlToken::Int(raw.parse().map_err(|_| format!("Invalid number literal: {raw}"))?));
+            }
+            continue;
+        }
+        if character == '@' {
+            return Err("Directives are not supported.".to_owned());
+        }
+        if character == '.' {
+            return Err("Fragments are not supported.".to_owned());
+        }
+        return Err(format!("Unexpected character {character:?} in query."));
+    }
+    tokens.push(GqlToken::Eof);
+    Ok(tokens)
+}
+
+struct GraphQLParser {
+    tokens: Vec<GqlToken>,
+    pos: usize,
+    depth: u32,
+}
+
+impl GraphQLParser {
+    fn new(tokens: Vec<GqlToken>) -> Self {
+        Self { tokens, pos: 0, depth: 0 }
+    }
+
+    fn peek(&self) -> &GqlToken {
+        &self.tokens[self.pos]
+    }
+
+    fn advance(&mut self) -> GqlToken {
+        let token = self.tokens[self.pos].clone();
+        if self.pos + 1 < self.tokens.len() {
+            self.pos += 1;
+        }
+        token
+    }
+
+    fn peek_is_punct(&self, value: char) -> bool {
+        matches!(self.peek(), GqlToken::Punct(character) if *character == value)
+    }
+
+    fn expect_punct(&mut self, value: char) -> Result<(), String> {
+        match self.advance() {
+            GqlToken::Punct(character) if character == value => Ok(()),
+            other => Err(format!("Expected '{value}', found {other:?}.")),
+        }
+    }
+
+    fn expect_name(&mut self) -> Result<String, String> {
+        match self.advance() {
+            GqlToken::Name(name) => Ok(name),
+            other => Err(format!("Expected a name, found {other:?}.")),
+        }
+    }
+
+    fn parse_document(&mut self) -> Result<GraphQLDocument, String> {
+        let mut operation_type = "query".to_owned();
+        let mut operation_name = None;
+        if let GqlToken::Name(name) = self.peek() {
+            if name == "query" || name == "mutation" {
+                operation_type = self.expect_name()?;
+                if matches!(self.peek(), GqlToken::Name(_)) {
+                    operation_name = Some(self.expect_name()?);
+                }
+            }
+        }
+        let variable_definitions = self.parse_variable_definitions()?;
+        let selection_set = self.parse_selection_set()?;
+        if !matches!(self.peek(), GqlToken::Eof) {
+            return Err("Unexpected content after the operation.".to_owned());
+        }
+        Ok(GraphQLDocument { operation_type, operation_name, variable_definitions, selection_set })
+    }
+
+    fn parse_variable_definitions(&mut self) -> Result<Vec<GraphQLVariableDefinition>, String> {
+        let mut definitions = Vec::new();
+        if !self.peek_is_punct('(') {
+            return Ok(definitions);
+        }
+        self.advance();
+        while !self.peek_is_punct(')') {
+            self.expect_punct('$')?;
+            let name = self.expect_name()?;
+            self.expect_punct(':')?;
+            let non_null = self.parse_type()?;
+            let mut has_default = false;
+            let mut default = None;
+            if self.peek_is_punct('=') {
+                self.advance();
+                default = Some(self.parse_value()?);
+                has_default = true;
+            }
+            definitions.push(GraphQLVariableDefinition { name, required: non_null && !has_default, default, has_default });
+        }
+        self.advance();
+        Ok(definitions)
+    }
+
+    fn parse_type(&mut self) -> Result<bool, String> {
+        if self.peek_is_punct('[') {
+            self.advance();
+            self.parse_type()?;
+            self.expect_punct(']')?;
+        } else {
+            self.expect_name()?;
+        }
+        if self.peek_is_punct('!') {
+            self.advance();
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    fn parse_selection_set(&mut self) -> Result<Vec<GraphQLField>, String> {
+        self.depth += 1;
+        if self.depth > GRAPHQL_MAX_STRUCTURAL_DEPTH {
+            return Err("Query is nested too deeply to parse.".to_owned());
+        }
+        self.expect_punct('{')?;
+        let mut fields = Vec::new();
+        while !self.peek_is_punct('}') {
+            fields.push(self.parse_field()?);
+        }
+        self.advance();
+        if fields.is_empty() {
+            return Err("A selection set must select at least one field.".to_owned());
+        }
+        self.depth -= 1;
+        Ok(fields)
+    }
+
+    fn parse_field(&mut self) -> Result<GraphQLField, String> {
+        let name = self.expect_name()?;
+        let arguments = self.parse_arguments()?;
+        let selection_set = if self.peek_is_punct('{') { Some(self.parse_selection_set()?) } else { None };
+        Ok(GraphQLField { name, arguments, selection_set })
+    }
+
+    fn parse_arguments(&mut self) -> Result<Vec<(String, GraphQLValue)>, String> {
+        let mut arguments = Vec::new();
+        if !self.peek_is_punct('(') {
+            return Ok(arguments);
+        }
+        self.advance();
+        while !self.peek_is_punct(')') {
+            let name = self.expect_name()?;
+            self.expect_punct(':')?;
+            arguments.push((name, self.parse_value()?));
+        }
+        self.advance();
+        Ok(arguments)
+    }
+
+    fn parse_value(&mut self) -> Result<GraphQLValue, String> {
+        match self.peek().clone() {
+            GqlToken::Punct('$') => {
+                self.advance();
+                Ok(GraphQLValue::Variable(self.expect_name()?))
+            }
+            GqlToken::Int(value) => {
+                self.advance();
+                Ok(GraphQLValue::Int(value))
+            }
+            GqlToken::Float(value) => {
+                self.advance();
+                Ok(GraphQLValue::Float(value))
+            }
+            GqlToken::Str(value) => {
+                self.advance();
+                Ok(GraphQLValue::String(value))
+            }
+            GqlToken::Name(name) => {
+                self.advance();
+                match name.as_str() {
+                    "true" => Ok(GraphQLValue::Bool(true)),
+                    "false" => Ok(GraphQLValue::Bool(false)),
+                    "null" => Ok(GraphQLValue::Null),
+                    _ => Ok(GraphQLValue::String(name)),
+                }
+            }
+            GqlToken::Punct('[') => {
+                self.advance();
+                let mut items = Vec::new();
+                while !self.peek_is_punct(']') {
+                    items.push(self.parse_value()?);
+                }
+                self.advance();
+                Ok(GraphQLValue::List(items))
+            }
+            GqlToken::Punct('{') => {
+                self.advance();
+                let mut fields = Vec::new();
+                while !self.peek_is_punct('}') {
+                    let key = self.expect_name()?;
+                    self.expect_punct(':')?;
+                    fields.push((key, self.parse_value()?));
+                }
+                self.advance();
+                Ok(GraphQLValue::Object(fields))
+            }
+            other => Err(format!("Expected a value, found {other:?}.")),
+        }
+    }
+}
+
+pub fn parse_graphql_document(source: &str) -> Result<GraphQLDocument, String> {
+    let tokens = tokenize_graphql(source)?;
+    GraphQLParser::new(tokens).parse_document()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{decode_request_headers, encode_response_headers, normalize_path, render_fragment_items, render_post_list_page, render_template_nodes, JsonValue, MangoList, QueryPlan, TemplateExpr, TemplateNode};
+    use super::{decode_request_headers, encode_response_headers, normalize_path, parse_graphql_document, render_fragment_items, render_post_list_page, render_template_nodes, GraphQLValue, JsonValue, MangoList, QueryPlan, TemplateExpr, TemplateNode};
 
     #[test]
     fn normalizes_paths() {
@@ -526,5 +897,86 @@ mod tests {
         let posts = JsonValue::Array(vec![object(vec![("title", JsonValue::String("Post 0".to_owned())), ("views", JsonValue::Number("0".to_owned()))]), object(vec![("title", JsonValue::String("Post 1".to_owned())), ("views", JsonValue::Number("3".to_owned()))])]);
         let context = object(vec![("posts", posts)]);
         assert_eq!(render_template_nodes(&nodes, &context), "<ul>\n\n<li>Post 0 (0 views)</li>\n\n<li>Post 1 (3 views)</li>\n\n</ul>\n");
+    }
+
+    #[test]
+    fn graphql_parses_a_minimal_query() {
+        let document = parse_graphql_document("{ greeting }").unwrap();
+        assert_eq!(document.operation_type, "query");
+        assert_eq!(document.operation_name, None);
+        assert!(document.variable_definitions.is_empty());
+        assert_eq!(document.selection_set.len(), 1);
+        assert_eq!(document.selection_set[0].name, "greeting");
+        assert!(document.selection_set[0].arguments.is_empty());
+        assert_eq!(document.selection_set[0].selection_set, None);
+    }
+
+    #[test]
+    fn graphql_parses_a_complex_query_with_variables_and_nesting() {
+        let source = r#"
+            query ListPosts($limit: Int! = 10, $search: String) {
+                posts(limit: $limit, search: $search, tags: ["rust", "web"]) {
+                    id
+                    title
+                    author {
+                        name
+                    }
+                }
+                viewer {
+                    id
+                }
+            }
+        "#;
+        let document = parse_graphql_document(source).unwrap();
+        assert_eq!(document.operation_type, "query");
+        assert_eq!(document.operation_name, Some("ListPosts".to_owned()));
+        assert_eq!(document.variable_definitions.len(), 2);
+        assert_eq!(document.variable_definitions[0].name, "limit");
+        assert!(!document.variable_definitions[0].required);
+        assert_eq!(document.variable_definitions[0].default, Some(GraphQLValue::Int(10)));
+        assert_eq!(document.variable_definitions[1].name, "search");
+        assert!(!document.variable_definitions[1].required);
+        assert!(!document.variable_definitions[1].has_default);
+
+        assert_eq!(document.selection_set.len(), 2);
+        let posts = &document.selection_set[0];
+        assert_eq!(posts.name, "posts");
+        assert_eq!(posts.arguments.len(), 3);
+        assert_eq!(posts.arguments[0], ("limit".to_owned(), GraphQLValue::Variable("limit".to_owned())));
+        assert_eq!(posts.arguments[2], ("tags".to_owned(), GraphQLValue::List(vec![GraphQLValue::String("rust".to_owned()), GraphQLValue::String("web".to_owned())])));
+        let posts_selection = posts.selection_set.as_ref().unwrap();
+        assert_eq!(posts_selection.len(), 3);
+        assert_eq!(posts_selection[2].name, "author");
+        assert_eq!(posts_selection[2].selection_set.as_ref().unwrap()[0].name, "name");
+
+        assert_eq!(document.selection_set[1].name, "viewer");
+    }
+
+    #[test]
+    fn graphql_rejects_directives() {
+        assert!(parse_graphql_document("{ greeting @skip }").is_err());
+    }
+
+    #[test]
+    fn graphql_rejects_fragments() {
+        assert!(parse_graphql_document("{ ...fragment }").is_err());
+    }
+
+    #[test]
+    fn graphql_rejects_empty_selection_sets() {
+        assert!(parse_graphql_document("{ posts { } }").is_err());
+    }
+
+    #[test]
+    fn graphql_rejects_overly_deep_nesting() {
+        let mut source = String::new();
+        for _ in 0..70 {
+            source.push_str("{ a");
+        }
+        source.push_str(" x ");
+        for _ in 0..70 {
+            source.push('}');
+        }
+        assert!(parse_graphql_document(&source).is_err());
     }
 }

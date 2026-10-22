@@ -30,6 +30,82 @@ fn compile_selection(
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
+fn graphql_value_to_py(py: Python<'_>, value: &mangoo_core::GraphQLValue) -> PyResult<Py<PyAny>> {
+    use mangoo_core::GraphQLValue;
+    match value {
+        GraphQLValue::Null => Ok(py.None()),
+        GraphQLValue::Bool(boolean) => Ok(boolean.into_pyobject(py)?.to_owned().into_any().unbind()),
+        GraphQLValue::Int(integer) => Ok(integer.into_pyobject(py)?.into_any().unbind()),
+        GraphQLValue::Float(number) => Ok(number.into_pyobject(py)?.into_any().unbind()),
+        GraphQLValue::String(text) => Ok(text.into_pyobject(py)?.into_any().unbind()),
+        // A 2-tuple tagged with "$" -- GraphQL list/object values are always Python
+        // lists/dicts on this bridge, never tuples, so this cannot collide with a
+        // real value. graphql.py's wire decoder looks for exactly this shape.
+        GraphQLValue::Variable(name) => Ok(PyTuple::new(py, ["$".into_pyobject(py)?.into_any().unbind(), name.into_pyobject(py)?.into_any().unbind()])?.into_any().unbind()),
+        GraphQLValue::List(items) => {
+            let converted = items.iter().map(|item| graphql_value_to_py(py, item)).collect::<PyResult<Vec<_>>>()?;
+            Ok(PyList::new(py, converted)?.into_any().unbind())
+        }
+        GraphQLValue::Object(fields) => {
+            let result = PyDict::new(py);
+            for (key, item) in fields {
+                result.set_item(key, graphql_value_to_py(py, item)?)?;
+            }
+            Ok(result.into_any().unbind())
+        }
+    }
+}
+
+fn graphql_fields_to_py(py: Python<'_>, fields: &[mangoo_core::GraphQLField]) -> PyResult<Py<PyAny>> {
+    let converted = fields
+        .iter()
+        .map(|field| -> PyResult<Py<PyAny>> {
+            let arguments = field
+                .arguments
+                .iter()
+                .map(|(name, value)| -> PyResult<Py<PyAny>> { Ok(PyTuple::new(py, [name.into_pyobject(py)?.into_any().unbind(), graphql_value_to_py(py, value)?])?.into_any().unbind()) })
+                .collect::<PyResult<Vec<_>>>()?;
+            let selection_set = match &field.selection_set {
+                Some(sub_fields) => graphql_fields_to_py(py, sub_fields)?,
+                None => py.None(),
+            };
+            Ok(PyTuple::new(py, [field.name.clone().into_pyobject(py)?.into_any().unbind(), PyList::new(py, arguments)?.into_any().unbind(), selection_set])?.into_any().unbind())
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(PyList::new(py, converted)?.into_any().unbind())
+}
+
+/// Tokenizes and parses a GraphQL query, returning
+/// `(operation_type, operation_name, variable_definitions, selection_set)` in
+/// the wire format `src/mangoo/graphql.py`'s decoder expects. Mirrors
+/// `_tokenize`/`_Parser.parse_document()` exactly -- field resolution itself
+/// (arbitrary Python callables) stays entirely in Python.
+#[pyfunction]
+fn parse_graphql_document(py: Python<'_>, source: &str) -> PyResult<Py<PyAny>> {
+    let document = mangoo_core::parse_graphql_document(source).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let variable_definitions = document
+        .variable_definitions
+        .iter()
+        .map(|definition| -> PyResult<Py<PyAny>> {
+            let default = match &definition.default {
+                Some(value) => graphql_value_to_py(py, value)?,
+                None => py.None(),
+            };
+            Ok(PyTuple::new(py, [definition.name.clone().into_pyobject(py)?.into_any().unbind(), definition.required.into_pyobject(py)?.to_owned().into_any().unbind(), default, definition.has_default.into_pyobject(py)?.to_owned().into_any().unbind()])?.into_any().unbind())
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    let operation_name = match &document.operation_name {
+        Some(name) => name.into_pyobject(py)?.into_any().unbind(),
+        None => py.None(),
+    };
+    Ok(PyTuple::new(
+        py,
+        [document.operation_type.into_pyobject(py)?.into_any().unbind(), operation_name, PyList::new(py, variable_definitions)?.into_any().unbind(), graphql_fields_to_py(py, &document.selection_set)?],
+    )?
+    .into_any()
+    .unbind())
+}
+
 fn to_json_value(value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
     if value.is_none() { return Ok(JsonValue::Null); }
     if let Ok(boolean) = value.extract::<bool>() { return Ok(JsonValue::Bool(boolean)); }
@@ -514,6 +590,7 @@ impl PySerializedConnection {
 fn mangoo_native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(normalize_path, module)?)?;
     module.add_function(wrap_pyfunction!(compile_selection, module)?)?;
+    module.add_function(wrap_pyfunction!(parse_graphql_document, module)?)?;
     module.add_function(wrap_pyfunction!(serialize_json, module)?)?;
     module.add_function(wrap_pyfunction!(plain_value, module)?)?;
     module.add_function(wrap_pyfunction!(render_post_list_page, module)?)?;

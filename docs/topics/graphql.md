@@ -77,3 +77,15 @@ concrete need emerges.
 Like REST, a resolver exception never leaks its raw message to the
 client (`Schema(debug=False)`, the default, exposes only `error_type`) &mdash;
 see [Security](security.md) for the full standard.
+
+## Rust-accelerated parsing
+
+Tokenizing and parsing a query (not field resolution, which always
+calls your own Python resolvers) runs through a Rust port of the same
+grammar when `mangoo_native` is built &mdash; a faithful port, not a
+reinterpretation, with an identical pure-Python fallback otherwise.
+Measured (`benchmarks/native_graphql_parser.py`) at a real **2.7-3.9x**
+speedup over the pure-Python lexer/parser, including the cost of
+decoding the result back into Python objects. No configuration needed
+either way, and `Schema.execute()`'s behavior (including error
+messages for malformed queries) is identical on both paths.
