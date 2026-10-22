@@ -51,6 +51,13 @@ thread pool. This closed a real gap found while building ASGI support:
 wrapping an async view with any of these previously produced a silently
 unawaited coroutine instead of a `Response`.
 
+## WebSockets
+
+ASGI also carries `websocket` scopes, not just `http` ones -- pass
+`create_asgi_application(websocket_patterns=[...])` to add them. See
+[WebSockets](websockets.md) for the handler contract, hijacking
+protection, and testing.
+
 ## Testing
 
 ```python

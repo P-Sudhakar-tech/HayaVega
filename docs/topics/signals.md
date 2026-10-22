@@ -25,9 +25,11 @@ lifecycle events.
 
 `request.started`/`request.finished`, `auth.login_succeeded`,
 `auth.password_reset_requested`/`completed`, `auth.session_rotated`,
-`admin.action`, `migration.applied`, model lifecycle events (below),
-and more &mdash; every one documented alongside the subsystem that emits
-it (see [Authentication](auth.md#audit-events)).
+`admin.action`, `migration.applied`, `websocket.connected`/
+`disconnected`/`rejected` (see [WebSockets](websockets.md#signals)),
+model lifecycle events (below), and more &mdash; every one documented
+alongside the subsystem that emits it (see
+[Authentication](auth.md#audit-events)).
 
 ## Model lifecycle events
 

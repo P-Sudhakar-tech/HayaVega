@@ -131,6 +131,7 @@ nav:
       - REST & OpenAPI: topics/rest-api.md
       - GraphQL: topics/graphql.md
       - ASGI: topics/asgi.md
+      - WebSockets: topics/websockets.md
       - Rust runtime: topics/rust-runtime.md
       - Signals: topics/signals.md
       - Testing: topics/testing.md

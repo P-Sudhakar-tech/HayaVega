@@ -53,6 +53,7 @@ from .swagger import ERROR_SCHEMA, openapi_document
 from .templates import render_template
 from .testing import AsyncTestClient, TestClient
 from .uploads import save_uploaded_file
+from .websocket import WebSocket, WebSocketDisconnect, WebSocketRoute, websocket_path
 
 __all__ = [
     "AsyncTestClient",
@@ -92,6 +93,9 @@ __all__ = [
     "Toggle",
     "UploadedFile",
     "User",
+    "WebSocket",
+    "WebSocketDisconnect",
+    "WebSocketRoute",
     "add_message",
     "add_user_to_group",
     "admin_routes",
@@ -148,4 +152,5 @@ __all__ = [
     "validate_password",
     "validate_production",
     "verify_email",
+    "websocket_path",
 ]
