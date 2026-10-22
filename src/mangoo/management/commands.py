@@ -1,9 +1,11 @@
+import argparse
 import os
 import sys
 from getpass import getpass
 
 from mangoo.auth import UserAlreadyExistsError, create_superuser, enable_totp
 from mangoo.autoreload import run_with_reloader
+from mangoo.cacheserver import serve as serve_cache
 from mangoo.checks import run_checks
 from mangoo.conf import load_settings
 from mangoo.hardening import HardeningOptions
@@ -17,7 +19,7 @@ from mangoo.runtime import serve
 from mangoo.rust_runtime import RustRuntimeUnavailableError
 from mangoo.rust_runtime import serve as serve_rust
 
-HELP_TEXT = "Commands: launch [port] [--noreload], newapp <name>, createadmin, enable2fa <username>, newmigration <app>, applymigrations, migrationstatus, diagnose, runworker"
+HELP_TEXT = "Commands: launch [port] [--noreload], newapp <name>, createadmin, enable2fa <username>, newmigration <app>, applymigrations, migrationstatus, diagnose, runworker, cacheserver [--host H] [--port P] [--password PW]"
 
 # Django spells these runserver/startapp/createsuperuser/migrate/
 # makemigrations/showmigrations; Mangoo's own names below are distinct on
@@ -60,6 +62,8 @@ def execute_from_command_line(argv: list[str] | None = None) -> None:
         _diagnose()
     elif canonical == "runworker":
         _runworker()
+    elif canonical == "cacheserver":
+        _cacheserver(args[2:])
     elif not _dispatch_custom_command(canonical, args[2:]):
         print(HELP_TEXT)
 
@@ -188,6 +192,23 @@ def _runworker() -> None:
         run_worker(settings.database, handlers)
     except KeyboardInterrupt:
         print("\nMangoo job worker stopped.")
+
+
+def _cacheserver(args: list[str]) -> None:
+    """Runs standalone -- no project, no `Settings`, needed: `mango.py
+    cacheserver` (via this function) and the installed `mango cacheserver`
+    (via `cli.py`'s own subparser) both reach this one implementation."""
+    parser = argparse.ArgumentParser(prog="mango cacheserver", add_help=False)
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=6379)
+    parser.add_argument("--password", default=None)
+    parsed = parser.parse_args(args)
+    try:
+        serve_cache(parsed.host, parsed.port, password=parsed.password)
+    except ValueError as error:
+        print(f"Error: {error}")
+    except KeyboardInterrupt:
+        print("\nMangoo cache server stopped.")
 
 
 def _dispatch_custom_command(name: str, extra_args: list[str]) -> bool:

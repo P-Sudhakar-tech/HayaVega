@@ -38,7 +38,13 @@ dependencies = ["msgspec>=0.21,<0.23"]
 # only needed to parse multipart/form-data file uploads), listed here so
 # tests/test_request_multipart.py exercises the real parser in CI, not
 # just the MultipartUnavailableError fallback path.
-dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.16", "mypy>=1.13", "hatchling>=1.25", "pymysql>=1.1", "cryptography>=42", "python-multipart>=0.0.9"]
+# redis (the pure-Python client, needs no server of its own to import) is
+# listed here so tests/test_cacheserver.py can run the *real* redis-py
+# client against mango cacheserver -- the server under test is the one
+# this repo ships, not an external service, so this doesn't need the
+# opt-in redis-integration job's MANGOO_TEST_REDIS_URL gating the way
+# tests/test_redis_cache_integration.py (a real external Redis) does.
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.16", "mypy>=1.13", "hatchling>=1.25", "pymysql>=1.1", "cryptography>=42", "python-multipart>=0.0.9", "redis>=5"]
 docs = ["mkdocs>=1.6", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26", "mike>=2.1"]
 
 [project.scripts]

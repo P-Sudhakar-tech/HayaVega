@@ -154,6 +154,23 @@ class ManagementTests(unittest.TestCase):
             execute_from_command_line(["mango.py", "diagnose"])
         self.assertIn("No issues found.", output.getvalue())
 
+    @patch("mangoo.management.commands.serve_cache")
+    def test_cacheserver_defaults_to_localhost_and_redis_cache_port(self, serve_cache):
+        execute_from_command_line(["mango.py", "cacheserver"])
+        serve_cache.assert_called_once_with("127.0.0.1", 6379, password=None)
+
+    @patch("mangoo.management.commands.serve_cache")
+    def test_cacheserver_accepts_host_port_and_password_flags(self, serve_cache):
+        execute_from_command_line(["mango.py", "cacheserver", "--host", "0.0.0.0", "--port", "7000", "--password", "secret"])
+        serve_cache.assert_called_once_with("0.0.0.0", 7000, password="secret")
+
+    @patch("mangoo.management.commands.serve_cache", side_effect=ValueError("needs a password"))
+    def test_cacheserver_reports_a_rejected_configuration_without_crashing(self, serve_cache):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            execute_from_command_line(["mango.py", "cacheserver", "--host", "0.0.0.0"])
+        self.assertIn("needs a password", output.getvalue())
+
 
 _custom_command_calls: list[list[str]] = []
 

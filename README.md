@@ -308,6 +308,17 @@ from mangoo.cache import cache_from_settings
 cache = cache_from_settings(settings.cache)
 ```
 
+Don't want to install Redis at all? `mango cacheserver` is a built-in,
+networked, in-memory cache server speaking enough of the real Redis
+wire protocol (verified against the real `redis` package, not just its
+own code) that `RedisCache()`'s own zero-argument default points
+straight at it -- no client code changes, reachable from any number of
+machines (unlike `SqliteCache`), refuses to bind beyond `localhost`
+without a `--password`. See [Caching](docs/topics/caching.md#running-the-built-in-cache-server)
+for what it does and doesn't implement (no persistence, no `EVAL`/Lua
+scripting -- a real Redis instance is still needed for
+`hardening.RedisRateLimiter`).
+
 See [Caching](docs/topics/caching.md) for the full option list.
 
 ## Observability

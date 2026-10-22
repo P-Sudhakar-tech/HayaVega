@@ -23,6 +23,10 @@ def main(argv: list[str] | None = None) -> None:
     launch.add_argument("port", type=int, nargs="?", default=8000)
     launch.add_argument("--noreload", action="store_true")
     commands.add_parser("diagnose", help="Report unsafe settings, deprecated API usage, and pending migrations.")
+    cacheserver = commands.add_parser("cacheserver", help="Run the built-in networked cache server -- a drop-in Redis substitute for mangoo.cache.RedisCache.")
+    cacheserver.add_argument("--host", default="127.0.0.1")
+    cacheserver.add_argument("--port", type=int, default=6379)
+    cacheserver.add_argument("--password", default=None)
     args = parser.parse_args(argv)
 
     if args.command in _DEPRECATED_ALIASES:
@@ -42,6 +46,15 @@ def main(argv: list[str] | None = None) -> None:
         from .management.commands import execute_from_command_line
 
         execute_from_command_line(["mango", "diagnose"])
+        return
+
+    if args.command == "cacheserver":
+        from .management.commands import execute_from_command_line
+
+        command_args = ["mango", "cacheserver", "--host", args.host, "--port", str(args.port)]
+        if args.password is not None:
+            command_args += ["--password", args.password]
+        execute_from_command_line(command_args)
         return
 
     canonical = _DEPRECATED_ALIASES.get(args.command, args.command)

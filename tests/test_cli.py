@@ -53,3 +53,13 @@ class CliTests(unittest.TestCase):
     def test_diagnose_forwards_to_execute_from_command_line(self, execute):
         main(["diagnose"])
         execute.assert_called_once_with(["mango", "diagnose"])
+
+    @patch("mangoo.management.commands.execute_from_command_line")
+    def test_cacheserver_forwards_default_host_and_port(self, execute):
+        main(["cacheserver"])
+        execute.assert_called_once_with(["mango", "cacheserver", "--host", "127.0.0.1", "--port", "6379"])
+
+    @patch("mangoo.management.commands.execute_from_command_line")
+    def test_cacheserver_forwards_host_port_and_password(self, execute):
+        main(["cacheserver", "--host", "0.0.0.0", "--port", "7000", "--password", "secret"])
+        execute.assert_called_once_with(["mango", "cacheserver", "--host", "0.0.0.0", "--port", "7000", "--password", "secret"])
