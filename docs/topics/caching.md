@@ -26,10 +26,13 @@ machine, without running a separate service. It reuses `db.connect()`,
 the exact connection layer `mangoo.jobs`/`mangoo.migrations` already
 use, and enables WAL mode so a writer never blocks a reader and vice
 versa. Like `RedisCache`, values are JSON-encoded via `msgspec`, so
-only JSON-safe values round-trip. The one thing it can't do that Redis
-can: share state across *multiple machines* -- SQLite has no network
-protocol, so a deployment that spans more than one host still needs
-`RedisCache`.
+only JSON-safe values round-trip, and a `key_prefix` scopes every key
+(including `clear()`, which only clears its own prefix) so more than
+one logical cache can safely share one file -- the same coexistence
+`RedisCache` gives multiple caches sharing one Redis instance. The one
+thing it can't do that Redis can: share state across *multiple
+machines* -- SQLite has no network protocol, so a deployment that
+spans more than one host still needs `RedisCache`.
 
 `RedisCache` JSON-encodes values via `msgspec` (already a core
 dependency); it shares state across processes the same way
@@ -57,9 +60,10 @@ cache = cache_from_settings(settings.cache)
 `default_ttl`; `"sqlite"` accepts `path` (default
 `mangoo_cache.sqlite3`, relative to the process's working directory --
 pass an absolute path, e.g. `BASE_DIR / "cache.sqlite3"`, for anything
-beyond local experimentation) and `default_ttl`; `"redis"` accepts
-`redis_url` (default `redis://localhost:6379/0`), `default_ttl`, and
-`key_prefix` (default `mangoo:cache:`) -- the same
+beyond local experimentation), `default_ttl`, and `key_prefix` (default
+`mangoo:cache:`); `"redis"` accepts `redis_url` (default
+`redis://localhost:6379/0`), `default_ttl`, and `key_prefix` (default
+`mangoo:cache:`) -- the same
 `backend_from_settings()` shape [Email](email.md) already uses.
 
 ## Caching a whole view

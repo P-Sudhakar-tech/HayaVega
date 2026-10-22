@@ -188,15 +188,22 @@ class SqliteCache:
     running a separate service. Reach for ``RedisCache`` once a deployment
     spans more than one machine.
 
+    Like ``RedisCache``, a ``key_prefix`` scopes every key this instance
+    reads or writes, including ``clear()``, which only deletes keys under
+    its own prefix -- so more than one logical cache (different prefixes)
+    can safely share one SQLite file, the same coexistence story
+    ``RedisCache`` gives multiple caches sharing one Redis instance.
+
     An expired entry is only purged when it's next read (the same lazy
     behavior ``InMemoryCache`` has) or on an explicit ``delete()``/
     ``clear()`` -- a key that's set once and never read again stays on
     disk past its ``ttl`` until one of those happens.
     """
 
-    def __init__(self, path: str | Path = "mangoo_cache.sqlite3", *, default_ttl: float | None = None):
+    def __init__(self, path: str | Path = "mangoo_cache.sqlite3", *, default_ttl: float | None = None, key_prefix: str = "mangoo:cache:"):
         self.path = str(path)
         self.default_ttl = default_ttl
+        self.key_prefix = key_prefix
         connection = connect(self.path)
         try:
             connection.raw.execute("PRAGMA journal_mode=WAL")
@@ -205,14 +212,18 @@ class SqliteCache:
         finally:
             connection.close()
 
+    def _storage_key(self, key: str) -> str:
+        return f"{self.key_prefix}{key}"
+
     def get(self, key: str, default: Any = None) -> Any:
         connection = connect(self.path)
         try:
-            row = connection.execute("SELECT value, expires_at FROM mangoo_cache WHERE key = ?", (key,)).fetchone()
+            storage_key = self._storage_key(key)
+            row = connection.execute("SELECT value, expires_at FROM mangoo_cache WHERE key = ?", (storage_key,)).fetchone()
             if row is None:
                 return default
             if row["expires_at"] is not None and row["expires_at"] <= time.time():
-                connection.execute("DELETE FROM mangoo_cache WHERE key = ?", (key,))
+                connection.execute("DELETE FROM mangoo_cache WHERE key = ?", (storage_key,))
                 connection.commit()
                 return default
             return msgspec.json.decode(row["value"])
@@ -227,7 +238,7 @@ class SqliteCache:
         try:
             connection.execute(
                 "INSERT INTO mangoo_cache (key, value, expires_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at",
-                (key, encoded, expires_at),
+                (self._storage_key(key), encoded, expires_at),
             )
             connection.commit()
         finally:
@@ -236,16 +247,20 @@ class SqliteCache:
     def delete(self, key: str) -> bool:
         connection = connect(self.path)
         try:
-            cursor = connection.execute("DELETE FROM mangoo_cache WHERE key = ?", (key,))
+            cursor = connection.execute("DELETE FROM mangoo_cache WHERE key = ?", (self._storage_key(key),))
             connection.commit()
             return cursor.rowcount > 0
         finally:
             connection.close()
 
     def clear(self) -> None:
+        """Delete every key this cache owns (matched by `key_prefix`) --
+        mirrors `RedisCache.clear()`'s scoped-by-prefix behavior, so a
+        second `SqliteCache` with a different prefix, pointed at the same
+        file, is untouched."""
         connection = connect(self.path)
         try:
-            connection.execute("DELETE FROM mangoo_cache")
+            connection.execute("DELETE FROM mangoo_cache WHERE substr(key, 1, ?) = ?", (len(self.key_prefix), self.key_prefix))
             connection.commit()
         finally:
             connection.close()
@@ -264,15 +279,16 @@ def cache_from_settings(cache: dict):
 
     ``cache["BACKEND"]`` selects ``"in_memory"`` (default), ``"sqlite"``,
     or ``"redis"``. ``MAX_ENTRIES``/``DEFAULT_TTL`` apply to the in-memory
-    backend; ``PATH``/``DEFAULT_TTL`` apply to the SQLite one;
-    ``REDIS_URL``/``DEFAULT_TTL``/``KEY_PREFIX`` apply to the Redis one --
-    the same `backend_from_settings()` shape `mangoo.mail` already uses.
+    backend; ``PATH``/``DEFAULT_TTL``/``KEY_PREFIX`` apply to the SQLite
+    one; ``REDIS_URL``/``DEFAULT_TTL``/``KEY_PREFIX`` apply to the Redis
+    one -- the same `backend_from_settings()` shape `mangoo.mail` already
+    uses.
     """
     backend = str(cache.get("BACKEND", "in_memory")).lower()
     if backend == "in_memory":
         return InMemoryCache(max_entries=int(cache.get("MAX_ENTRIES", 10_000)), default_ttl=cache.get("DEFAULT_TTL"))
     if backend == "sqlite":
-        return SqliteCache(path=cache.get("PATH", "mangoo_cache.sqlite3"), default_ttl=cache.get("DEFAULT_TTL"))
+        return SqliteCache(path=cache.get("PATH", "mangoo_cache.sqlite3"), default_ttl=cache.get("DEFAULT_TTL"), key_prefix=cache.get("KEY_PREFIX", "mangoo:cache:"))
     if backend == "redis":
         return RedisCache(redis_url=cache.get("REDIS_URL", "redis://localhost:6379/0"), default_ttl=cache.get("DEFAULT_TTL"), key_prefix=cache.get("KEY_PREFIX", "mangoo:cache:"))
     raise ValueError(f"Settings.cache.backend must be 'in_memory', 'sqlite', or 'redis' -- got {backend!r}.")

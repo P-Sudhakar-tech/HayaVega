@@ -191,6 +191,39 @@ class SqliteCacheTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             cache.set("key", object())
 
+    def test_different_prefixes_sharing_one_file_do_not_see_each_others_keys(self):
+        mine = SqliteCache(self.path, key_prefix="mine:")
+        theirs = SqliteCache(self.path, key_prefix="theirs:")
+        mine.set("key", "mine")
+        theirs.set("key", "theirs")
+        self.assertEqual(mine.get("key"), "mine")
+        self.assertEqual(theirs.get("key"), "theirs")
+
+    def test_clear_removes_only_this_caches_prefix(self):
+        """Mirrors RedisCache.clear()'s scoped-by-prefix behavior: clearing
+        one cache sharing a file with another (different-prefix) cache
+        leaves the other cache's keys untouched."""
+        mine = SqliteCache(self.path, key_prefix="mine:")
+        theirs = SqliteCache(self.path, key_prefix="theirs:")
+        mine.set("key", "mine")
+        theirs.set("key", "theirs")
+
+        mine.clear()
+
+        self.assertIsNone(mine.get("key"))
+        self.assertEqual(theirs.get("key"), "theirs")
+
+    def test_delete_does_not_affect_a_same_named_key_under_a_different_prefix(self):
+        mine = SqliteCache(self.path, key_prefix="mine:")
+        theirs = SqliteCache(self.path, key_prefix="theirs:")
+        mine.set("key", "mine")
+        theirs.set("key", "theirs")
+
+        mine.delete("key")
+
+        self.assertIsNone(mine.get("key"))
+        self.assertEqual(theirs.get("key"), "theirs")
+
 
 class RedisCacheMissingDependencyTests(unittest.TestCase):
     def test_missing_redis_package_raises_backend_error(self):
@@ -208,13 +241,14 @@ class CacheFromSettingsTests(unittest.TestCase):
         self.assertEqual(cache.max_entries, 5)
         self.assertEqual(cache.default_ttl, 30)
 
-    def test_sqlite_backend_honors_path_and_default_ttl(self):
+    def test_sqlite_backend_honors_path_default_ttl_and_key_prefix(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "cache.sqlite3")
-            cache = cache_from_settings({"BACKEND": "sqlite", "PATH": path, "DEFAULT_TTL": 30})
+            cache = cache_from_settings({"BACKEND": "sqlite", "PATH": path, "DEFAULT_TTL": 30, "KEY_PREFIX": "myapp:"})
             self.assertIsInstance(cache, SqliteCache)
             self.assertEqual(cache.path, path)
             self.assertEqual(cache.default_ttl, 30)
+            self.assertEqual(cache.key_prefix, "myapp:")
 
     def test_redis_backend_is_attempted_with_the_configured_url_and_prefix(self):
         """Confirms the dict -> kwargs plumbing reaches RedisCache correctly

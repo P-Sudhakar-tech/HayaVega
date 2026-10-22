@@ -264,10 +264,13 @@ request counts; it stores Python objects directly, no serialization.
 worker process instead of one per worker) for a single-machine deployment,
 with no separate server and no new dependency -- it reuses `db.connect()`,
 the same connection layer `mangoo.jobs`/`mangoo.migrations` already use,
-with WAL mode enabled so a writer never blocks a reader. It can't share
-state across *multiple* machines, though -- SQLite has no network
-protocol, so a deployment spanning more than one host still needs
-`RedisCache`. `RedisCache` JSON-encodes values via `msgspec` (already a
+with WAL mode enabled so a writer never blocks a reader. Like
+`RedisCache`, a `key_prefix` scopes every key an instance owns -- including
+`clear()`, which only clears its own prefix -- so more than one logical
+cache can safely share one file. It can't share state across *multiple*
+machines, though -- SQLite has no network protocol, so a deployment
+spanning more than one host still needs `RedisCache`. `RedisCache`
+JSON-encodes values via `msgspec` (already a
 core dependency, same JSON-safety constraint `SqliteCache` has), so only
 JSON-safe values round-trip; it shares state across processes the same
 way `hardening.RedisRateLimiter` does, and requires `uv add redis`.
