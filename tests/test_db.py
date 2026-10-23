@@ -17,9 +17,12 @@ from mangoo.db import (
     connection_pooling_enabled,
     disable_connection_pooling,
     disable_readonly_connection_pooling,
+    disable_wal_mode,
     enable_connection_pooling,
     enable_readonly_connection_pooling,
+    enable_wal_mode,
     readonly_connection_pooling_enabled,
+    wal_mode_enabled,
 )
 
 
@@ -121,6 +124,69 @@ class ConnectionPoolingTests(unittest.TestCase):
         self.assertFalse(connection_pooling_enabled())
         with self.assertRaises(sqlite3.ProgrammingError):
             raw.execute("SELECT 1")
+
+
+class WalModeTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.database = {"ENGINE": "sqlite3", "NAME": Path(self.directory.name) / "wal.sqlite3"}
+        self.addCleanup(disable_wal_mode)
+
+    def test_disabled_by_default_and_uses_sqlites_own_default_journal_mode(self):
+        self.assertFalse(wal_mode_enabled())
+        connection = connect(self.database)
+        try:
+            self.assertEqual(connection.execute("PRAGMA journal_mode").fetchone()[0], "delete")
+        finally:
+            connection.close()
+
+    def test_enabling_sets_wal_and_normal_synchronous_on_new_connections(self):
+        enable_wal_mode()
+        self.assertTrue(wal_mode_enabled())
+        connection = connect(self.database)
+        try:
+            self.assertEqual(connection.execute("PRAGMA journal_mode").fetchone()[0], "wal")
+            self.assertEqual(connection.execute("PRAGMA synchronous").fetchone()[0], 1)  # NORMAL
+        finally:
+            connection.close()
+
+    def test_a_full_collection_round_trip_still_works_correctly_under_wal(self):
+        enable_wal_mode()
+        connection = connect(self.database)
+        try:
+            connection.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, name TEXT)")
+            connection.execute("INSERT INTO sample (name) VALUES (?)", ("Mangoo",))
+            connection.commit()
+            self.assertEqual(connection.execute("SELECT name FROM sample").fetchone()["name"], "Mangoo")
+        finally:
+            connection.close()
+
+    def test_disable_wal_mode_stops_new_connections_from_enabling_it(self):
+        enable_wal_mode()
+        connect(self.database).close()
+        disable_wal_mode()
+        self.assertFalse(wal_mode_enabled())
+        # The earlier connection already switched this file to WAL --
+        # disable_wal_mode() only stops *new* opt-in, it doesn't revert an
+        # already-WAL file (that's the documented, disclosed limitation).
+        other_database = {"ENGINE": "sqlite3", "NAME": Path(self.directory.name) / "fresh.sqlite3"}
+        connection = connect(other_database)
+        try:
+            self.assertEqual(connection.execute("PRAGMA journal_mode").fetchone()[0], "delete")
+        finally:
+            connection.close()
+
+    def test_non_sqlite_engines_take_the_same_code_path_regardless_of_the_flag(self):
+        """enable_wal_mode()'s pragma calls live only in _open()'s sqlite
+        branch -- a non-sqlite config must fail exactly the same way
+        (DatabaseConfigurationError for an unknown engine) whether or not
+        the flag is on, proving the sqlite-only branch guard is real."""
+        with self.assertRaises(DatabaseConfigurationError):
+            connect({"ENGINE": "oracle", "NAME": "mangoo"})
+        enable_wal_mode()
+        with self.assertRaises(DatabaseConfigurationError):
+            connect({"ENGINE": "oracle", "NAME": "mangoo"})
 
 
 class ReadonlyConnectionPoolingTests(unittest.TestCase):

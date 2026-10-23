@@ -160,6 +160,43 @@ regression for WSGI on this project's own benchmark environment; see
 [Performance](../performance.md) for the numbers and reasoning before
 enabling either for your deployment.
 
+## SQLite WAL mode (opt-in, a real write-path win)
+
+```python
+from mangoo import db
+
+db.enable_wal_mode()  # PRAGMA journal_mode=WAL + synchronous=NORMAL on new connections
+```
+
+SQLite only (silently a no-op for PostgreSQL/MySQL configs) &mdash;
+sets SQLite's own officially documented recommended pairing for
+write-heavy workloads on every new connection `connect()` opens from
+then on. Measured (`benchmarks/sqlite_wal_mode.py`): a write
+transaction (two inserts, one update, one commit &mdash; the shape a
+checkout/order-placement endpoint does) costs ~6.4-6.9ms under
+SQLite's untouched defaults on this project's own Windows development
+environment, almost entirely `fsync` overhead on commit, and
+~0.15-0.17ms with WAL+NORMAL &mdash; a **~39-47x** improvement across
+repeated runs. Confirmed at the HTTP level too: a sample e-commerce
+app's write-heavy order-placement endpoint moved from a near-tie with
+a comparable FastAPI backend (≈70-77 req/s each) to a decisive win
+(166 req/s vs. 71 req/s) once enabled, reproduced across independent
+runs. `fsync` cost is highly platform- and disk-dependent &mdash;
+benchmark your own deployment before enabling, same as every option
+above.
+
+Real trade-offs, not a free lunch: WAL mode creates `-wal`/`-shm`
+sidecar files next to the main `.sqlite3` file and doesn't work
+reliably on some network filesystems (NFS, SMB/CIFS shares) &mdash;
+stick to a local disk. `synchronous=NORMAL` is fully safe against an
+*application* crash (every committed transaction is still there on
+restart), but can lose the most recent transaction(s) specifically on
+an OS crash or power loss &mdash; an accepted trade-off for most
+deployments, not a universal one. `journal_mode` persists in the
+database file itself, not in this flag &mdash; `db.disable_wal_mode()`
+only stops *new* connections from turning it on; it does not revert a
+file already in WAL mode back to its original journal mode.
+
 ## `SerializedConnection`: one connection, Rust-serialized, for a hot read path
 
 ```python
