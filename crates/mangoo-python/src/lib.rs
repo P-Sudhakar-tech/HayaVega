@@ -529,6 +529,7 @@ fn close_connection(connection: &Py<PyAny>) {
 #[pyclass(name = "SerializedConnection")]
 struct PySerializedConnection {
     sender: Option<Sender<QueryJob>>,
+    worker: Option<thread::JoinHandle<()>>,
 }
 
 #[pymethods]
@@ -552,18 +553,20 @@ impl PySerializedConnection {
         let connection: Py<PyAny> = raw_connection.unbind();
 
         let (sender, receiver) = channel::<QueryJob>();
-        thread::spawn(move || {
+        let worker = thread::spawn(move || {
             while let Ok(job) = receiver.recv() {
                 run_query_job(&connection, job);
             }
             // The sender was dropped (close() called, or this object was
             // garbage collected) -- close the connection deterministically
             // here rather than leaving it to whenever Py<PyAny>'s own drop
-            // happens to run, so a file handle this type held open is
-            // actually released by the time close() returns.
+            // happens to run. close() joins this thread before returning,
+            // so the file handle is actually released by the time it does
+            // -- dropping the sender alone only *starts* that shutdown, it
+            // doesn't wait for it.
             close_connection(&connection);
         });
-        Ok(Self { sender: Some(sender) })
+        Ok(Self { sender: Some(sender), worker: Some(worker) })
     }
 
     fn execute(&self, py: Python<'_>, sql: String, params: Py<PyAny>) -> PyResult<Py<PyAny>> {
@@ -578,11 +581,18 @@ impl PySerializedConnection {
             .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("SerializedConnection worker is no longer running"))?
     }
 
-    /// Stop the worker thread and close the underlying connection. Safe to
-    /// call more than once; `execute()` after `close()` raises clearly
-    /// rather than hanging.
-    fn close(&mut self) {
+    /// Stop the worker thread and close the underlying connection,
+    /// blocking until it has actually finished -- not just signaled to
+    /// stop -- so the SQLite file handle is guaranteed released by the
+    /// time this returns. Safe to call more than once; `execute()` after
+    /// `close()` raises clearly rather than hanging.
+    fn close(&mut self, py: Python<'_>) {
         self.sender = None;
+        if let Some(worker) = self.worker.take() {
+            py.detach(move || {
+                let _ = worker.join();
+            });
+        }
     }
 }
 

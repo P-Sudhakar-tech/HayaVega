@@ -6,6 +6,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 try:
     from mangoo_native import SerializedConnection as _NativeSerializedConnection
@@ -511,6 +512,9 @@ class SerializedConnection:
 
 def _open(config: dict) -> Connection:
     engine = str(config.get("ENGINE", "sqlite3")).lower()
+    # Untyped on purpose: each branch below assigns a different driver's own
+    # connection type (sqlite3/psycopg/pymysql) to this same name.
+    raw: Any
     if engine in {"sqlite", "sqlite3"}:
         raw = sqlite3.connect(config["NAME"])
         raw.row_factory = sqlite3.Row
