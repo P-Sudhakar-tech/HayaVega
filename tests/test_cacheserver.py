@@ -6,7 +6,9 @@ agree with each other."""
 
 import asyncio
 import threading
+import time
 import unittest
+from unittest import mock
 
 import redis
 
@@ -39,6 +41,198 @@ class EncodingTests(unittest.TestCase):
     def test_map(self):
         pairs = [(cacheserver._bulk_string(b"a"), cacheserver._integer(1))]
         self.assertEqual(cacheserver._map(pairs), b"%1\r\n$1\r\na\r\n:1\r\n")
+
+
+class _InlineReader:
+    """Feeds pre-built lines straight to `_read_command` without a real socket."""
+
+    def __init__(self, chunks: list[bytes]):
+        self._chunks = list(chunks)
+
+    async def readline(self) -> bytes:
+        return self._chunks.pop(0) if self._chunks else b""
+
+    async def readexactly(self, n: int) -> bytes:
+        chunk = self._chunks.pop(0)
+        assert len(chunk) == n
+        return chunk
+
+
+class ReadCommandTests(unittest.IsolatedAsyncioTestCase):
+    """Direct unit tests of `_read_command`'s own line/RESP-bulk parsing,
+    independent of a real connection -- covers the malformed/edge-case
+    shapes a hostile or buggy client could send."""
+
+    async def test_a_line_not_ending_in_newline_is_an_incomplete_line(self):
+        with self.assertRaises(cacheserver._ProtocolError):
+            await cacheserver._read_command(_InlineReader([b"PING"]), 1024)
+
+    async def test_a_blank_line_is_an_empty_command(self):
+        self.assertEqual(await cacheserver._read_command(_InlineReader([b"\r\n"]), 1024), [])
+
+    async def test_a_multibulk_headers_incomplete_line_is_rejected(self):
+        with self.assertRaises(cacheserver._ProtocolError):
+            await cacheserver._read_command(_InlineReader([b"*1\r\n", b"$4"]), 1024)
+
+    async def test_a_bulk_header_not_starting_with_dollar_is_rejected(self):
+        with self.assertRaises(cacheserver._ProtocolError):
+            await cacheserver._read_command(_InlineReader([b"*1\r\n", b"X4\r\n"]), 1024)
+
+    async def test_a_non_numeric_bulk_length_is_rejected(self):
+        with self.assertRaises(cacheserver._ProtocolError):
+            await cacheserver._read_command(_InlineReader([b"*1\r\n", b"$abc\r\n"]), 1024)
+
+    async def test_a_null_bulk_length_of_negative_one_becomes_an_empty_arg(self):
+        result = await cacheserver._read_command(_InlineReader([b"*1\r\n", b"$-1\r\n"]), 1024)
+        self.assertEqual(result, [b""])
+
+    async def test_a_bulk_value_larger_than_the_configured_max_is_rejected(self):
+        with self.assertRaises(cacheserver._ProtocolError):
+            await cacheserver._read_command(_InlineReader([b"*1\r\n", b"$2000\r\n"]), 1024)
+
+
+class DispatchArgumentCountTests(unittest.TestCase):
+    """`_dispatch`'s own 'wrong number of arguments' guards -- a real
+    `redis-py` client never sends these malformed shapes itself, so they
+    need to be exercised directly."""
+
+    def setUp(self):
+        self.store = cacheserver._Store()
+
+    def test_select_always_replies_ok(self):
+        self.assertEqual(cacheserver._dispatch(self.store, "SELECT", [b"0"], 2), cacheserver._simple_string("OK"))
+
+    def test_get_with_wrong_argument_count_is_rejected(self):
+        self.assertIn(b"wrong number of arguments", cacheserver._dispatch(self.store, "GET", [], 2))
+
+    def test_set_with_wrong_argument_count_is_rejected(self):
+        self.assertIn(b"wrong number of arguments", cacheserver._dispatch(self.store, "SET", [b"key"], 2))
+
+    def test_set_with_px_option_sets_a_ttl_in_milliseconds(self):
+        cacheserver._dispatch(self.store, "SET", [b"key", b"value", b"PX", b"5000"], 2)
+        self.assertEqual(self.store.get("key"), b"value")
+
+    def test_set_with_an_unrecognized_option_is_ignored_not_rejected(self):
+        cacheserver._dispatch(self.store, "SET", [b"key", b"value", b"NOTAREALOPTION"], 2)
+        self.assertEqual(self.store.get("key"), b"value")
+
+    def test_del_with_no_keys_is_rejected(self):
+        self.assertIn(b"wrong number of arguments", cacheserver._dispatch(self.store, "DEL", [], 2))
+
+    def test_exists_with_no_keys_is_rejected(self):
+        self.assertIn(b"wrong number of arguments", cacheserver._dispatch(self.store, "EXISTS", [], 2))
+
+    def test_expire_with_wrong_argument_count_is_rejected(self):
+        self.assertIn(b"wrong number of arguments", cacheserver._dispatch(self.store, "EXPIRE", [b"key"], 2))
+
+    def test_scan_with_no_arguments_is_rejected(self):
+        self.assertIn(b"wrong number of arguments", cacheserver._dispatch(self.store, "SCAN", [], 2))
+
+    def test_scan_with_an_unrecognized_option_is_ignored_not_rejected(self):
+        self.store.set("key", b"value", None)
+        response = cacheserver._dispatch(self.store, "SCAN", [b"0", b"NOTAREALOPTION"], 2)
+        self.assertIn(b"key", response)
+
+
+class HandleHelloTests(unittest.TestCase):
+    """Direct unit tests of `_handle_hello`'s own negotiation edge cases."""
+
+    def test_a_non_numeric_protocol_version_falls_back_to_the_default(self):
+        response, authenticated, protocol = cacheserver._handle_hello([b"not-a-number"], None, False, 2)
+        self.assertEqual(protocol, 2)
+
+    def test_an_unsupported_protocol_version_is_rejected(self):
+        response, authenticated, protocol = cacheserver._handle_hello([b"99"], None, False, 2)
+        self.assertIn(b"NOPROTO", response)
+
+    def test_an_unrecognized_hello_option_is_ignored_not_rejected(self):
+        response, authenticated, protocol = cacheserver._handle_hello([b"2", b"NOTAREALOPTION"], None, False, 2)
+        self.assertNotIn(b"ERR", response)
+
+
+class RawProtocolDispatchTests(unittest.IsolatedAsyncioTestCase):
+    """Real connections sending raw commands `redis-py` itself would never
+    construct -- a bare AUTH (not via HELLO's embedded AUTH option) and a
+    command sent before ever authenticating."""
+
+    async def test_auth_when_no_password_is_configured_is_rejected(self):
+        server = await cacheserver.start_server("127.0.0.1", 0)
+        try:
+            host, port = server.sockets[0].getsockname()
+            reader, writer = await asyncio.open_connection(host, port)
+            writer.write(b"AUTH somepassword\r\n")
+            await writer.drain()
+            response = await asyncio.wait_for(reader.readline(), timeout=5)
+            self.assertIn(b"ERR", response)
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    async def test_a_command_before_authenticating_is_rejected_with_noauth(self):
+        server = await cacheserver.start_server("127.0.0.1", 0, password="hunter2")
+        try:
+            host, port = server.sockets[0].getsockname()
+            reader, writer = await asyncio.open_connection(host, port)
+            writer.write(b"GET somekey\r\n")  # no AUTH/HELLO sent at all
+            await writer.drain()
+            response = await asyncio.wait_for(reader.readline(), timeout=5)
+            self.assertTrue(response.startswith(b"-NOAUTH"))
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    async def test_a_bare_auth_with_the_correct_password_succeeds(self):
+        server = await cacheserver.start_server("127.0.0.1", 0, password="hunter2")
+        try:
+            host, port = server.sockets[0].getsockname()
+            reader, writer = await asyncio.open_connection(host, port)
+            writer.write(b"AUTH hunter2\r\n")
+            await writer.drain()
+            response = await asyncio.wait_for(reader.readline(), timeout=5)
+            self.assertEqual(response, b"+OK\r\n")
+            writer.write(b"PING\r\n")  # now authenticated -- a real command must succeed
+            await writer.drain()
+            response = await asyncio.wait_for(reader.readline(), timeout=5)
+            self.assertEqual(response, b"+PONG\r\n")
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    async def test_a_bare_auth_with_the_wrong_password_is_rejected(self):
+        server = await cacheserver.start_server("127.0.0.1", 0, password="hunter2")
+        try:
+            host, port = server.sockets[0].getsockname()
+            reader, writer = await asyncio.open_connection(host, port)
+            writer.write(b"AUTH wrongpassword\r\n")
+            await writer.drain()
+            response = await asyncio.wait_for(reader.readline(), timeout=5)
+            self.assertTrue(response.startswith(b"-WRONGPASS"))
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    async def test_a_blank_command_is_skipped_not_rejected(self):
+        server = await cacheserver.start_server("127.0.0.1", 0)
+        try:
+            host, port = server.sockets[0].getsockname()
+            reader, writer = await asyncio.open_connection(host, port)
+            writer.write(b"\r\nPING\r\n")  # a blank line, then a real command
+            await writer.drain()
+            response = await asyncio.wait_for(reader.readline(), timeout=5)
+            self.assertEqual(response, b"+PONG\r\n")
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            server.close()
+            await server.wait_closed()
 
 
 class StoreTests(unittest.TestCase):
@@ -418,6 +612,128 @@ class ProtocolRobustnessTests(unittest.IsolatedAsyncioTestCase):
         finally:
             server.close()
             await server.wait_closed()
+
+
+class _FakeReader:
+    """A minimal fake StreamReader: yields one inline command, then EOF."""
+
+    def __init__(self, lines: list[bytes]):
+        self._lines = list(lines) + [b""]
+
+    async def readline(self) -> bytes:
+        return self._lines.pop(0)
+
+
+class _FakeWriter:
+    """A minimal fake StreamWriter whose drain()/wait_closed() can be made
+    to raise, to exercise _handle_connection's own exception-swallowing
+    around an abruptly-dropped client connection."""
+
+    def __init__(self, *, drain_error: Exception | None = None, wait_closed_error: Exception | None = None):
+        self._drain_error = drain_error
+        self._wait_closed_error = wait_closed_error
+        self.closed = False
+        self.written: list[bytes] = []
+
+    def write(self, data: bytes) -> None:
+        self.written.append(data)
+
+    async def drain(self) -> None:
+        if self._drain_error is not None:
+            raise self._drain_error
+
+    def close(self) -> None:
+        self.closed = True
+
+    async def wait_closed(self) -> None:
+        if self._wait_closed_error is not None:
+            raise self._wait_closed_error
+
+    def get_extra_info(self, name, default=None):
+        return default
+
+
+class ConnectionDropSwallowingTests(unittest.IsolatedAsyncioTestCase):
+    """A client that disconnects mid-response (ConnectionResetError/
+    BrokenPipeError from drain()) or whose socket is already fully gone by
+    the time the server tries to close it (wait_closed() itself raising)
+    must never surface as an unhandled exception -- there is no client
+    left to report it to."""
+
+    async def test_connection_reset_during_drain_is_swallowed(self):
+        reader = _FakeReader([b"PING\r\n"])
+        writer = _FakeWriter(drain_error=ConnectionResetError("connection reset by peer"))
+        await cacheserver._handle_connection(reader, writer, cacheserver._Store(), None, 1_048_576)  # must not raise
+        self.assertTrue(writer.closed)
+
+    async def test_broken_pipe_during_drain_is_swallowed(self):
+        reader = _FakeReader([b"PING\r\n"])
+        writer = _FakeWriter(drain_error=BrokenPipeError("broken pipe"))
+        await cacheserver._handle_connection(reader, writer, cacheserver._Store(), None, 1_048_576)  # must not raise
+        self.assertTrue(writer.closed)
+
+    async def test_a_wait_closed_failure_while_closing_is_swallowed(self):
+        reader = _FakeReader([])
+        writer = _FakeWriter(wait_closed_error=RuntimeError("socket already gone"))
+        await cacheserver._handle_connection(reader, writer, cacheserver._Store(), None, 1_048_576)  # must not raise
+        self.assertTrue(writer.closed)
+
+
+class RunForeverTests(unittest.IsolatedAsyncioTestCase):
+    """`_run_forever()` for real: a bound socket, a real client command,
+    a real answer -- not just that it calls `start_server()` correctly."""
+
+    async def test_run_forever_actually_serves_a_real_client(self):
+        captured: dict = {}
+        real_start_server = cacheserver.start_server
+
+        async def capturing_start_server(host, port, *, password=None, max_value_size=1_048_576):
+            server = await real_start_server(host, port, password=password, max_value_size=max_value_size)
+            captured["server"] = server
+            return server
+
+        with mock.patch("mangoo.cacheserver.start_server", side_effect=capturing_start_server):
+            task = asyncio.create_task(cacheserver._run_forever("127.0.0.1", 0, password=None, max_value_size=1_048_576))
+            try:
+                deadline = time.monotonic() + 5
+                while "server" not in captured and time.monotonic() < deadline:
+                    await asyncio.sleep(0.05)
+                self.assertIn("server", captured, "_run_forever() never reached start_server() in time")
+                host, port = captured["server"].sockets[0].getsockname()
+
+                reader, writer = await asyncio.open_connection(host, port)
+                writer.write(b"PING\r\n")
+                await writer.drain()
+                response = await asyncio.wait_for(reader.readline(), timeout=5)
+                self.assertEqual(response, b"+PONG\r\n")
+                writer.close()
+                await writer.wait_closed()
+            finally:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+
+class ServeTests(unittest.TestCase):
+    """serve()'s own line -- asyncio.run(_run_forever(...)) -- really runs
+    a real event loop with the real arguments forwarded correctly. The
+    inner `_run_forever` itself is already proven for real above; here a
+    fast-completing stand-in (still a real coroutine, really executed by
+    a real asyncio.run()) keeps this test bounded instead of blocking
+    forever like the real cache server would."""
+
+    def test_serve_forwards_its_arguments_to_run_forever_under_a_real_event_loop(self):
+        received = {}
+
+        async def fast_completing_run_forever(host, port, *, password, max_value_size):
+            received.update(host=host, port=port, password=password, max_value_size=max_value_size)
+
+        with mock.patch("mangoo.cacheserver._run_forever", side_effect=fast_completing_run_forever):
+            cacheserver.serve("127.0.0.1", 0, password="hunter2", max_value_size=2048)
+
+        self.assertEqual(received, {"host": "127.0.0.1", "port": 0, "password": "hunter2", "max_value_size": 2048})
 
 
 if __name__ == "__main__":

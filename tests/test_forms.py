@@ -46,6 +46,21 @@ class FieldTests(unittest.TestCase):
         with self.assertRaises(FieldError):
             EmailField().clean("not-an-email")
 
+    def test_base_field_convert_returns_the_raw_value_unchanged(self):
+        self.assertEqual(Field().clean("raw-value"), "raw-value")
+
+    def test_email_field_widget_renders_an_email_input(self):
+        widget = EmailField().widget("email", "alice@example.com")
+        self.assertIn("type='email'", widget)
+        self.assertIn("value='alice@example.com'", widget)
+        self.assertIn("required", widget)
+
+    def test_decimal_field_widget_renders_a_step_any_number_input(self):
+        widget = DecimalField(required=False).widget("price", 9.5)
+        self.assertIn("type='number'", widget)
+        self.assertIn("step='any'", widget)
+        self.assertNotIn("required", widget)
+
 
 class DemoForm(Form):
     name = CharField()

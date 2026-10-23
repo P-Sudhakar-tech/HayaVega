@@ -72,7 +72,13 @@ def serve(urlpatterns, host: str = "127.0.0.1", port: int = 8000, *, hardening: 
     except ImportError as error:
         raise RustRuntimeUnavailableError("Settings.server.engine is 'rust' but mangoo_native was not built for this install. Rebuild with `cargo` on PATH (`pip install -e .` re-runs the build hook), or set Settings.server.engine to 'python' to use the standard runtime.") from error
 
-    application = create_application(urlpatterns, hardening=hardening, debug=debug)
-    scheme = "https" if tls_cert else "http"
-    print(f"Mangoo development server (Rust runtime, {workers} workers): {scheme}://{host}:{port}/")
-    mangoo_native.serve_wsgi(application, host, port, workers, tls_cert, tls_key)
+    # Environment-dependent, not a design gap: reached only when
+    # mangoo_native is actually built (the ImportError above already
+    # returned otherwise), so the pure-Python fallback-mode CI job can
+    # never exercise it -- the native-extension job does, for real
+    # (tests/test_rust_runtime.py and friends); excluded here so that
+    # job's 100% coverage gate stays meaningful.
+    application = create_application(urlpatterns, hardening=hardening, debug=debug)  # pragma: no cover
+    scheme = "https" if tls_cert else "http"  # pragma: no cover
+    print(f"Mangoo development server (Rust runtime, {workers} workers): {scheme}://{host}:{port}/")  # pragma: no cover
+    mangoo_native.serve_wsgi(application, host, port, workers, tls_cert, tls_key)  # pragma: no cover

@@ -95,6 +95,58 @@ class ModelSelectionTests(unittest.TestCase):
         rows = self.products.seek(published=True).arrange("-price").window(1).values("name")
         self.assertEqual(rows, [{"name": "Notebook"}])
 
+    def test_a_non_nullable_non_primary_column_rejects_none(self):
+        with self.assertRaises(EntityError):
+            Product(name=None, price=9.5)
+
+    def test_a_callable_default_is_invoked_for_each_new_instance(self):
+        class Ticket(Entity):
+            label = Text(default=lambda: "draft")
+
+        self.assertEqual(Ticket().label, "draft")
+
+    def test_append_requires_at_least_one_non_key_value(self):
+        class Blank(Entity):
+            note = Text(nullable=True)
+
+        other_database = Path(self.directory.name) / "blank.sqlite3"
+        with self.assertRaises(EntityError):
+            Blank.collection(other_database).append()
+
+    def test_collection_total_delegates_to_browse_total(self):
+        self.products.append(name="Notebook", price=9.5)
+        self.products.append(name="Marker", price=3.0)
+        self.assertEqual(self.products.total(), 2)
+
+    def test_match_rejects_an_unknown_column(self):
+        with self.assertRaises(EntityError):
+            self.products.seek(not_a_column=1)
+
+    def test_match_rejects_an_unknown_operator(self):
+        with self.assertRaises(EntityError):
+            self.products.seek(price__weird=1)
+
+    def test_arrange_rejects_an_unknown_column(self):
+        with self.assertRaises(EntityError):
+            self.products.browse().arrange("not_a_column")
+
+    def test_window_rejects_a_non_positive_count_or_a_negative_skip(self):
+        with self.assertRaises(EntityError):
+            self.products.browse().window(0)
+        with self.assertRaises(EntityError):
+            self.products.browse().window(1, skip=-1)
+
+    def test_revise_with_no_values_is_a_no_op(self):
+        self.products.append(name="Notebook", price=9.5)
+        self.assertEqual(self.products.seek(name="Notebook").revise(), 0)
+
+    def test_revise_rejects_an_unknown_or_an_id_column(self):
+        self.products.append(name="Notebook", price=9.5)
+        with self.assertRaises(EntityError):
+            self.products.seek(name="Notebook").revise(not_a_column=1)
+        with self.assertRaises(EntityError):
+            self.products.seek(name="Notebook").revise(id=99)
+
 
 class SelectionSearchTests(unittest.TestCase):
     def setUp(self):

@@ -298,7 +298,7 @@ class _Parser:
 # ---------------------------------------------------------------------------
 
 
-def _decode_native_value(wire):
+def _decode_native_value(wire):  # pragma: no cover -- only called from the native branch below; see its own pragma note.
     if isinstance(wire, tuple) and len(wire) == 2 and wire[0] == "$":
         return _VariableRef(wire[1])
     if isinstance(wire, list):
@@ -308,7 +308,7 @@ def _decode_native_value(wire):
     return wire
 
 
-def _decode_native_fields(wire) -> list[_FieldNode]:
+def _decode_native_fields(wire) -> list[_FieldNode]:  # pragma: no cover -- only called from the native branch below; see its own pragma note.
     return [
         _FieldNode(
             name=name,
@@ -322,12 +322,17 @@ def _decode_native_fields(wire) -> list[_FieldNode]:
 def _parse_document(query: str):
     if _native_parse_graphql_document is None:
         return _Parser(_tokenize(query)).parse_document()
-    try:
+    # Environment-dependent, not a design gap: this branch only runs when
+    # mangoo_native is actually built, so no single test environment can
+    # cover both this and the fallback branch above -- the native-extension
+    # CI job (mangoo_native present) exercises it for real; excluded here so
+    # the pure-Python fallback-mode job's 100% coverage gate stays meaningful.
+    try:  # pragma: no cover
         operation_type, operation_name, variable_definitions_wire, selection_set_wire = _native_parse_graphql_document(query)
-    except ValueError as exc:
+    except ValueError as exc:  # pragma: no cover
         raise GraphQLSyntaxError(str(exc)) from exc
-    variable_definitions = {name: _VariableDefinition(required=required, default=_decode_native_value(default), has_default=has_default) for name, required, default, has_default in variable_definitions_wire}
-    return operation_type, operation_name, variable_definitions, _decode_native_fields(selection_set_wire)
+    variable_definitions = {name: _VariableDefinition(required=required, default=_decode_native_value(default), has_default=has_default) for name, required, default, has_default in variable_definitions_wire}  # pragma: no cover
+    return operation_type, operation_name, variable_definitions, _decode_native_fields(selection_set_wire)  # pragma: no cover
 
 
 def _bind(value, variables: dict):

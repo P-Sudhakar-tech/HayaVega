@@ -50,3 +50,21 @@ class AuthenticationApiTests(unittest.TestCase):
         captured, payload = call(self.application, "/api/auth/login", "POST", {"username": "missing", "password": PASSWORD})
         self.assertEqual(captured["status"], "401 Unauthorized")
         self.assertEqual(payload["detail"], "Invalid credentials.")
+
+    def test_login_rejects_a_malformed_payload(self):
+        captured, payload = call(self.application, "/api/auth/login", "POST", {"username": "admin"})
+        self.assertEqual(captured["status"], "400 Bad Request")
+        self.assertEqual(payload["detail"], "Invalid authentication request.")
+
+    def test_logout_requires_authentication(self):
+        captured, _ = call(self.application, "/api/auth/logout", "POST")
+        self.assertEqual(captured["status"], "401 Unauthorized")
+
+    def test_default_mail_notifier_logs_the_password_reset_token_instead_of_sending_it(self):
+        """`auth_routes` without an explicit `notify=` falls back to
+        `log_mail_notifier`, which only logs -- no mail provider configured
+        out of the box."""
+        with self.assertLogs("mangoo.auth.mail", level="INFO") as captured_logs:
+            captured, _ = call(self.application, "/api/auth/password-reset/request", "POST", {"username": "admin"})
+        self.assertEqual(captured["status"], "202 OK")
+        self.assertIn("password_reset", captured_logs.output[0])

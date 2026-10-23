@@ -4,15 +4,30 @@ import tempfile
 import unittest
 import warnings
 from pathlib import Path
+from unittest.mock import patch
 
 from mangoo import HardeningOptions, api_route, path
 from mangoo.addons.signals import SignalBus
-from mangoo.asgi import create_asgi_application
+from mangoo.asgi import _declared_content_length, _handle_websocket, _read_body, create_asgi_application
 from mangoo.auth import create_session, create_superuser
 from mangoo.metrics import MetricsRegistry
 from mangoo.response import Response
 from mangoo.security import csrf_protect, login_required
 from mangoo.testing import AsyncTestClient
+from mangoo.websocket import websocket_path
+
+
+async def _raises_disconnect_without_catching_it(ws):
+    """Unlike this project's other websocket test fixtures, this handler
+    does NOT catch WebSocketDisconnect itself -- it propagates up to
+    _handle_websocket's own try/except, exercising that `pass` branch."""
+    await ws.accept()
+    await ws.receive_text()
+
+
+async def _raises_after_accepting_for_asgi_tests(ws):
+    await ws.accept()
+    raise RuntimeError("boom")
 
 
 class AsgiApplicationTests(unittest.TestCase):
@@ -215,6 +230,43 @@ class AsgiApplicationTests(unittest.TestCase):
         response = AsyncTestClient(app).post("/form", headers={"Cookie": "mangoo_session=some-session-token"})
         self.assertEqual(response.status_code, 403)
 
+    def test_form_data_is_url_encoded_and_sent_with_the_form_content_type(self):
+        captured = {}
+
+        async def view(request):
+            captured["content_type"] = request.headers.get("Content-Type")
+            captured["form"] = request.form()
+            return Response("ok")
+
+        app = create_asgi_application([path("echo", view, methods=("POST",))])
+        AsyncTestClient(app).post("/echo", form_data={"name": "mangoo", "lang": "python"})
+        self.assertEqual(captured["content_type"], "application/x-www-form-urlencoded")
+        self.assertEqual(captured["form"], {"name": "mangoo", "lang": "python"})
+
+    def test_receive_returns_http_disconnect_once_the_body_has_already_been_delivered(self):
+        """Exercises AsyncTestClient's own `receive()` closure directly with a
+        raw ASGI callable, rather than through Mangoo's routing -- which
+        never calls `receive()` a second time for an ordinary request."""
+
+        async def app(scope, receive, send):
+            await receive()
+            second = await receive()
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": second["type"].encode("utf-8")})
+
+        response = AsyncTestClient(app).get("/")
+        self.assertEqual(response.text, "http.disconnect")
+
+    def test_set_cookie_response_header_is_captured_in_the_client_cookie_jar(self):
+        async def app(scope, receive, send):
+            await receive()
+            await send({"type": "http.response.start", "status": 200, "headers": [(b"set-cookie", b"session=abc123; Path=/")]})
+            await send({"type": "http.response.body", "body": b"ok"})
+
+        client = AsyncTestClient(app)
+        client.get("/")
+        self.assertEqual(client.cookies, {"session": "abc123"})
+
     def test_unsupported_scope_type_raises(self):
         app = create_asgi_application([])
 
@@ -226,6 +278,90 @@ class AsgiApplicationTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             asyncio.run(app({"type": "grpc"}, receive, send))
+
+    def test_an_uncaught_websocket_disconnect_from_the_handler_is_swallowed(self):
+        """A handler that doesn't catch WebSocketDisconnect itself must not
+        propagate it out of _handle_websocket -- the connection is already
+        gone, there is nothing left to respond to."""
+        app = create_asgi_application([], websocket_patterns=[websocket_path("ws/boom", _raises_disconnect_without_catching_it)])
+        messages = iter([{"type": "websocket.connect"}, {"type": "websocket.disconnect", "code": 1000}])
+
+        async def receive():
+            return next(messages)
+
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        asyncio.run(app({"type": "websocket", "path": "/ws/boom", "headers": []}, receive, send))  # must not raise
+        # The disconnect itself is swallowed; the always-run `finally` still closes out cleanly afterward.
+        self.assertEqual(sent, [{"type": "websocket.accept"}, {"type": "websocket.close", "code": 1000}])
+
+    def test_a_close_failure_after_a_handler_exception_is_swallowed(self):
+        """If the handler raises AND the subsequent close() itself fails
+        (the connection is already gone), both failures must be swallowed
+        -- including the second close attempt in the always-run `finally`."""
+        app = create_asgi_application([], websocket_patterns=[websocket_path("ws/boom", _raises_after_accepting_for_asgi_tests)])
+
+        async def receive():
+            return {"type": "websocket.connect"}
+
+        async def send(message):
+            if message["type"] == "websocket.close":
+                raise RuntimeError("connection already gone")
+
+        asyncio.run(app({"type": "websocket", "path": "/ws/boom", "headers": []}, receive, send))  # must not raise
+
+    def test_pool_connections_enables_connection_pooling(self):
+        with patch("mangoo.asgi.db.enable_connection_pooling") as enable:
+            create_asgi_application([], pool_connections=True)
+        enable.assert_called_once_with()
+
+    def test_pool_connections_defaults_to_disabled(self):
+        with patch("mangoo.asgi.db.enable_connection_pooling") as enable:
+            create_asgi_application([])
+        enable.assert_not_called()
+
+    def test_preflight_options_request_with_an_allowed_origin_is_answered_before_dispatch(self):
+        app = create_asgi_application([path("", lambda request: Response("ok"))], hardening=HardeningOptions(allowed_origins=("https://example.test",)))
+        response = AsyncTestClient(app).request("OPTIONS", "/", headers={"Origin": "https://example.test"})
+        self.assertEqual(response.status_code, 204)
+
+
+class AsgiHelperFunctionTests(unittest.TestCase):
+    """Direct unit tests of small ``mangoo.asgi`` helpers whose branches
+    aren't reachable through ``AsyncTestClient`` (which always delivers a
+    single, well-formed ``http.request`` message and never a malformed
+    ``content-length``)."""
+
+    def test_read_body_skips_a_message_that_is_not_http_request(self):
+        messages = iter([{"type": "http.disconnect"}, {"type": "http.request", "body": b"hello", "more_body": False}])
+
+        async def receive():
+            return next(messages)
+
+        body = asyncio.run(_read_body(receive))
+        self.assertEqual(body, b"hello")
+
+    def test_declared_content_length_returns_zero_for_a_malformed_header(self):
+        scope = {"headers": [(b"content-length", b"not-a-number")]}
+        self.assertEqual(_declared_content_length(scope), 0)
+
+    def test_declared_content_length_returns_zero_when_absent(self):
+        self.assertEqual(_declared_content_length({"headers": []}), 0)
+
+    def test_handle_websocket_returns_before_accepting_on_a_non_connect_message(self):
+        sent = []
+
+        async def receive():
+            return {"type": "websocket.disconnect", "code": 1000}
+
+        async def send(message):
+            sent.append(message)
+
+        asyncio.run(_handle_websocket({"path": "/ws"}, receive, send, route=None, hardening_layer=None, signals=None))
+        self.assertEqual(sent, [])
 
 
 if __name__ == "__main__":

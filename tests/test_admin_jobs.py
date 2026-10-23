@@ -133,6 +133,97 @@ class RetryTests(JobsAdminSetup):
         response = self.client.post(f"/admin/jobs/{job_id}/retry", form_data={}, headers={"Cookie": f"mangoo_session={token}"})
         self.assertEqual(response.status_code, 403)
 
+    def test_retry_url_missing_the_retry_suffix_is_404(self):
+        job_id = self._dead_letter_job()
+        response = self.client.post(f"/admin/jobs/{job_id}", form_data={}, headers=self.bearer(self.admin_token))
+        self.assertEqual(response.status_code, 404)
+
+    def test_retry_with_a_non_numeric_job_id_is_404(self):
+        response = self.client.post("/admin/jobs/not-a-number/retry", form_data={}, headers=self.bearer(self.admin_token))
+        self.assertEqual(response.status_code, 404)
+
+    def test_retry_method_guard_rejects_a_non_post_request(self):
+        """The route itself only ever accepts ``POST`` (``methods=("POST",)``),
+        so ``jobs_retry``'s own method guard is unreachable through routing
+        -- the view is pulled off the registered routes and called directly
+        with a ``GET`` request to exercise it."""
+        from mangoo.request import Request
+
+        job_id = self._dead_letter_job()
+        routes = admin_routes(self.database, jobs=True)
+        retry_route = next(route for route in routes if route.pattern == "admin/jobs/<path>")
+        request = Request(method="GET", path=f"/admin/jobs/{job_id}/retry", query_params={}, body=b"", headers=self.bearer(self.admin_token))
+        response = retry_route.view(request)
+        self.assertEqual(response.status, 405)
+        self.assertEqual(dict(response.headers).get("Allow"), "POST")
+
+
+class SignalsIntegrationTests(JobsAdminSetup):
+    def test_jobs_list_viewed_publishes_an_admin_action_event(self):
+        from threading import Event
+
+        from mangoo.addons.signals import SignalBus
+
+        bus = SignalBus()
+        received = []
+        seen = Event()
+
+        def on_action(event):
+            received.append(event.data["action"])
+            seen.set()
+
+        bus.connect("admin.action", on_action)
+        app = create_application(admin_routes(self.database, jobs=True, signals=bus))
+        client = TestClient(app)
+        client.get("/admin/jobs", headers=self.bearer(self.admin_token))
+        seen.wait(2)
+        bus.close()
+        self.assertIn("jobs.list_viewed", received)
+
+    def test_retrying_a_dead_job_publishes_an_admin_action_event(self):
+        from threading import Event
+
+        from mangoo.addons.signals import SignalBus
+
+        bus = SignalBus()
+        received = []
+        seen = Event()
+
+        def on_action(event):
+            received.append(event.data["action"])
+            if "jobs.retried" in received:
+                seen.set()
+
+        bus.connect("admin.action", on_action)
+        app = create_application(admin_routes(self.database, jobs=True, signals=bus))
+        client = TestClient(app)
+        job_id = self._dead_letter_job()
+        get_response = client.get("/admin/jobs", headers=self.bearer(self.admin_token))
+        token, cookie_value = _csrf_from(get_response)
+        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        client.post(f"/admin/jobs/{job_id}/retry", form_data={"csrf_token": token}, headers=headers)
+        seen.wait(2)
+        bus.close()
+        self.assertIn("jobs.retried", received)
+
+
+class JobsPaginationTests(JobsAdminSetup):
+    def test_first_page_shows_a_next_link_only(self):
+        for i in range(30):
+            enqueue(self.database, f"job{i}")
+        response = self.client.get("/admin/jobs", headers=self.bearer(self.admin_token))
+        self.assertIn("Page 1 of 2", response.text)
+        self.assertIn("Next", response.text)
+        self.assertNotIn("Previous", response.text)
+
+    def test_last_page_shows_a_previous_link_only(self):
+        for i in range(30):
+            enqueue(self.database, f"job{i}")
+        response = self.client.get("/admin/jobs?page=2", headers=self.bearer(self.admin_token))
+        self.assertIn("Page 2 of 2", response.text)
+        self.assertIn("Previous", response.text)
+        self.assertNotIn("Next", response.text)
+
 
 if __name__ == "__main__":
     unittest.main()

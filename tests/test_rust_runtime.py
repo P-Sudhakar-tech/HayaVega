@@ -4,6 +4,7 @@ identically to the existing Python runtime for every route this suite
 exercises. Requires mangoo_native -- see the native-extension CI job."""
 
 import socket
+import sys
 import tempfile
 import threading
 import time
@@ -130,6 +131,22 @@ class RustRuntimeUnavailableTests(unittest.TestCase):
             self.skipTest("mangoo_native is built in this environment; this test targets the fallback path")
         with self.assertRaisesRegex(RustRuntimeUnavailableError, "mangoo_native was not built"):
             serve_rust([], "127.0.0.1", _free_port())
+
+    def test_serve_raises_an_actionable_error_when_mangoo_native_import_fails(self):
+        """`serve()` imports `mangoo_native` inside the function body on every
+        call (not just at module load), so forcing the ImportError just needs
+        `sys.modules` patched for this one call -- no module reload, and
+        therefore no risk of leaking a stale module state to other tests."""
+        original = sys.modules.get("mangoo_native", None)
+        sys.modules["mangoo_native"] = None  # sentinel: forces ImportError on import
+        try:
+            with self.assertRaisesRegex(RustRuntimeUnavailableError, "mangoo_native was not built"):
+                serve_rust([], "127.0.0.1", _free_port())
+        finally:
+            if original is None:
+                sys.modules.pop("mangoo_native", None)
+            else:
+                sys.modules["mangoo_native"] = original
 
 
 if __name__ == "__main__":

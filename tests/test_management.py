@@ -7,7 +7,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
-from mangoo.auth import min_length_validator
+from mangoo import Entity, Text
+from mangoo.auth import create_user, min_length_validator
 from mangoo.management.commands import HELP_TEXT, _createadmin, execute_from_command_line
 from mangoo.rust_runtime import RustRuntimeUnavailableError
 
@@ -26,10 +27,15 @@ class ManagementTests(unittest.TestCase):
             execute_from_command_line(["mango.py"])
         self.assertEqual(output.getvalue().strip(), HELP_TEXT)
 
+    @patch.dict("os.environ", {"MANGOO_LAUNCH_MODE": ""})
     @patch("mangoo.management.commands.run_with_reloader")
     def test_launch_enables_autoreload_by_default(self, run_with_reloader):
+        # Explicitly cleared rather than relying on no other test having
+        # set it first: mangoo.cli's own "launch" handling sets this real
+        # env var permanently, by design, with no cleanup of its own.
         execute_from_command_line(["mango.py", "launch", "8001"])
         run_with_reloader.assert_called_once()
+        self.assertEqual(run_with_reloader.call_args.args[0][1], sys.argv[0])
 
     @patch("mangoo.management.commands.serve")
     @patch("mangoo.management.commands.load_settings")
@@ -218,6 +224,266 @@ class CustomCommandTests(unittest.TestCase):
         with redirect_stdout(output):
             execute_from_command_line(["mango.py", "diagnose"])
         self.assertEqual(_custom_command_calls, [])
+
+
+class NewappDispatchTests(unittest.TestCase):
+    def test_newapp_dispatch_creates_a_real_app_via_the_scaffold(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("mangoo.cli.Path.cwd", return_value=Path(directory)), patch("os.getcwd", return_value=directory):
+                output = io.StringIO()
+                with redirect_stdout(output), patch("pathlib.Path.cwd", return_value=Path(directory)):
+                    execute_from_command_line(["mango.py", "newapp", "blog"])
+            self.assertTrue((Path(directory) / "blog").is_dir())
+
+
+class CreateAdminFailureTests(unittest.TestCase):
+    @patch("mangoo.management.commands.load_settings")
+    def test_mismatched_passwords_are_rejected(self, load_settings):
+        with tempfile.TemporaryDirectory() as directory:
+            load_settings.return_value = SimpleNamespace(database={"ENGINE": "sqlite3", "NAME": Path(directory) / "users.sqlite3"})
+            prompts = iter(["admin", "admin@example.com"])
+            passwords = iter(["Correct-Horse-7!", "Different-Horse-9!"])
+            output = io.StringIO()
+            with redirect_stdout(output):
+                _createadmin([], prompt=lambda _: next(prompts), password_prompt=lambda _: next(passwords))
+            self.assertIn("do not match", output.getvalue())
+
+    @patch("mangoo.management.commands.load_settings")
+    def test_a_duplicate_username_is_reported_cleanly(self, load_settings):
+        with tempfile.TemporaryDirectory() as directory:
+            database = {"ENGINE": "sqlite3", "NAME": Path(directory) / "users.sqlite3"}
+            load_settings.return_value = SimpleNamespace(database=database)
+            create_user(database, "admin", "admin@example.com", "Correct-Horse-7!")
+            prompts = iter(["admin", "admin2@example.com"])
+            passwords = iter(["Correct-Horse-7!", "Correct-Horse-7!"])
+            output = io.StringIO()
+            with redirect_stdout(output):
+                _createadmin([], prompt=lambda _: next(prompts), password_prompt=lambda _: next(passwords))
+            self.assertIn("Error:", output.getvalue())
+
+
+class Enable2faTests(unittest.TestCase):
+    @patch("mangoo.management.commands.load_settings")
+    def test_enables_totp_for_a_real_user(self, load_settings):
+        with tempfile.TemporaryDirectory() as directory:
+            database = {"ENGINE": "sqlite3", "NAME": Path(directory) / "users.sqlite3"}
+            load_settings.return_value = SimpleNamespace(database=database, secret_key="test-secret")
+            create_user(database, "alice", "alice@example.com", "Correct-Horse-7!")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                execute_from_command_line(["mango.py", "enable2fa", "alice"])
+            self.assertIn("enabled for 'alice'", output.getvalue())
+            self.assertIn("authenticator app", output.getvalue())
+
+    @patch("mangoo.management.commands.load_settings")
+    def test_an_unknown_username_is_reported_cleanly(self, load_settings):
+        with tempfile.TemporaryDirectory() as directory:
+            database = {"ENGINE": "sqlite3", "NAME": Path(directory) / "users.sqlite3"}
+            load_settings.return_value = SimpleNamespace(database=database, secret_key="test-secret")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                execute_from_command_line(["mango.py", "enable2fa", "nobody"])
+            self.assertIn("Error:", output.getvalue())
+
+
+class MigrationCommandsTests(unittest.TestCase):
+    """`newmigration`/`applymigrations`/`migrationstatus` for real: a real
+    sqlite database, a real generated migration file, a real apply."""
+
+    def _settings_for(self, directory: Path, app_module):
+        database = {"ENGINE": "sqlite3", "NAME": directory / "app.sqlite3"}
+        return SimpleNamespace(database=database, installed_apps=[app_module.__name__])
+
+    def test_newmigration_rejects_an_app_not_in_installed_apps(self):
+        settings = SimpleNamespace(installed_apps=[])
+        with patch("mangoo.management.commands.load_settings", return_value=settings):
+            output = io.StringIO()
+            with redirect_stdout(output):
+                execute_from_command_line(["mango.py", "newmigration", "blog"])
+            self.assertIn("not in Settings.installed_apps", output.getvalue())
+
+    def test_newmigration_generates_a_real_migration_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app_module = ModuleType("mgmt_test_blog")
+            app_module.__file__ = str(root / "mgmt_test_blog" / "__init__.py")
+            (root / "mgmt_test_blog").mkdir()
+            models_module = ModuleType("mgmt_test_blog.models")
+            models_module.Post = type("Post", (Entity,), {"__module__": models_module.__name__, "title": Text()})
+            with patch.dict(sys.modules, {"mgmt_test_blog": app_module, "mgmt_test_blog.models": models_module}):
+                settings = self._settings_for(root, app_module)
+                with patch("mangoo.management.commands.load_settings", return_value=settings):
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        execute_from_command_line(["mango.py", "newmigration", "mgmt_test_blog"])
+                    self.assertIn("Created", output.getvalue())
+
+                    # A second run with no entity changes has nothing new to generate.
+                    output2 = io.StringIO()
+                    with redirect_stdout(output2):
+                        execute_from_command_line(["mango.py", "newmigration", "mgmt_test_blog"])
+                    self.assertIn("No entities found", output2.getvalue())
+
+    def test_newmigration_reports_an_app_with_no_discoverable_file_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app_module = ModuleType("mgmt_test_no_file_app")  # deliberately no __file__ set
+            models_module = ModuleType("mgmt_test_no_file_app.models")
+            with patch.dict(sys.modules, {"mgmt_test_no_file_app": app_module, "mgmt_test_no_file_app.models": models_module}):
+                settings = self._settings_for(root, app_module)
+                with patch("mangoo.management.commands.load_settings", return_value=settings):
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        execute_from_command_line(["mango.py", "newmigration", "mgmt_test_no_file_app"])
+                    self.assertIn("no discoverable file path", output.getvalue())
+
+    def test_newmigration_reports_a_rejected_change_cleanly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app_module = ModuleType("mgmt_test_rejected_app")
+            app_module.__file__ = str(root / "mgmt_test_rejected_app" / "__init__.py")
+            (root / "mgmt_test_rejected_app").mkdir()
+            models_module = ModuleType("mgmt_test_rejected_app.models")
+            models_module.Note = type("Note", (Entity,), {"__module__": models_module.__name__, "title": Text()})
+            with patch.dict(sys.modules, {"mgmt_test_rejected_app": app_module, "mgmt_test_rejected_app.models": models_module}):
+                settings = self._settings_for(root, app_module)
+                with patch("mangoo.management.commands.load_settings", return_value=settings):
+                    first_output = io.StringIO()
+                    with redirect_stdout(first_output):
+                        execute_from_command_line(["mango.py", "newmigration", "mgmt_test_rejected_app"])
+                    self.assertIn("Created", first_output.getvalue())
+
+                    # A new, non-nullable column needs an explicit reviewed
+                    # migration -- generate() must reject it, not guess a backfill.
+                    models_module.Note = type("Note", (Entity,), {"__module__": models_module.__name__, "title": Text(), "body": Text()})
+                    second_output = io.StringIO()
+                    with redirect_stdout(second_output):
+                        execute_from_command_line(["mango.py", "newmigration", "mgmt_test_rejected_app"])
+                    self.assertIn("Error:", second_output.getvalue())
+                    self.assertIn("must be nullable", second_output.getvalue())
+
+    def test_applymigrations_and_migrationstatus_with_nothing_pending(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app_module = ModuleType("mgmt_test_empty_app")
+            app_module.__file__ = str(root / "mgmt_test_empty_app" / "__init__.py")
+            (root / "mgmt_test_empty_app" / "migrations").mkdir(parents=True)
+            settings = self._settings_for(root, app_module)
+            with patch.dict(sys.modules, {"mgmt_test_empty_app": app_module}), patch("mangoo.management.commands.load_settings", return_value=settings):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    execute_from_command_line(["mango.py", "applymigrations"])
+                self.assertIn("No migrations to apply", output.getvalue())
+
+                output2 = io.StringIO()
+                with redirect_stdout(output2):
+                    execute_from_command_line(["mango.py", "migrationstatus"])
+                self.assertIn("No migrations found", output2.getvalue())
+
+    def test_applymigrations_and_migrationstatus_with_a_real_migration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app_module = ModuleType("mgmt_test_real_app")
+            app_module.__file__ = str(root / "mgmt_test_real_app" / "__init__.py")
+            (root / "mgmt_test_real_app").mkdir()
+            models_module = ModuleType("mgmt_test_real_app.models")
+            models_module.Comment = type("Comment", (Entity,), {"__module__": models_module.__name__, "body": Text()})
+            with patch.dict(sys.modules, {"mgmt_test_real_app": app_module, "mgmt_test_real_app.models": models_module}):
+                settings = self._settings_for(root, app_module)
+                with patch("mangoo.management.commands.load_settings", return_value=settings):
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        execute_from_command_line(["mango.py", "newmigration", "mgmt_test_real_app"])
+                    self.assertIn("Created", output.getvalue())
+
+                    status_output = io.StringIO()
+                    with redirect_stdout(status_output):
+                        execute_from_command_line(["mango.py", "migrationstatus"])
+                    self.assertIn("[ ]", status_output.getvalue())
+
+                    apply_output = io.StringIO()
+                    with redirect_stdout(apply_output):
+                        execute_from_command_line(["mango.py", "applymigrations"])
+                    self.assertIn("Applied:", apply_output.getvalue())
+
+                    status_output2 = io.StringIO()
+                    with redirect_stdout(status_output2):
+                        execute_from_command_line(["mango.py", "migrationstatus"])
+                    self.assertIn("[X]", status_output2.getvalue())
+
+
+class RunworkerTests(unittest.TestCase):
+    @patch("mangoo.management.commands.run_worker")
+    @patch("mangoo.management.commands.load_settings")
+    def test_runworker_resolves_real_handlers_and_starts_the_real_worker(self, load_settings, run_worker):
+        load_settings.return_value = SimpleNamespace(database={"ENGINE": "sqlite3", "NAME": "unused"}, job_handlers={"send_email": "test_management._hello_command"})
+        output = io.StringIO()
+        with redirect_stdout(output):
+            execute_from_command_line(["mango.py", "runworker"])
+        self.assertIn("1 handler(s) registered", output.getvalue())
+        run_worker.assert_called_once()
+        (_database, handlers), _kwargs = run_worker.call_args
+        self.assertIs(handlers["send_email"], _hello_command)
+
+    @patch("mangoo.management.commands.run_worker", side_effect=KeyboardInterrupt)
+    @patch("mangoo.management.commands.load_settings")
+    def test_runworker_stops_cleanly_on_ctrl_c(self, load_settings, run_worker):
+        load_settings.return_value = SimpleNamespace(database={"ENGINE": "sqlite3", "NAME": "unused"}, job_handlers={})
+        output = io.StringIO()
+        with redirect_stdout(output):
+            execute_from_command_line(["mango.py", "runworker"])
+        self.assertIn("job worker stopped", output.getvalue())
+
+
+class LaunchEdgeCaseTests(unittest.TestCase):
+    @patch.dict("os.environ", {"MANGOO_LAUNCH_MODE": "module", "MANGOO_RUN_MAIN": ""})
+    @patch("mangoo.management.commands.run_with_reloader")
+    def test_module_launch_mode_builds_a_python_dash_m_command(self, run_with_reloader):
+        execute_from_command_line(["mango.py", "launch", "8001"])
+        command = run_with_reloader.call_args.args[0]
+        self.assertEqual(command[1:4], ["-m", "mangoo.cli", "launch"])
+
+    @patch("mangoo.management.commands.serve")
+    @patch("mangoo.management.commands.load_settings")
+    def test_a_host_colon_port_address_is_parsed_into_both_parts(self, load_settings, serve):
+        load_settings.return_value = SimpleNamespace(root_urlconf="test_project_urls", server_host="127.0.0.1", server_port=8000)
+        urls = ModuleType("test_project_urls")
+        urls.urlpatterns = []
+        with patch.dict(sys.modules, {"test_project_urls": urls}):
+            execute_from_command_line(["mango.py", "launch", "0.0.0.0:9000", "--noreload"])
+        _, host, port = serve.call_args.args
+        self.assertEqual(host, "0.0.0.0")
+        self.assertEqual(port, 9000)
+
+    @patch("mangoo.management.commands.validate_production", side_effect=__import__("mangoo.production", fromlist=["ProductionConfigurationError"]).ProductionConfigurationError("unsafe secret key"))
+    @patch("mangoo.management.commands.load_settings")
+    def test_a_production_configuration_error_is_reported_without_crashing(self, load_settings, validate_production):
+        load_settings.return_value = SimpleNamespace(root_urlconf="test_project_urls", server_host="127.0.0.1", server_port=8000)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            execute_from_command_line(["mango.py", "launch", "8001", "--noreload"])
+        self.assertIn("Error:", output.getvalue())
+
+    @patch("mangoo.management.commands.serve", side_effect=KeyboardInterrupt)
+    @patch("mangoo.management.commands.load_settings")
+    def test_ctrl_c_during_serve_stops_cleanly(self, load_settings, serve):
+        load_settings.return_value = SimpleNamespace(root_urlconf="test_project_urls", server_host="127.0.0.1", server_port=8000)
+        urls = ModuleType("test_project_urls")
+        urls.urlpatterns = []
+        with patch.dict(sys.modules, {"test_project_urls": urls}):
+            output = io.StringIO()
+            with redirect_stdout(output):
+                execute_from_command_line(["mango.py", "launch", "8001", "--noreload"])
+        self.assertIn("development server stopped", output.getvalue())
+
+
+class CacheserverFailureTests(unittest.TestCase):
+    @patch("mangoo.management.commands.serve_cache", side_effect=KeyboardInterrupt)
+    def test_ctrl_c_during_cacheserver_stops_cleanly(self, serve_cache):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            execute_from_command_line(["mango.py", "cacheserver"])
+        self.assertIn("cache server stopped", output.getvalue())
 
 
 if __name__ == "__main__":

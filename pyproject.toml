@@ -69,7 +69,7 @@ omit = ["src/mangoo/__main__.py"]
 [tool.coverage.report]
 skip_covered = false
 show_missing = true
-fail_under = 85
+fail_under = 100
 
 [tool.mypy]
 python_version = "3.10"

@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mangoo.checks import CheckMessage, run_checks
+from mangoo.checks import CheckMessage, _scan_deprecated_usage, run_checks
 
 
 def _settings(**overrides) -> SimpleNamespace:
@@ -82,6 +82,18 @@ class PendingMigrationCheckTests(unittest.TestCase):
         self.assertEqual(len(matches), 1)
         self.assertEqual(matches[0].level, "error")
 
+    @patch("mangoo.checks.migration_status")
+    def test_pending_migrations_are_reported_as_a_warning_naming_each_one(self, mock_migration_status):
+        from mangoo.migrations import MigrationStatus
+
+        mock_migration_status.return_value = [MigrationStatus("0001_initial", True), MigrationStatus("0002_add_index", False)]
+        messages = run_checks(_settings())
+        matches = [message for message in messages if "pending migration" in message.message]
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0].level, "warning")
+        self.assertIn("0002_add_index", matches[0].message)
+        self.assertNotIn("0001_initial", matches[0].message)
+
 
 class DeprecatedUsageScanTests(unittest.TestCase):
     def test_detects_deprecated_pulse_import(self):
@@ -119,6 +131,21 @@ class DeprecatedUsageScanTests(unittest.TestCase):
     def test_missing_base_dir_does_not_crash(self):
         messages = run_checks(_settings(base_dir=Path("/this/does/not/exist")))
         self.assertIsInstance(messages, list)
+
+    def test_unreadable_or_non_utf8_file_is_skipped_rather_than_crashing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base_dir = Path(directory)
+            (base_dir / "legacy.py").write_bytes(b"\xff\xfe# mentions PulseBus\x00")
+            messages = run_checks(_settings(base_dir=base_dir))
+            self.assertFalse(any("legacy.py" in message.message for message in messages))
+
+    def test_a_path_that_relative_to_cannot_express_falls_back_to_the_absolute_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base_dir = Path(directory)
+            (base_dir / "views.py").write_text("PulseBus\n", encoding="utf-8")
+            with patch("mangoo.checks.Path.relative_to", side_effect=ValueError):
+                messages = _scan_deprecated_usage(base_dir)
+            self.assertTrue(any("PulseBus" in message.message for message in messages))
 
 
 class CryptoCheckTests(unittest.TestCase):

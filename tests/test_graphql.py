@@ -1,7 +1,10 @@
+import importlib.util
+import sys
 import unittest
 from unittest import mock
 
-from mangoo.graphql import GraphQLSyntaxError, Schema, _Parser, _tokenize, graphql_view
+import mangoo.graphql as graphql_module
+from mangoo.graphql import GraphQLSyntaxError, Schema, _depth, _Parser, _tokenize, graphql_view
 
 
 class SchemaArgumentsTests(unittest.TestCase):
@@ -86,6 +89,81 @@ class LexerAndParserEdgeCaseTests(unittest.TestCase):
         result = schema.execute("{ greeting % }", None)
         self.assertIn("errors", result)
 
+    # The tests below construct `_tokenize`/`_Parser` directly (the same
+    # pattern as `test_pathologically_nested_query_is_rejected_during_parsing`
+    # above) because `Schema.execute()` prefers the Rust-ported
+    # `mangoo_native.parse_graphql_document` whenever it is built, which
+    # would otherwise never exercise these pure-Python code paths.
+
+    def test_comment_without_a_trailing_newline_is_skipped_by_the_pure_python_tokenizer(self):
+        tokens = _tokenize("foo # trailing comment with no newline")
+        self.assertEqual([token.kind for token in tokens], ["name", "eof"])
+
+    def test_string_literal_is_tokenized_by_the_pure_python_tokenizer(self):
+        tokens = _tokenize('"hello"')
+        self.assertEqual((tokens[0].kind, tokens[0].value), ("string", "hello"))
+
+    def test_unterminated_string_is_rejected_by_the_pure_python_tokenizer(self):
+        with self.assertRaises(GraphQLSyntaxError) as ctx:
+            _tokenize('"unterminated')
+        self.assertIn("Unterminated string literal", str(ctx.exception))
+
+    def test_invalid_escape_sequence_is_rejected_by_the_pure_python_tokenizer(self):
+        with self.assertRaises(GraphQLSyntaxError) as ctx:
+            _tokenize('"\\q"')
+        self.assertIn("Invalid string literal", str(ctx.exception))
+
+    def test_exponent_numbers_with_and_without_a_sign_are_tokenized_by_the_pure_python_tokenizer(self):
+        tokens = _tokenize("1e+3 2E-2 3e4")
+        values = [token.value for token in tokens if token.kind == "float"]
+        self.assertEqual(values, [1000.0, 0.02, 30000.0])
+
+    def test_fragment_dot_is_rejected_by_the_pure_python_tokenizer(self):
+        with self.assertRaises(GraphQLSyntaxError) as ctx:
+            _tokenize(".foo")
+        self.assertIn("Fragments are not supported", str(ctx.exception))
+
+    def test_unsupported_character_is_rejected_by_the_pure_python_tokenizer(self):
+        with self.assertRaises(GraphQLSyntaxError) as ctx:
+            _tokenize("%")
+        self.assertIn("Unexpected character", str(ctx.exception))
+
+    def test_missing_colon_between_argument_name_and_value_is_rejected_by_the_pure_python_parser(self):
+        with self.assertRaises(GraphQLSyntaxError) as ctx:
+            _Parser(_tokenize("{ foo(bar 1) }")).parse_document()
+        self.assertIn("Expected ':'", str(ctx.exception))
+
+    def test_non_name_token_where_a_name_is_expected_is_rejected_by_the_pure_python_parser(self):
+        with self.assertRaises(GraphQLSyntaxError) as ctx:
+            _Parser(_tokenize("{ 1 }")).parse_document()
+        self.assertIn("Expected a name", str(ctx.exception))
+
+    def test_trailing_tokens_after_the_operation_are_rejected_by_the_pure_python_parser(self):
+        with self.assertRaises(GraphQLSyntaxError) as ctx:
+            _Parser(_tokenize("{ greeting } { greeting }")).parse_document()
+        self.assertIn("Unexpected content", str(ctx.exception))
+
+    def test_empty_selection_set_is_rejected_by_the_pure_python_parser(self):
+        with self.assertRaises(GraphQLSyntaxError) as ctx:
+            _Parser(_tokenize("{ }")).parse_document()
+        self.assertIn("at least one field", str(ctx.exception))
+
+    def test_false_null_and_bare_enum_values_are_parsed_by_the_pure_python_parser(self):
+        _, _, _, selection_set = _Parser(_tokenize("{ probe(flag: false, missing: null, status: ACTIVE) }")).parse_document()
+        self.assertEqual(selection_set[0].arguments, {"flag": False, "missing": None, "status": "ACTIVE"})
+
+    def test_list_value_argument_is_parsed_by_the_pure_python_parser(self):
+        _, _, _, selection_set = _Parser(_tokenize("{ probe(tags: [1, 2, 3]) }")).parse_document()
+        self.assertEqual(selection_set[0].arguments, {"tags": [1, 2, 3]})
+
+    def test_missing_value_after_colon_is_rejected_by_the_pure_python_parser(self):
+        with self.assertRaises(GraphQLSyntaxError) as ctx:
+            _Parser(_tokenize("{ probe(name:) }")).parse_document()
+        self.assertIn("Expected a value", str(ctx.exception))
+
+    def test_depth_of_an_empty_selection_set_is_zero(self):
+        self.assertEqual(_depth([]), 0)
+
 
 class VariableTests(unittest.TestCase):
     def test_variable_value_is_bound_from_the_variables_mapping(self):
@@ -112,6 +190,11 @@ class VariableTests(unittest.TestCase):
         schema = Schema(query={"greeting": lambda request: "hi"})
         result = schema.execute("query Hello { greeting }", None, operation_name="Other")
         self.assertIn("Unknown operation", result["errors"][0]["message"])
+
+    def test_optional_variable_without_a_default_is_bound_to_none_when_not_provided(self):
+        schema = Schema(query={"probe": lambda request, x: x})
+        result = schema.execute("query($x: Int) { probe(x: $x) }", None, variables={})
+        self.assertEqual(result, {"data": {"probe": None}})
 
 
 class NestingTests(unittest.TestCase):
@@ -145,6 +228,23 @@ class NestingTests(unittest.TestCase):
         schema = Schema(query={"user": lambda request: None})
         result = schema.execute("{ user { id } }", None)
         self.assertEqual(result, {"data": {"user": None}})
+
+    def test_none_items_in_a_projected_list_stay_none(self):
+        schema = Schema(query={"users": lambda request: [{"id": 1}, None]})
+        result = schema.execute("{ users { id } }", None)
+        self.assertEqual(result, {"data": {"users": [{"id": 1}, None]}})
+
+    def test_non_mapping_item_in_a_projected_list_is_a_subfield_error(self):
+        schema = Schema(query={"users": lambda request: [{"id": 1}, "oops"]})
+        result = schema.execute("{ users { id } }", None)
+        self.assertEqual(result["data"]["users"], [{"id": 1}, None])
+        self.assertIn("does not have subfields", result["errors"][0]["message"])
+
+    def test_double_underscore_subfield_other_than_typename_resolves_through_introspection(self):
+        schema = Schema(query={"user": lambda request: {"id": 1}}, introspection=True)
+        result = schema.execute("{ user { id __foo } }", None)
+        self.assertEqual(result["data"]["user"], {"id": 1, "__foo": None})
+        self.assertIn("minimal introspection", result["errors"][0]["message"])
 
 
 class MutationTests(unittest.TestCase):
@@ -348,6 +448,44 @@ class NativeParserBridgeTests(unittest.TestCase):
             fallback_result = schema.execute("{ greeting @skip }", None)
         self.assertIn("errors", native_result)
         self.assertIn("errors", fallback_result)
+
+
+class NativeParserImportFallbackTests(unittest.TestCase):
+    """mangoo.graphql's `try: import mangoo_native ... except ImportError:
+    _native_parse_graphql_document = None` only runs at module import time.
+    `NativeParserBridgeTests` above mocks the already-bound attribute, which
+    never executes those two lines.
+
+    Reaching them for real means re-executing the module with
+    `mangoo_native` made unimportable -- but `importlib.reload
+    (mangoo.graphql)` would do that *in place*, rebinding every name in the
+    live module (including `GraphQLSyntaxError`, `Schema`, ...) to new
+    objects, which would desync every reference this test file already
+    holds to the old ones (e.g. `assertRaises(GraphQLSyntaxError)` would stop
+    matching). Loading a throwaway module object from the same source file
+    under a different name avoids that: `mangoo.graphql` itself is never
+    touched."""
+
+    def test_module_falls_back_to_the_pure_python_parser_when_mangoo_native_is_unavailable(self):
+        original = sys.modules.get("mangoo_native", None)
+        sys.modules["mangoo_native"] = None  # sentinel: forces ImportError on import
+        try:
+            spec = importlib.util.spec_from_file_location("mangoo._graphql_reimport_test", graphql_module.__file__)
+            fresh_module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = fresh_module  # dataclasses in this module need their class's module registered
+            try:
+                spec.loader.exec_module(fresh_module)
+            finally:
+                sys.modules.pop(spec.name, None)
+            self.assertIsNone(fresh_module._native_parse_graphql_document)
+            schema = fresh_module.Schema(query={"greet": lambda request, name: f"Hello, {name}!"})
+            result = schema.execute('{ greet(name: "Ada") }', None)
+            self.assertEqual(result, {"data": {"greet": "Hello, Ada!"}})
+        finally:
+            if original is None:
+                sys.modules.pop("mangoo_native", None)
+            else:
+                sys.modules["mangoo_native"] = original
 
 
 if __name__ == "__main__":

@@ -1,13 +1,17 @@
+import importlib.util
 import sqlite3
+import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 from unittest import mock
 
+import mangoo.db as db_module
 from mangoo.db import (
     Connection,
     DatabaseConfigurationError,
+    DatabaseDriverError,
     SerializedConnection,
     _is_stale_connection_error,
     close_pooled_connections,
@@ -22,6 +26,7 @@ from mangoo.db import (
     enable_readonly_connection_pooling,
     enable_wal_mode,
     readonly_connection_pooling_enabled,
+    user_id_definition,
     wal_mode_enabled,
 )
 
@@ -41,6 +46,72 @@ class DatabaseTests(unittest.TestCase):
     def test_unknown_database_engine_is_rejected(self):
         with self.assertRaisesRegex(DatabaseConfigurationError, "Unsupported"):
             connect({"ENGINE": "oracle", "NAME": "mangoo"})
+
+    def test_user_id_definition_covers_every_supported_engine(self):
+        self.assertEqual(user_id_definition("sqlite3"), "INTEGER PRIMARY KEY AUTOINCREMENT")
+        self.assertEqual(user_id_definition("postgresql"), "BIGSERIAL PRIMARY KEY")
+        self.assertEqual(user_id_definition("mysql"), "BIGINT AUTO_INCREMENT PRIMARY KEY")
+
+
+class AtomicTransactionTests(unittest.TestCase):
+    """`Connection.atomic()` nests correctly via savepoints -- a nested
+    block that raises rolls back to its own savepoint, not the whole
+    outer transaction, and a successful nested block releases its
+    savepoint without committing (only the outermost block commits)."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.connection = connect({"ENGINE": "sqlite3", "NAME": Path(self.directory.name) / "atomic.sqlite3"})
+        self.addCleanup(self.connection.close)
+        self.connection.execute("CREATE TABLE rows (id INTEGER PRIMARY KEY, name TEXT)")
+        self.connection.commit()
+
+    def test_rollback_delegates_to_the_raw_connection(self):
+        self.connection.execute("INSERT INTO rows (name) VALUES ('uncommitted')")
+        self.connection.rollback()
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) AS n FROM rows").fetchone()["n"], 0)
+
+    def test_a_successful_nested_atomic_block_releases_its_savepoint_not_commits(self):
+        with self.connection.atomic():
+            self.connection.execute("INSERT INTO rows (name) VALUES ('outer')")
+            with self.connection.atomic():
+                self.connection.execute("INSERT INTO rows (name) VALUES ('inner')")
+        names = sorted(row["name"] for row in self.connection.execute("SELECT name FROM rows").fetchall())
+        self.assertEqual(names, ["inner", "outer"])
+
+    def test_a_failing_outer_atomic_block_rolls_back_the_raw_connection(self):
+        self.connection.execute("INSERT INTO rows (name) VALUES ('before')")
+        self.connection.commit()
+        with self.assertRaises(ValueError):
+            with self.connection.atomic():
+                self.connection.execute("INSERT INTO rows (name) VALUES ('during')")
+                raise ValueError("boom")
+        names = [row["name"] for row in self.connection.execute("SELECT name FROM rows").fetchall()]
+        self.assertEqual(names, ["before"])
+
+    def test_a_failing_nested_atomic_block_rolls_back_only_its_own_savepoint(self):
+        with self.connection.atomic():
+            self.connection.execute("INSERT INTO rows (name) VALUES ('outer')")
+            with self.assertRaises(ValueError):
+                with self.connection.atomic():
+                    self.connection.execute("INSERT INTO rows (name) VALUES ('inner')")
+                    raise ValueError("boom")
+        # The inner insert was rolled back to its own savepoint; the outer one still committed.
+        names = [row["name"] for row in self.connection.execute("SELECT name FROM rows").fetchall()]
+        self.assertEqual(names, ["outer"])
+
+
+class _RaisingCloseRaw:
+    """A fake `.raw` connection whose close() raises -- used to prove
+    close_pooled_connections()/close_pooled_readonly_connections() swallow
+    a close failure instead of letting it interrupt the sweep.
+    sqlite3.Connection itself is an immutable C type and can't be patched
+    directly, so a real pooled Connection's `.raw` is swapped for one of
+    these instead."""
+
+    def close(self):
+        raise RuntimeError("already gone")
 
 
 class ConnectionPoolingTests(unittest.TestCase):
@@ -125,6 +196,22 @@ class ConnectionPoolingTests(unittest.TestCase):
         with self.assertRaises(sqlite3.ProgrammingError):
             raw.execute("SELECT 1")
 
+    def test_close_pooled_connections_swallows_a_close_failure_and_still_clears_the_pool(self):
+        """A connection whose underlying close() itself raises must not stop
+        the rest of the pool from being cleared -- this is a best-effort
+        sweep, not a transaction that can partially fail. sqlite3.Connection
+        is an immutable C type (can't be patched directly), so swap in a
+        fake `.raw` that raises on close() instead."""
+        enable_connection_pooling()
+        connection = connect(self.database)
+        connection.close()
+        original_raw = connection.raw
+        connection.raw = _RaisingCloseRaw()
+        close_pooled_connections()  # must not raise
+        original_raw.close()
+        # Pool actually cleared despite the raised exception: a fresh connect() must not return the stale object.
+        self.assertIsNot(connect(self.database).raw, connection.raw)
+
 
 class WalModeTests(unittest.TestCase):
     def setUp(self):
@@ -187,6 +274,49 @@ class WalModeTests(unittest.TestCase):
         enable_wal_mode()
         with self.assertRaises(DatabaseConfigurationError):
             connect({"ENGINE": "oracle", "NAME": "mangoo"})
+
+
+class ReadonlyFallbackTests(unittest.TestCase):
+    """connect_readonly()'s own fallback branches: a non-SQLite engine has
+    no read-only mode to speak of, and a read-only open that fails (the
+    file doesn't exist yet) falls back to a normal connect() rather than
+    raising -- see connect_readonly()'s own docstring."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.addCleanup(disable_readonly_connection_pooling)
+
+    def test_non_sqlite_engine_delegates_straight_to_connect(self):
+        config = {"ENGINE": "postgres", "NAME": "mangoo"}
+        fake_connection = object()
+        with mock.patch("mangoo.db.connect", return_value=fake_connection) as connect_mock:
+            result = connect_readonly(config)
+        connect_mock.assert_called_once_with(config)
+        self.assertIs(result, fake_connection)
+
+    def test_open_readonly_returns_none_for_a_file_that_does_not_exist(self):
+        missing = Path(self.directory.name) / "does-not-exist.sqlite3"
+        self.assertIsNone(db_module._open_readonly({"NAME": str(missing)}))
+
+    def test_a_missing_file_falls_back_to_a_real_connect_that_creates_it(self):
+        missing_path = Path(self.directory.name) / "created-on-fallback.sqlite3"
+        database = {"ENGINE": "sqlite3", "NAME": missing_path}
+        connection = connect_readonly(database)
+        try:
+            self.assertTrue(missing_path.exists())
+        finally:
+            connection.close()
+
+    def test_the_same_fallback_happens_with_readonly_pooling_enabled(self):
+        enable_readonly_connection_pooling()
+        missing_path = Path(self.directory.name) / "created-on-fallback-pooled.sqlite3"
+        database = {"ENGINE": "sqlite3", "NAME": missing_path}
+        connection = connect_readonly(database)
+        try:
+            self.assertTrue(missing_path.exists())
+        finally:
+            connection.close()
 
 
 class ReadonlyConnectionPoolingTests(unittest.TestCase):
@@ -252,6 +382,16 @@ class ReadonlyConnectionPoolingTests(unittest.TestCase):
         self.assertFalse(readonly_connection_pooling_enabled())
         with self.assertRaises(sqlite3.ProgrammingError):
             raw.execute("SELECT 1")
+
+    def test_close_pooled_readonly_connections_swallows_a_close_failure_and_still_clears_the_pool(self):
+        enable_readonly_connection_pooling()
+        connection = connect_readonly(self.database)
+        connection.close()
+        original_raw = connection.raw
+        connection.raw = _RaisingCloseRaw()
+        close_pooled_readonly_connections()  # must not raise
+        original_raw.close()
+        self.assertIsNot(connect_readonly(self.database).raw, connection.raw)
 
 
 class _FlakyCursor:
@@ -472,3 +612,127 @@ class SerializedConnectionTests(unittest.TestCase):
             self.addCleanup(serialized.close)
             self.assertEqual(type(serialized._impl).__name__, "_FallbackSerializedConnection")
             self.assertEqual(serialized.execute("SELECT id, name FROM sample ORDER BY id"), [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}, {"id": 3, "name": "c"}])
+
+    def test_fallback_close_then_execute_raises_rather_than_hangs(self):
+        """Same contract as the native path's own close-then-execute test
+        above, but forced onto _FallbackSerializedConnection specifically
+        -- the native implementation is what SerializedConnection actually
+        uses in this environment, so without forcing the fallback here,
+        this specific implementation's own closed-check never runs."""
+        with mock.patch("mangoo.db._NativeSerializedConnection", None):
+            serialized = SerializedConnection(self.database)
+            serialized.close()
+            with self.assertRaises(RuntimeError):
+                serialized.execute("SELECT 1")
+
+
+class NativeSerializedConnectionImportFallbackTests(unittest.TestCase):
+    """mangoo.db's `try: import mangoo_native ... except ImportError:
+    _NativeSerializedConnection = None` only runs at module import time.
+    `test_falls_back_to_pure_python_when_mangoo_native_is_unavailable` above
+    mocks the already-bound attribute, which never executes those two lines.
+
+    Reaching them for real means re-executing the module with `mangoo_native`
+    made unimportable -- but `importlib.reload(mangoo.db)` would do that *in
+    place*, redefining every class in the live module (including
+    `DatabaseDriverError`, `Connection`, ...) as a brand-new class object.
+    Every other test in this process that imported those names before the
+    reload would then hold a stale class, e.g. making `assertRaises
+    (DatabaseDriverError, ...)` fail even when the right error is raised,
+    since it's no longer the *same* class the module now raises. So instead
+    of reloading the shared module, a throwaway module object is loaded from
+    the same source file under a different name -- `mangoo.db` itself, and
+    everything already imported from it, is never touched."""
+
+    def test_module_level_import_falls_back_when_mangoo_native_is_unavailable(self):
+        original = sys.modules.get("mangoo_native", None)
+        sys.modules["mangoo_native"] = None  # sentinel: forces ImportError on import
+        try:
+            spec = importlib.util.spec_from_file_location("mangoo._db_reimport_test", db_module.__file__)
+            fresh_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(fresh_module)
+            self.assertIsNone(fresh_module._NativeSerializedConnection)
+        finally:
+            if original is None:
+                sys.modules.pop("mangoo_native", None)
+            else:
+                sys.modules["mangoo_native"] = original
+
+
+class DriverImportFallbackTests(unittest.TestCase):
+    """`_open()`'s postgres/mysql branches import their driver lazily (inside
+    the function, not at module load) and raise `DatabaseDriverError` if it
+    isn't installed -- so, unlike the `mangoo_native` cases above, forcing
+    this only needs `sys.modules` patched for the one call, no reload."""
+
+    def _force_missing(self, module_name):
+        original = sys.modules.get(module_name, None)
+        sys.modules[module_name] = None  # sentinel: forces ImportError on import
+        return module_name, original
+
+    def _restore(self, forced):
+        module_name, original = forced
+        if original is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = original
+
+    def test_postgres_driver_missing_raises_an_actionable_error(self):
+        forced = self._force_missing("psycopg")
+        try:
+            with self.assertRaisesRegex(DatabaseDriverError, "psycopg"):
+                connect({"ENGINE": "postgresql", "NAME": "mangoo"})
+        finally:
+            self._restore(forced)
+
+    def test_mysql_driver_missing_raises_an_actionable_error(self):
+        forced = self._force_missing("pymysql")
+        try:
+            with self.assertRaisesRegex(DatabaseDriverError, "pymysql"):
+                connect({"ENGINE": "mysql", "NAME": "mangoo"})
+        finally:
+            self._restore(forced)
+
+
+class DriverConnectCallTests(unittest.TestCase):
+    """`_open()`'s postgres/mysql branches, exercised against the real driver
+    packages with their own `.connect()` mocked out -- this proves `_open()`
+    calls the driver correctly and wraps the result in `Connection`, without
+    needing a real PostgreSQL/MySQL server (that's covered separately by the
+    opt-in integration tests)."""
+
+    def test_open_postgres_calls_psycopg_connect_with_the_given_config_and_wraps_it(self):
+        try:
+            import psycopg
+        except ImportError:
+            self.skipTest("psycopg is not installed")
+        fake_raw = mock.Mock()
+        with mock.patch.object(psycopg, "connect", return_value=fake_raw) as connect_mock:
+            connection = connect({"ENGINE": "postgresql", "NAME": "mydb", "HOST": "dbhost", "PORT": 6543, "USER": "alice", "PASSWORD": "s3cret"})
+        connect_mock.assert_called_once()
+        kwargs = connect_mock.call_args.kwargs
+        self.assertEqual(kwargs["dbname"], "mydb")
+        self.assertEqual(kwargs["host"], "dbhost")
+        self.assertEqual(kwargs["port"], 6543)
+        self.assertEqual(kwargs["user"], "alice")
+        self.assertEqual(kwargs["password"], "s3cret")
+        self.assertIs(connection.raw, fake_raw)
+        self.assertEqual(connection.engine, "postgresql")
+
+    def test_open_mysql_calls_pymysql_connect_with_the_given_config_and_wraps_it(self):
+        try:
+            import pymysql
+        except ImportError:
+            self.skipTest("pymysql is not installed")
+        fake_raw = mock.Mock()
+        with mock.patch.object(pymysql, "connect", return_value=fake_raw) as connect_mock:
+            connection = connect({"ENGINE": "mysql", "NAME": "mydb", "HOST": "dbhost", "PORT": 3307, "USER": "alice", "PASSWORD": "s3cret"})
+        connect_mock.assert_called_once()
+        kwargs = connect_mock.call_args.kwargs
+        self.assertEqual(kwargs["host"], "dbhost")
+        self.assertEqual(kwargs["port"], 3307)
+        self.assertEqual(kwargs["database"], "mydb")
+        self.assertEqual(kwargs["user"], "alice")
+        self.assertEqual(kwargs["password"], "s3cret")
+        self.assertIs(connection.raw, fake_raw)
+        self.assertEqual(connection.engine, "mysql")

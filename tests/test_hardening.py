@@ -1,8 +1,10 @@
 import logging
+import sys
 import unittest
+from unittest.mock import MagicMock, patch
 
 from mangoo import HardeningOptions, Response, path
-from mangoo.hardening import RateLimiter
+from mangoo.hardening import Hardening, RateLimiter, RateLimiterBackendError, RedisRateLimiter
 from mangoo.logging import JsonFormatter
 from mangoo.runtime import create_application
 
@@ -104,6 +106,30 @@ class HardeningTests(unittest.TestCase):
         limiter.allow("new", now=11)
         self.assertEqual(limiter.stats()["tracked_clients"], 1)
 
+    def test_rate_limiter_rejects_non_positive_configuration(self):
+        with self.assertRaises(ValueError):
+            RateLimiter(limit=0, window_seconds=10)
+        with self.assertRaises(ValueError):
+            RateLimiter(limit=1, window_seconds=0)
+        with self.assertRaises(ValueError):
+            RateLimiter(limit=1, window_seconds=10, max_clients=0)
+
+    def test_allow_sweeps_its_own_stale_entry_even_when_prune_is_bypassed(self):
+        """`allow()` re-checks the current key's own front entry after
+        `_prune()` runs -- a defense-in-depth sweep, not just relying on
+        `_prune()` alone. Disabling `_prune()` isolates that sweep so this
+        pins its own behavior rather than `_prune()`'s."""
+        limiter = RateLimiter(limit=5, window_seconds=10, max_clients=10)
+        limiter.allow("k", now=0)
+        with patch.object(limiter, "_prune", lambda now: None):
+            self.assertTrue(limiter.allow("k", now=100))
+        self.assertEqual(limiter.stats()["tracked_clients"], 1)
+
+    def test_hardening_rejects_an_invalid_trusted_proxy_ip(self):
+        options = HardeningOptions(allowed_hosts=("example.test",), rate_limit=10, trusted_proxy_ips=("not-an-ip",))
+        with self.assertRaises(ValueError):
+            Hardening(options)
+
     def test_json_formatter_includes_request_metadata_without_headers(self):
         record = logging.LogRecord("mangoo.audit", logging.INFO, __file__, 0, "request complete", (), None)
         record.request_id, record.method, record.path, record.status, record.duration_ms = "request-1", "GET", "/healthz", 200, 2.5
@@ -111,3 +137,87 @@ class HardeningTests(unittest.TestCase):
         self.assertIn('"request_id":"request-1"', output)
         self.assertIn('"duration_ms":2.5', output)
         self.assertNotIn("Authorization", output)
+
+
+class RedisRateLimiterTests(unittest.TestCase):
+    """`RedisRateLimiter` needs a real Redis server to talk to for its own
+    opt-in integration test elsewhere -- here, its two other responsibilities
+    are tested without one: raising a clear `RateLimiterBackendError` when
+    the `redis` package itself isn't installed, and (given a fake redis
+    client standing in for a real server) calling the client the way it's
+    supposed to."""
+
+    def _force_redis_missing(self) -> dict:
+        removed = {name: sys.modules.pop(name) for name in list(sys.modules) if name == "redis" or name.startswith("redis.")}
+        sys.modules["redis"] = None  # sentinel: forces ImportError on import
+        return removed
+
+    def _restore_redis(self, removed: dict) -> None:
+        sys.modules.pop("redis", None)
+        sys.modules.update(removed)
+
+    def test_rejects_non_positive_configuration_before_touching_redis(self):
+        with self.assertRaises(ValueError):
+            RedisRateLimiter(limit=0, window_seconds=10)
+        with self.assertRaises(ValueError):
+            RedisRateLimiter(limit=1, window_seconds=0)
+
+    def test_raises_backend_error_when_redis_package_is_not_installed(self):
+        removed = self._force_redis_missing()
+        try:
+            with self.assertRaisesRegex(RateLimiterBackendError, "uv add redis"):
+                RedisRateLimiter(limit=5, window_seconds=60)
+        finally:
+            self._restore_redis(removed)
+
+    def _fake_redis_client(self, script):
+        client = MagicMock()
+        client.register_script.return_value = script
+        return client
+
+    def test_init_registers_the_incr_and_expire_script_against_the_configured_url(self):
+        import redis
+
+        fake_script = MagicMock()
+        fake_client = self._fake_redis_client(fake_script)
+        with patch.object(redis.Redis, "from_url", return_value=fake_client) as from_url:
+            limiter = RedisRateLimiter(limit=5, window_seconds=60, redis_url="redis://example.test:6379/1")
+        from_url.assert_called_once_with("redis://example.test:6379/1")
+        fake_client.register_script.assert_called_once()
+        self.assertIs(limiter._script, fake_script)
+        self.assertEqual(limiter.redis_url, "redis://example.test:6379/1")
+
+    def test_allow_runs_the_script_against_a_namespaced_key_and_compares_to_the_limit(self):
+        import redis
+
+        fake_script = MagicMock(return_value=3)
+        fake_client = self._fake_redis_client(fake_script)
+        with patch.object(redis.Redis, "from_url", return_value=fake_client):
+            limiter = RedisRateLimiter(limit=5, window_seconds=60)
+
+        self.assertTrue(limiter.allow("client-a"))
+        fake_script.assert_called_once_with(keys=["mangoo:ratelimit:client-a"], args=[60])
+
+        fake_script.return_value = 6
+        self.assertFalse(limiter.allow("client-a"))
+
+    def test_stats_reports_the_configured_limit_and_window_not_a_live_count(self):
+        import redis
+
+        with patch.object(redis.Redis, "from_url", return_value=self._fake_redis_client(MagicMock())):
+            limiter = RedisRateLimiter(limit=5, window_seconds=60)
+        self.assertEqual(limiter.stats(), {"limit": 5, "window_seconds": 60})
+
+    def test_hardening_uses_the_redis_backend_when_configured(self):
+        import redis
+
+        with patch.object(redis.Redis, "from_url", return_value=self._fake_redis_client(MagicMock())):
+            options = HardeningOptions(allowed_hosts=("example.test",), rate_limit=5, rate_limit_backend="redis", rate_limit_redis_url="redis://example.test:6379/0")
+            hardening = Hardening(options)
+        self.assertIsInstance(hardening.limiter, RedisRateLimiter)
+        self.assertEqual(hardening.limiter.redis_url, "redis://example.test:6379/0")
+
+    def test_hardening_uses_the_in_process_backend_by_default(self):
+        options = HardeningOptions(allowed_hosts=("example.test",), rate_limit=5)
+        hardening = Hardening(options)
+        self.assertIsInstance(hardening.limiter, RateLimiter)

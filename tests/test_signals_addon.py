@@ -1,7 +1,11 @@
+import importlib.util
+import sys
 import unittest
 from threading import Event
 
 from mangoo.addons.signals import BUILTIN_EVENTS, SignalBus, SignalEvent
+from mangoo.addons.signals import registry as registry_module
+from mangoo.addons.signals.registry import _FallbackDispatcher
 
 
 def _wait(event: Event, message: str) -> None:
@@ -23,6 +27,16 @@ class SignalsAddonTests(unittest.TestCase):
             SignalEvent("auth.login_succeeded", data={"password": "hunter2"})
         with self.assertRaises(ValueError):
             SignalEvent("auth.session_created", data={"Token": "abc"})
+
+    def test_bus_close_stops_its_worker_pool(self):
+        bus = SignalBus()
+        bus.close()  # must return promptly; no assertion needed beyond "doesn't hang"
+
+    def test_event_rejects_an_empty_or_non_string_name(self):
+        with self.assertRaises(ValueError):
+            SignalEvent("")
+        with self.assertRaises(ValueError):
+            SignalEvent(123)
 
     def test_bus_delivers_in_connection_order_without_blocking_the_caller(self):
         bus, delivered, received = SignalBus(), Event(), []
@@ -62,6 +76,21 @@ class SignalsAddonTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             SignalBus().connect("not valid", lambda event: None)
 
+    def test_connect_rejects_a_non_callable_subscriber(self):
+        with self.assertRaises(TypeError):
+            SignalBus().connect("request.started", "not callable")
+
+    def test_disconnect_removes_the_event_entry_once_its_last_subscriber_is_gone(self):
+        bus = SignalBus()
+        subscriber = lambda event: None  # noqa: E731
+        bus.connect("request.started", subscriber)
+        self.assertTrue(bus.disconnect("request.started", subscriber))
+        self.assertNotIn("request.started", bus._subscribers)
+
+    def test_emit_rejects_anything_that_is_not_a_signal_event(self):
+        with self.assertRaises(TypeError):
+            SignalBus().emit("not-an-event")
+
     def test_bus_delivers_to_many_subscribers_concurrently(self):
         bus, workers, delivered = SignalBus(workers=3), 3, Event()
         seen = []
@@ -79,3 +108,74 @@ class SignalsAddonTests(unittest.TestCase):
         bus.publish("migration.applied", data={"name": "0001_initial"})
         _wait(delivered, "not all subscribers were invoked")
         self.assertEqual(sorted(seen), list(range(workers)))
+
+
+class FallbackDispatcherTests(unittest.TestCase):
+    """Exercises the pure-Python ``ThreadPoolExecutor`` dispatcher directly --
+    it's only reached through ``SignalBus`` when ``mangoo_native`` isn't
+    built, which isn't the case in this environment."""
+
+    def test_dispatch_submits_delivery_to_the_worker_pool(self):
+        dispatcher = _FallbackDispatcher(workers=2)
+        try:
+            delivered, received = Event(), []
+
+            def subscriber(event):
+                received.append(event.name)
+                delivered.set()
+
+            dispatcher.dispatch([subscriber], SignalEvent("request.started"))
+            _wait(delivered, "the fallback dispatcher did not deliver the event")
+            self.assertEqual(received, ["request.started"])
+        finally:
+            dispatcher.close()
+
+    def test_a_failing_subscriber_is_logged_and_does_not_block_later_subscribers(self):
+        dispatcher = _FallbackDispatcher(workers=1)
+        try:
+            delivered, received = Event(), []
+
+            def broken(event):
+                raise RuntimeError("unavailable")
+
+            def ok(event):
+                received.append(event.name)
+                delivered.set()
+
+            with self.assertLogs("mangoo.signals", level="ERROR"):
+                dispatcher.dispatch([broken, ok], SignalEvent("request.finished"))
+                _wait(delivered, "the subscriber after the failing one was not invoked")
+            self.assertEqual(received, ["request.finished"])
+        finally:
+            dispatcher.close()
+
+    def test_close_shuts_down_the_pool_without_blocking(self):
+        dispatcher = _FallbackDispatcher(workers=1)
+        dispatcher.close()  # must return promptly (wait=False); no assertion needed beyond "doesn't hang"
+
+
+class NativeDispatcherImportFallbackTests(unittest.TestCase):
+    """`registry.py`'s `try: import mangoo_native ... except ImportError:
+    _NativeDispatcher = None` only runs at module import time. Loading a
+    throwaway copy of the module from the same source file (rather than
+    `importlib.reload`-ing the shared one in place) avoids desyncing class
+    identity for every other test that already imported names from it --
+    same technique as mangoo.db's own equivalent fallback test."""
+
+    def test_module_level_import_falls_back_when_mangoo_native_is_unavailable(self):
+        original = sys.modules.get("mangoo_native", None)
+        sys.modules["mangoo_native"] = None  # sentinel: forces ImportError on import
+        try:
+            # The throwaway name must live under "mangoo.addons.signals" so
+            # the module's own relative import ("from .contracts import
+            # ...") still resolves against the real, already-imported
+            # contracts module instead of a nonexistent sibling.
+            spec = importlib.util.spec_from_file_location("mangoo.addons.signals._registry_reimport_test", registry_module.__file__)
+            fresh_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(fresh_module)
+            self.assertIsNone(fresh_module._NativeDispatcher)
+        finally:
+            if original is not None:
+                sys.modules["mangoo_native"] = original
+            else:
+                del sys.modules["mangoo_native"]

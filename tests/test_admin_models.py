@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.admin import ModelAdmin, admin_routes
+from mangoo.admin import ModelAdmin, _handle_bulk_action, admin_routes
 from mangoo.audit import audit_events
 from mangoo.auth import create_session, create_superuser, create_user
 from mangoo.models import Entity, Integer, Text, Toggle
@@ -190,6 +190,11 @@ class UpdateAndDeleteTests(ModelAdminSetup):
         response = self.client.get("/admin/product/not-a-number", headers=self.bearer(self.admin_token))
         self.assertEqual(response.status_code, 404)
 
+    def test_detail_view_404s_for_an_extra_unrecognized_path_segment(self):
+        record_id = self.create_product(name="Widget", price="10")
+        response = self.client.get(f"/admin/product/{record_id}/not-delete", headers=self.bearer(self.admin_token))
+        self.assertEqual(response.status_code, 404)
+
     def test_delete_via_get_is_method_not_allowed(self):
         record_id = self.create_product(name="Widget", price="10")
         response = self.client.get(f"/admin/product/{record_id}/delete", headers=self.bearer(self.admin_token))
@@ -314,6 +319,24 @@ class ListFilterTests(ListFilterAndSearchSetup):
         self.assertIn("filter_active", response.text)
 
 
+class IntegerListFilterTests(ListFilterAndSearchSetup):
+    """A separate ``list_filter`` column whose ``coerce`` actually raises
+    (unlike ``Toggle``, which never does) -- the only way to exercise the
+    filter view's ``except (EntityError, ValueError, TypeError): pass``
+    guard around a genuinely invalid filter value."""
+
+    def setUp(self):
+        super().setUp()
+        self.seed(ModelAdmin(Product, list_filter=("price",)))
+
+    def test_a_non_numeric_filter_value_raises_in_coerce_and_is_silently_ignored(self):
+        response = self.client.get("/admin/product?filter_price=not-a-number", headers=self.bearer(self.admin_token))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Rust mug", response.text)
+        self.assertIn("Python sticker", response.text)
+        self.assertIn("Rust sticker", response.text)
+
+
 class SearchFieldsTests(ListFilterAndSearchSetup):
     def setUp(self):
         super().setUp()
@@ -394,6 +417,27 @@ class BulkActionsTests(unittest.TestCase):
         response = self.client.post("/admin/product", form_data=[("action", "deactivate")], headers=self.bearer(self.admin_token))
         self.assertEqual(response.status_code, 303)
         self.assertEqual(self.deactivated, [])
+
+    def test_a_non_numeric_selected_id_is_treated_as_no_selection(self):
+        response = self.client.post(
+            "/admin/product",
+            form_data=[("action", "deactivate"), ("selected", "not-a-number")],
+            headers=self.bearer(self.admin_token),
+        )
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(self.deactivated, [])
+
+    def test_bulk_action_handler_rejects_a_non_post_method(self):
+        """``_handle_bulk_action`` is only ever reached through the list
+        view's own ``POST`` branch, which already guarantees the method --
+        its own method guard is otherwise unreachable through routing, so
+        it's called directly here with a non-POST request."""
+        from mangoo.request import Request
+
+        request = Request(method="GET", path="/admin/product", query_params={}, body=b"", headers={})
+        response = _handle_bulk_action(request, self.database, ModelAdmin(Product, actions={"deactivate": lambda records: None}), "admin/product", lambda *a, **k: None)
+        self.assertEqual(response.status, 405)
+        self.assertEqual(dict(response.headers).get("Allow"), "POST")
 
 
 if __name__ == "__main__":

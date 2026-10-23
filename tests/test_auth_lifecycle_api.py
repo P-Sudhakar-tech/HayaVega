@@ -63,6 +63,44 @@ class AuthLifecycleApiTests(unittest.TestCase):
         response = self.client.post("/api/auth/password-reset/confirm", json_data={"token": "not-a-real-token", "password": NEW_PASSWORD})
         self.assertEqual(response.status_code, 400)
 
+    def test_password_reset_request_rejects_a_malformed_payload(self):
+        response = self.client.post("/api/auth/password-reset/request")
+        self.assertEqual(response.status_code, 400)
+
+    def test_password_reset_confirm_rejects_a_malformed_payload(self):
+        response = self.client.post("/api/auth/password-reset/confirm", json_data={"token": "only-a-token"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_password_reset_confirm_rejects_a_new_password_that_fails_policy(self):
+        """`reset_password` validates the new password *before* consuming the
+        token -- here that surfaces as `confirm_password_reset`'s own
+        `except ValueError` branch, not the "invalid or expired token" one."""
+        self.client.post("/api/auth/password-reset/request", json_data={"username": "admin"})
+        token = self.notifier.last_token
+        response = self.client.post("/api/auth/password-reset/confirm", json_data={"token": token, "password": "short"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("at least 12", response.json()["detail"])
+
+    def test_confirm_email_verification_rejects_a_malformed_payload(self):
+        response = self.client.post("/api/auth/email/verify/confirm")
+        self.assertEqual(response.status_code, 400)
+
+    def test_confirm_email_verification_rejects_an_invalid_token(self):
+        response = self.client.post("/api/auth/email/verify/confirm", json_data={"token": "not-a-real-token"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_logout_requires_authentication(self):
+        response = self.client.post("/api/auth/logout")
+        self.assertEqual(response.status_code, 401)
+
+    def test_sessions_listing_requires_authentication(self):
+        response = self.client.get("/api/auth/sessions")
+        self.assertEqual(response.status_code, 401)
+
+    def test_revoke_other_sessions_requires_authentication(self):
+        response = self.client.post("/api/auth/sessions/revoke-others")
+        self.assertEqual(response.status_code, 401)
+
     def test_email_verification_requires_authentication(self):
         response = self.client.post("/api/auth/email/verify/request")
         self.assertEqual(response.status_code, 401)

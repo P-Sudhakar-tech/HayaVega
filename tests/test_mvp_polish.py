@@ -51,6 +51,11 @@ class MvpPolishTests(unittest.TestCase):
             self.assertEqual(cached.status_code, 304)
             self.assertEqual(cached.content, b"")
 
+    def test_static_routes_rejects_a_negative_max_age(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(ValueError):
+                static_routes(directory, "assets", max_age=-1)
+
     def test_test_client_posts_json_and_reads_response(self):
         app = create_application([path("echo", lambda request: Response(request.body.decode(), content_type="application/json"), methods=("POST",))])
         response = TestClient(app).post("/echo", json_data={"ok": True})

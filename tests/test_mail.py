@@ -31,6 +31,14 @@ class FileEmailBackendTests(unittest.TestCase):
             send_mail(EmailMessage(to=("alice@example.com",), subject="Hi", body="Hello"), backend)
             self.assertTrue((Path(directory) / "outbox").is_dir())
 
+    def test_writes_an_alternative_html_part_when_given(self):
+        with tempfile.TemporaryDirectory() as directory:
+            backend = FileEmailBackend(directory)
+            send_mail(EmailMessage(to=("alice@example.com",), subject="Hi", body="Hello there", html_body="<p>Hello there</p>"), backend)
+            content = next(Path(directory).glob("*.eml")).read_text(encoding="utf-8")
+            self.assertIn("multipart/alternative", content)
+            self.assertIn("text/html", content)
+
 
 class SmtpEmailBackendTests(unittest.TestCase):
     @patch("mangoo.mail.smtplib.SMTP")

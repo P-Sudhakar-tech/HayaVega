@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from test_hardening import call
 
@@ -26,3 +27,10 @@ class ProductionTests(unittest.TestCase):
         self.assertEqual(health_body, b'{"status":"ok"}')
         self.assertEqual(ready["status"], "200 OK")
         self.assertEqual(ready_body, b'{"status":"ok","database":"ok"}')
+
+    def test_readiness_reports_unavailable_when_the_database_connection_fails(self):
+        with patch("mangoo.production.connect", side_effect=RuntimeError("connection refused")):
+            application = create_application(health_routes(":memory:"))
+            ready, ready_body = call(application, "/readyz")
+        self.assertTrue(ready["status"].startswith("503"))
+        self.assertEqual(ready_body, b'{"status":"unavailable","database":"unavailable"}')

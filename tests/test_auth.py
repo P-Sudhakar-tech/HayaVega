@@ -1,8 +1,11 @@
+import base64
 import hashlib
+import os
 import sqlite3
 import tempfile
 import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -46,6 +49,20 @@ class AuthenticationTests(unittest.TestCase):
         self.assertNotIn(PASSWORD, encoded)
         self.assertTrue(verify_password(PASSWORD, encoded))
         self.assertFalse(verify_password("incorrect-password", encoded))
+
+    def test_verify_password_accepts_a_legacy_pbkdf2_hash(self):
+        """Pre-scrypt Mangoo records are `pbkdf2_sha256$<iterations>$<salt>$<key>`
+        -- `verify_password` must still check these so a legacy user can log
+        in at all (before `authenticate` upgrades the hash to scrypt)."""
+        iterations = 100_000
+        salt = os.urandom(16)
+        derived_key = hashlib.pbkdf2_hmac("sha256", PASSWORD.encode("utf-8"), salt, iterations)
+        encoded = "pbkdf2_sha256${}${}${}".format(iterations, base64.b64encode(salt).decode("ascii"), base64.b64encode(derived_key).decode("ascii"))
+        self.assertTrue(verify_password(PASSWORD, encoded))
+        self.assertFalse(verify_password("wrong-password", encoded))
+
+    def test_verify_password_treats_a_malformed_pbkdf2_hash_as_invalid_not_an_error(self):
+        self.assertFalse(verify_password(PASSWORD, "pbkdf2_sha256$not-an-integer$c2FsdA==$a2V5"))
 
     def test_create_superuser_and_authenticate(self):
         created = create_superuser(self.database, "admin", "Admin@Example.com", PASSWORD)
@@ -149,6 +166,49 @@ class AuthenticationTests(unittest.TestCase):
             self.assertIsNone(authenticate(self.database, "admin", "Wrong-Password-7!"))
         self.assertIsNone(authenticate(self.database, "admin", PASSWORD))
 
+    def test_a_successful_login_upgrades_a_legacy_pbkdf2_hash_to_scrypt(self):
+        create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
+        iterations = 100_000
+        salt = os.urandom(16)
+        derived_key = hashlib.pbkdf2_hmac("sha256", PASSWORD.encode("utf-8"), salt, iterations)
+        legacy_hash = "pbkdf2_sha256${}${}${}".format(iterations, base64.b64encode(salt).decode("ascii"), base64.b64encode(derived_key).decode("ascii"))
+        connection = sqlite3.connect(self.database)
+        try:
+            connection.execute("UPDATE mangoo_users SET password_hash = ? WHERE username = 'admin'", (legacy_hash,))
+            connection.commit()
+        finally:
+            connection.close()
+
+        self.assertIsNotNone(authenticate(self.database, "admin", PASSWORD))
+
+        connection = sqlite3.connect(self.database)
+        try:
+            stored = connection.execute("SELECT password_hash FROM mangoo_users WHERE username = 'admin'").fetchone()[0]
+        finally:
+            connection.close()
+        self.assertTrue(stored.startswith("scrypt$"))
+
+    def test_enable_totp_raises_when_the_username_does_not_exist(self):
+        initialize_auth_db(self.database)
+        with self.assertRaisesRegex(ValueError, "not found"):
+            enable_totp(self.database, "nobody")
+
+    def test_create_session_rejects_an_inactive_user(self):
+        user = create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
+        inactive_user = replace(user, is_active=False)
+        with self.assertRaisesRegex(ValueError, "inactive"):
+            create_session(self.database, inactive_user)
+
+
+class ResolveTotpSecretTests(unittest.TestCase):
+    """`_resolve_totp_secret` is called from `authenticate` only when
+    `totp_enabled` is set, but it's a pure function in its own right --
+    exercised directly here for its "nothing stored" short-circuit."""
+
+    def test_a_missing_or_empty_stored_secret_resolves_to_none(self):
+        self.assertIsNone(auth_module._resolve_totp_secret(None, "a-secret-key"))
+        self.assertIsNone(auth_module._resolve_totp_secret("", "a-secret-key"))
+
 
 class PasswordValidatorTests(unittest.TestCase):
     def setUp(self):
@@ -172,6 +232,12 @@ class PasswordValidatorTests(unittest.TestCase):
 
     def test_common_password_validator_accepts_anything_not_on_the_list(self):
         common_password_validator(["password123"])("something-else-entirely")
+
+    def test_create_user_rejects_an_empty_or_too_long_username(self):
+        with self.assertRaisesRegex(ValueError, "Username is required"):
+            create_user(self.database, "", "alice@example.com", PASSWORD)
+        with self.assertRaisesRegex(ValueError, "Username is required"):
+            create_user(self.database, "x" * 151, "alice@example.com", PASSWORD)
 
     def test_create_user_uses_validate_password_by_default(self):
         with self.assertRaisesRegex(ValueError, "at least 12"):
@@ -257,6 +323,99 @@ class InitializeAuthDbCachingTests(unittest.TestCase):
         initialize_auth_db(database)
         user = create_user(database, "alice", "alice@example.com", PASSWORD)
         self.assertEqual(user.username, "alice")
+
+
+class SchemaBackfillTests(unittest.TestCase):
+    """`initialize_auth_db` upgrades a pre-existing SQLite schema in place
+    (columns added by later Mangoo releases) via `ALTER TABLE ... ADD COLUMN`,
+    instead of assuming every database was created fresh by the current
+    schema."""
+
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.database = Path(self.temporary_directory.name) / "users.sqlite3"
+
+    def test_a_users_table_missing_newer_columns_is_backfilled(self):
+        connection = sqlite3.connect(self.database)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE mangoo_users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    email TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    is_superuser INTEGER NOT NULL DEFAULT 0,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        initialize_auth_db(self.database)
+
+        connection = sqlite3.connect(self.database)
+        try:
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(mangoo_users)")}
+        finally:
+            connection.close()
+        self.assertTrue({"failed_attempts", "locked_until", "totp_secret", "totp_enabled", "email_verified"} <= columns)
+
+        user = create_user(self.database, "alice", "alice@example.com", PASSWORD)
+        self.assertEqual(user.username, "alice")
+
+    def test_a_sessions_table_missing_newer_columns_is_backfilled(self):
+        connection = sqlite3.connect(self.database)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE mangoo_users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    email TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    is_superuser INTEGER NOT NULL DEFAULT 0,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    failed_attempts INTEGER NOT NULL DEFAULT 0,
+                    locked_until INTEGER,
+                    totp_secret TEXT,
+                    totp_enabled INTEGER NOT NULL DEFAULT 0,
+                    email_verified INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE mangoo_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES mangoo_users(id) ON DELETE CASCADE,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    expires_at INTEGER NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        initialize_auth_db(self.database)
+
+        connection = sqlite3.connect(self.database)
+        try:
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(mangoo_sessions)")}
+        finally:
+            connection.close()
+        self.assertTrue({"ip_address", "user_agent"} <= columns)
+
+        user = create_user(self.database, "alice", "alice@example.com", PASSWORD)
+        token = create_session(self.database, user, ip_address="127.0.0.1", user_agent="pytest")
+        self.assertIsNotNone(authenticate_session(self.database, token))
 
 
 class SessionSweepTests(unittest.TestCase):

@@ -2,8 +2,8 @@ import unittest
 
 from mangoo.asgi import create_asgi_application
 from mangoo.hardening import HardeningOptions
-from mangoo.testing import WebSocketClosed, connect_websocket
-from mangoo.websocket import WebSocketDisconnect, websocket_path
+from mangoo.testing import WebSocketClosed, WebSocketTestSession, connect_websocket
+from mangoo.websocket import WebSocket, WebSocketDisconnect, websocket_path
 
 
 async def _echo(ws):
@@ -168,6 +168,67 @@ class WebSocketSignalsTests(unittest.IsolatedAsyncioTestCase):
             await session.receive_text()
         seen.wait(2)
         self.assertEqual(events, ["websocket.connected", "websocket.disconnected"])
+
+
+async def _sends_an_unexpected_message_first(scope, receive, send):
+    await receive()  # websocket.connect
+    await send({"type": "websocket.http.response.start"})  # neither accept nor close
+
+
+class WebSocketTestSessionUnitTests(unittest.IsolatedAsyncioTestCase):
+    """Drives ``WebSocketTestSession`` directly against a raw ASGI callable --
+    the client-harness behavior these cover doesn't depend on Mangoo's own
+    websocket dispatcher."""
+
+    async def test_entering_the_session_rejects_an_unexpected_first_message_type(self):
+        session = WebSocketTestSession(_sends_an_unexpected_message_first, "/ws/weird")
+        with self.assertRaises(AssertionError):
+            await session.__aenter__()
+        # The handler task already ran to completion by the time the
+        # unexpected message was read; await it so nothing is left pending.
+        self.assertIsNotNone(session._task)
+        await session._task
+
+
+class WebSocketUnitTests(unittest.IsolatedAsyncioTestCase):
+    """Drives ``WebSocket`` directly against fake ``receive``/``send``
+    callables -- cheaper than going through a full ASGI round trip for
+    behavior that doesn't depend on the dispatcher."""
+
+    @staticmethod
+    def _websocket(receive, send):
+        return WebSocket({"path": "/ws/x", "query_string": b"", "headers": ()}, receive, send)
+
+    async def test_accept_with_a_subprotocol_includes_it_in_the_accept_message(self):
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        ws = self._websocket(lambda: None, send)
+        await ws.accept(subprotocol="graphql-ws")
+        self.assertEqual(sent, [{"type": "websocket.accept", "subprotocol": "graphql-ws"}])
+
+    async def test_receive_text_raises_disconnect_with_the_clients_code(self):
+        async def receive():
+            return {"type": "websocket.disconnect", "code": 4007}
+
+        ws = self._websocket(receive, lambda message: None)
+        with self.assertRaises(WebSocketDisconnect) as context:
+            await ws.receive_text()
+        self.assertEqual(context.exception.code, 4007)
+
+    async def test_close_is_a_no_op_once_already_closed(self):
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        ws = self._websocket(lambda: None, send)
+        await ws.close(code=1000)
+        await ws.close(code=4001)  # second call must not send another close frame
+        self.assertEqual(len(sent), 1)
+        self.assertTrue(ws.closed)
 
 
 if __name__ == "__main__":

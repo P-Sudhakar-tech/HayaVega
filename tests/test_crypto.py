@@ -1,3 +1,4 @@
+import sys
 import unittest
 
 from mangoo import crypto
@@ -41,3 +42,46 @@ class EncryptDecryptTests(unittest.TestCase):
 
     def test_available_reflects_whether_cryptography_is_installed(self):
         self.assertIsInstance(crypto.available(), bool)
+
+
+class CryptographyUnavailableTests(unittest.TestCase):
+    """`available()`, `encrypt()`, and `decrypt()` each import `cryptography`
+    (or one of its submodules) lazily, inside the function body, and treat
+    an `ImportError` as "not installed" -- forced here via `sys.modules`,
+    since `cryptography` itself is installed in this environment. Every
+    already-imported `cryptography`/`cryptography.*` submodule is removed
+    first so a cached submodule can't bypass the forced failure, and
+    everything is restored afterwards so later tests see a normal,
+    available `cryptography`."""
+
+    def _force_cryptography_missing(self) -> dict:
+        removed = {name: sys.modules.pop(name) for name in list(sys.modules) if name == "cryptography" or name.startswith("cryptography.")}
+        sys.modules["cryptography"] = None  # sentinel: forces ImportError on import
+        return removed
+
+    def _restore_cryptography(self, removed: dict) -> None:
+        sys.modules.pop("cryptography", None)
+        sys.modules.update(removed)
+
+    def test_available_returns_false_when_cryptography_is_not_installed(self):
+        removed = self._force_cryptography_missing()
+        try:
+            self.assertFalse(crypto.available())
+        finally:
+            self._restore_cryptography(removed)
+
+    def test_encrypt_raises_encryption_unavailable_when_cryptography_is_not_installed(self):
+        removed = self._force_cryptography_missing()
+        try:
+            with self.assertRaises(crypto.EncryptionUnavailableError):
+                crypto.encrypt("a-real-unique-secret", "JBSWY3DPEHPK3PXP")
+        finally:
+            self._restore_cryptography(removed)
+
+    def test_decrypt_raises_encryption_unavailable_when_cryptography_is_not_installed(self):
+        removed = self._force_cryptography_missing()
+        try:
+            with self.assertRaises(crypto.EncryptionUnavailableError):
+                crypto.decrypt("a-real-unique-secret", "aesgcm$1$abc$def")
+        finally:
+            self._restore_cryptography(removed)

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.i18n import Catalog, LanguageCatalog, catalog_from_settings, resolve_language, translator_for
+from mangoo.i18n import Catalog, LanguageCatalog, _parse_accept_language, catalog_from_settings, resolve_language, translator_for
 from mangoo.request import Request
 from mangoo.templates import render_template
 
@@ -178,6 +178,18 @@ class TranslatorForTests(unittest.TestCase):
     def test_override_takes_precedence_over_the_header(self):
         t = translator_for(self._request("en"), self.catalog, override="es")
         self.assertEqual(t.welcome, "¡Bienvenido!")
+
+
+class ParseAcceptLanguageTests(unittest.TestCase):
+    def test_an_entry_with_no_tag_text_is_skipped(self):
+        """A `;`-led entry (e.g. a stray leading `;q=...`) partitions to an
+        empty tag -- it must be dropped, not kept as a blank language."""
+        self.assertEqual(_parse_accept_language("en,;q=0.9"), ["en"])
+
+    def test_a_malformed_quality_value_defaults_to_zero(self):
+        """`q=` followed by something `float()` rejects must not raise --
+        it defaults to quality 0.0, so the entry still sorts, just last."""
+        self.assertEqual(_parse_accept_language("en;q=not-a-number,es"), ["es", "en"])
 
 
 class CatalogFromSettingsTests(unittest.TestCase):

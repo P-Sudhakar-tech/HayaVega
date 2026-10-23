@@ -38,6 +38,16 @@ class ProductionFeatureTests(unittest.TestCase):
         self.assertEqual(missing.status, 403)
         self.assertEqual(allowed, {"ok": True})
 
+    def test_csrf_protect_rejects_when_the_form_body_cannot_be_decoded(self):
+        """A plain `<form>` CSRF fallback (`_form_csrf_token`) reads
+        `request.form()`, which decodes the body as UTF-8 -- a body that
+        isn't valid UTF-8 must be treated as "no token supplied", not
+        raise out of the decorator."""
+        protected = csrf_protect(lambda request: {"ok": True})
+        malformed = Request("POST", "/", {}, b"\xff\xfe", {"Cookie": f"{SESSION_COOKIE_NAME}=token; {CSRF_COOKIE_NAME}=csrf"})
+        response = protected(malformed)
+        self.assertEqual(response.status, 403)
+
     def test_login_required_accepts_cookie_session(self):
         token = create_session(self.database, self.user)
         protected = login_required(self.database)(lambda request: {"ok": True})
@@ -54,3 +64,9 @@ class ProductionFeatureTests(unittest.TestCase):
         self.assertIn("member@example.com", page.body)
         self.assertIn("admin@example.com", page.body)
         self.assertEqual(audit_events(self.database)[0]["event_type"], "admin.users_viewed")
+
+    def test_audit_events_rejects_a_limit_outside_1_to_1000(self):
+        with self.assertRaises(ValueError):
+            audit_events(self.database, limit=0)
+        with self.assertRaises(ValueError):
+            audit_events(self.database, limit=1001)

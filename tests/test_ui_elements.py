@@ -41,6 +41,10 @@ class ElementTests(unittest.TestCase):
         result = input_(name="x", type="text")
         self.assertEqual(result, '<input name="x" type="text">')
 
+    def test_a_list_or_tuple_child_is_flattened_and_each_item_escaped(self):
+        result = div(["<b>", "ok"])
+        self.assertEqual(result, "<div>&lt;b&gt;ok</div>")
+
     def test_fragment_groups_children_with_no_wrapper(self):
         result = fragment(div("a"), div("b"))
         self.assertEqual(result, "<div>a</div><div>b</div>")

@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from mangoo.jobs import _mark_failed, _mark_succeeded, claim_next_job, enqueue, initialize_jobs_db, run_worker
+from mangoo.jobs import _mark_failed, _mark_succeeded, claim_next_job, enqueue, initialize_jobs_db, retry_job, run_worker
 
 
 def _iso(delta_seconds: float) -> str:
@@ -162,6 +162,77 @@ class JobsTests(unittest.TestCase):
         row_1 = self._row(job_id_1)
         self.assertIn(row_1["status"], {"pending", "dead"})
         self.assertIn("RuntimeError", row_1["last_error"])
+
+
+class JobSignalsTests(unittest.TestCase):
+    """`enqueue`/`_mark_succeeded`/`_mark_failed`/`retry_job` each publish an
+    event on the caller's `SignalBus`, after their own DB commit -- delivery
+    is always-async (a worker thread), so each test connects a real
+    subscriber and waits on a `threading.Event` it sets, the same pattern
+    `test_admin_jobs.py`'s `SignalsIntegrationTests` already uses."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.database = str(Path(self._tmpdir.name) / "jobs.db")
+        initialize_jobs_db(self.database)
+
+    def _bus_and_waiter(self, event_name):
+        from threading import Event
+
+        from mangoo.addons.signals import SignalBus
+
+        bus = SignalBus()
+        self.addCleanup(bus.close)
+        received = []
+        seen = Event()
+
+        def on_event(event):
+            received.append(event)
+            seen.set()
+
+        bus.connect(event_name, on_event)
+        return bus, received, seen
+
+    def test_enqueue_publishes_job_enqueued(self):
+        bus, received, seen = self._bus_and_waiter("job.enqueued")
+        job_id = enqueue(self.database, "send_email", {"to": "a@example.com"}, signals=bus)
+        self.assertTrue(seen.wait(2))
+        self.assertEqual(received[0].data["job_id"], job_id)
+        self.assertEqual(received[0].data["name"], "send_email")
+
+    def test_mark_succeeded_publishes_job_succeeded(self):
+        bus, received, seen = self._bus_and_waiter("job.succeeded")
+        job_id = enqueue(self.database, "send_email")
+        claim_next_job(self.database)
+        _mark_succeeded(self.database, job_id, signals=bus)
+        self.assertTrue(seen.wait(2))
+        self.assertEqual(received[0].data["job_id"], job_id)
+
+    def test_mark_failed_publishes_job_failed_when_a_retry_is_scheduled(self):
+        bus, received, seen = self._bus_and_waiter("job.failed")
+        job_id = enqueue(self.database, "send_email", max_attempts=3)
+        claim_next_job(self.database)
+        _mark_failed(self.database, job_id, attempts=1, max_attempts=3, exc=ValueError("boom"), signals=bus)
+        self.assertTrue(seen.wait(2))
+        self.assertEqual(received[0].data["job_id"], job_id)
+
+    def test_mark_failed_publishes_job_dead_when_attempts_are_exhausted(self):
+        bus, received, seen = self._bus_and_waiter("job.dead")
+        job_id = enqueue(self.database, "send_email", max_attempts=2)
+        claim_next_job(self.database)
+        _mark_failed(self.database, job_id, attempts=2, max_attempts=2, exc=ValueError("boom"), signals=bus)
+        self.assertTrue(seen.wait(2))
+        self.assertEqual(received[0].data["job_id"], job_id)
+
+    def test_retry_job_publishes_job_retried(self):
+        bus, received, seen = self._bus_and_waiter("job.retried")
+        job_id = enqueue(self.database, "send_email", max_attempts=1)
+        claim_next_job(self.database)
+        _mark_failed(self.database, job_id, attempts=1, max_attempts=1, exc=ValueError("boom"))
+        self.assertTrue(retry_job(self.database, job_id, signals=bus))
+        self.assertTrue(seen.wait(2))
+        self.assertEqual(received[0].data["job_id"], job_id)
 
 
 if __name__ == "__main__":

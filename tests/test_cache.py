@@ -21,6 +21,12 @@ class InMemoryCacheTests(unittest.TestCase):
         value = cache.get("key")
         self.assertEqual(value["a"][:2], [1, 2])
 
+    def test_set_overwrites_an_existing_key(self):
+        cache = InMemoryCache()
+        cache.set("key", "first")
+        cache.set("key", "second")
+        self.assertEqual(cache.get("key"), "second")
+
     def test_delete_removes_the_entry(self):
         cache = InMemoryCache()
         cache.set("key", "value")
@@ -372,6 +378,25 @@ class CachedViewTests(unittest.TestCase):
         self.assertEqual(first.body, "async body")
         self.assertEqual(second.body, "async body")
         self.assertEqual(len(calls), 1)
+
+    def test_async_view_non_get_requests_are_never_cached(self):
+        import asyncio
+
+        cache = InMemoryCache()
+        calls = []
+
+        @cached_view(cache)
+        async def view(request):
+            calls.append(1)
+            return Response("posted")
+
+        async def run():
+            request = self._request(method="POST")
+            await view(request)
+            await view(request)
+
+        asyncio.run(run())
+        self.assertEqual(len(calls), 2)
 
 
 if __name__ == "__main__":
