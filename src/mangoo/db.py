@@ -525,10 +525,18 @@ def _open(config: dict) -> Connection:
     if engine in {"postgres", "postgresql"}:
         try:
             import psycopg
-            from psycopg.rows import dict_row
+            from psycopg.rows import dict_row  # pragma: no cover -- only reached when psycopg IS installed; see below.
         except ImportError as error:
             raise DatabaseDriverError("PostgreSQL requires `uv add psycopg[binary]`.") from error
-        raw = psycopg.connect(
+        # Environment-dependent, not a design gap: psycopg is a compiled
+        # wheel, deliberately left out of the `dev` extra (unlike
+        # pymysql/redis/cryptography, all pure Python) so CI's main `test`
+        # job -- the full Python-version matrix -- doesn't carry that
+        # binary-wheel risk across every version. The real PostgreSQL
+        # driver path is exercised for real in the opt-in
+        # postgresql-integration CI job instead; excluded here so the
+        # main job's 100% coverage gate stays meaningful without it.
+        raw = psycopg.connect(  # pragma: no cover
             dbname=config["NAME"],
             host=config.get("HOST", "localhost"),
             port=config.get("PORT", 5432),
@@ -536,7 +544,7 @@ def _open(config: dict) -> Connection:
             password=config.get("PASSWORD"),
             row_factory=dict_row,
         )
-        return Connection(raw, "postgresql", config)
+        return Connection(raw, "postgresql", config)  # pragma: no cover
     if engine in {"mysql", "mariadb"}:
         try:
             import pymysql
@@ -572,7 +580,7 @@ def _is_stale_connection_error(engine: str, exc: Exception) -> bool:
             # 2003/2014 can't connect/out-of-sync after a dropped socket.
             return code in {2003, 2006, 2013, 2014}
         return False
-    if engine == "postgresql":
+    if engine == "postgresql":  # pragma: no cover -- only reachable with psycopg installed; see _open()'s own pragma note.
         import psycopg
 
         return isinstance(exc, psycopg.OperationalError)
