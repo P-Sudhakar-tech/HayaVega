@@ -5,12 +5,29 @@ import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
+import mangoo.jobs as jobs_module
 from mangoo.jobs import _mark_failed, _mark_succeeded, claim_next_job, enqueue, initialize_jobs_db, retry_job, run_worker
 
 
 def _iso(delta_seconds: float) -> str:
     return (datetime.now(timezone.utc) + timedelta(seconds=delta_seconds)).isoformat()
+
+
+class _StaleRowCursor:
+    """Returns a pre-captured row regardless of what the table looks like
+    now -- stands in for a real SELECT's result from *before* a competing
+    claim ran, the same stale read a genuine race would produce."""
+
+    def __init__(self, row):
+        self._row = row
+
+    def fetchone(self):
+        return self._row
+
+    def fetchall(self):
+        return [self._row] if self._row is not None else []
 
 
 class JobsTests(unittest.TestCase):
@@ -120,6 +137,50 @@ class JobsTests(unittest.TestCase):
             thread.join()
 
         self.assertEqual(len(results), 1)
+
+    def test_a_losing_claim_after_its_own_select_returns_none_deterministically(self):
+        """The exact race claim_next_job's own docstring describes: this
+        call's SELECT sees the row as pending, but a competing claim
+        completes first, so this call's own UPDATE matches zero rows.
+
+        test_concurrent_threaded_claim_only_runs_once above is a genuine
+        concurrency smoke test (8 real threads), but whether it actually
+        interleaves into *this specific* window -- SELECT-sees-pending,
+        UPDATE-finds-nothing -- rather than the competing thread finishing
+        its whole claim before this one's SELECT even runs (which takes
+        the earlier "no candidate" branch instead) depends on real
+        thread-scheduling timing that isn't guaranteed the same way on
+        every platform/Python version. This test forces that exact
+        interleaving directly instead of hoping real threads happen to
+        produce it.
+        """
+        enqueue(self.database, "send_email")
+        real_connect = jobs_module.connect
+        triggered = []
+
+        def stealing_connect(database):
+            connection = real_connect(database)
+            real_execute = connection.execute
+
+            def execute(sql, params=()):
+                if sql.startswith("SELECT id FROM mangoo_jobs WHERE status = 'pending'") and not triggered:
+                    triggered.append(True)
+                    cursor = real_execute(sql, params)
+                    row = cursor.fetchone()
+                    self.assertIsNotNone(row, "setup bug: nothing pending to race for")
+                    # A competing claim completes in full, for real, before
+                    # this call's own UPDATE below ever runs.
+                    stolen = claim_next_job(self.database)
+                    self.assertIsNotNone(stolen)
+                    return _StaleRowCursor(row)
+                return real_execute(sql, params)
+
+            connection.execute = execute
+            return connection
+
+        with patch("mangoo.jobs.connect", side_effect=stealing_connect):
+            result = claim_next_job(self.database)
+        self.assertIsNone(result)
 
     def test_run_worker_processes_jobs_with_max_iterations(self):
         processed = []
