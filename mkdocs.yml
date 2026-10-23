@@ -1,8 +1,11 @@
 site_name: Mangoo
 site_description: A structured Python web framework with automatic, interactive API documentation and a Rust-accelerated core
-# No site_url: this site isn't published anywhere (see README.md) -- it's
-# built and browsed entirely locally, so there's no real canonical URL to
-# claim for it.
+# Not published yet (see README.md) -- this is the URL the site would have
+# if published via `mkdocs gh-deploy` to this repo's GitHub Pages, set now
+# only because the llmstxt plugin below needs a real canonical base to
+# generate correct absolute links against; it doesn't claim the site is
+# live today, and nothing here triggers a deploy.
+site_url: https://p-sudhakar-tech.github.io/mangoo-framework/
 copyright: Released under the MIT License.
 
 docs_dir: docs
@@ -37,10 +40,13 @@ theme:
   features:
     - navigation.tabs
     - navigation.tabs.sticky
+    - navigation.sections
     - navigation.indexes
+    - navigation.path
     - navigation.top
     - navigation.footer
     - navigation.instant
+    - navigation.instant.prefetch
     - navigation.instant.progress
     - navigation.tracking
     - toc.follow
@@ -103,6 +109,43 @@ plugins:
             merge_init_into_class: true
             show_signature_annotations: true
             separate_signature: true
+  - llmstxt:
+      markdown_description: |
+        Mangoo is a structured Python web framework: a conventional,
+        batteries-included project layout, automatic interactive API
+        documentation generated from your code, and a Rust core used
+        only where it measurably wins a real benchmark.
+      sections:
+        Getting started:
+          - getting-started/installation.md
+          - getting-started/quickstart.md
+          - getting-started/tutorial.md
+        Guides:
+          - topics/routing.md
+          - topics/models.md
+          - topics/forms.md
+          - topics/file-uploads.md
+          - topics/templates.md
+          - topics/auth.md
+          - topics/admin.md
+          - topics/rest-api.md
+          - topics/graphql.md
+          - topics/websockets.md
+          - topics/deployment.md
+        Concepts:
+          - topics/middleware.md
+          - topics/email.md
+          - topics/messages.md
+          - topics/caching.md
+          - topics/i18n.md
+          - topics/asgi.md
+          - topics/rust-runtime.md
+          - topics/signals.md
+          - topics/security.md
+          - topics/testing.md
+        Reference:
+          - performance.md
+          - reference/api.md
 
 extra:
   version:
@@ -115,28 +158,30 @@ nav:
       - Installation: getting-started/installation.md
       - Quickstart: getting-started/quickstart.md
       - Your first app: getting-started/tutorial.md
-  - Topics:
-      - topics/index.md
+  - Guides:
+      - guides/index.md
       - Routing: topics/routing.md
-      - Middleware: topics/middleware.md
       - Models & migrations: topics/models.md
       - Forms: topics/forms.md
       - File uploads: topics/file-uploads.md
+      - Templates: topics/templates.md
+      - Authentication: topics/auth.md
+      - Admin: topics/admin.md
+      - REST & OpenAPI: topics/rest-api.md
+      - GraphQL: topics/graphql.md
+      - WebSockets: topics/websockets.md
+      - Deployment: topics/deployment.md
+  - Concepts:
+      - concepts/index.md
+      - Middleware: topics/middleware.md
       - Email: topics/email.md
       - Messages: topics/messages.md
       - Caching: topics/caching.md
-      - Authentication: topics/auth.md
-      - Admin: topics/admin.md
-      - Templates: topics/templates.md
       - i18n: topics/i18n.md
-      - REST & OpenAPI: topics/rest-api.md
-      - GraphQL: topics/graphql.md
       - ASGI: topics/asgi.md
-      - WebSockets: topics/websockets.md
       - Rust runtime: topics/rust-runtime.md
       - Signals: topics/signals.md
-      - Testing: topics/testing.md
       - Security: topics/security.md
-      - Deployment: topics/deployment.md
+      - Testing: topics/testing.md
   - Performance: performance.md
   - Reference: reference/api.md
