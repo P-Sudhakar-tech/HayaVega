@@ -83,6 +83,30 @@ def _auth_db_key(database_path: str | Path | dict) -> tuple:
     return tuple(sorted((key, str(value)) for key, value in config.items()))
 
 
+_SESSION_SWEEP_INTERVAL_SECONDS = 60
+_LAST_SESSION_SWEEP: dict[tuple, float] = {}
+
+
+def _sweep_expired_sessions_if_due(connection, database_path: str | Path | dict, now: int) -> None:
+    """Delete expired `mangoo_sessions` rows, but at most once per
+    `_SESSION_SWEEP_INTERVAL_SECONDS` per (process, database) rather than
+    on every call -- `authenticate_session`/`list_sessions` previously ran
+    this unconditionally, making every authenticated request pay for a
+    write+commit on what is otherwise a read. Safe to skip most of the
+    time: the SELECT callers actually use always filters on
+    `expires_at > ?` itself, so a stale-but-not-yet-swept row can never be
+    treated as a valid session -- this is pure housekeeping, not a
+    correctness dependency. Unlocked, same as `_INITIALIZED_AUTH_DBS`: a
+    race just means an occasional redundant sweep, never a missed one.
+    """
+    key = _auth_db_key(database_path)
+    last_swept = _LAST_SESSION_SWEEP.get(key, 0.0)
+    if now - last_swept < _SESSION_SWEEP_INTERVAL_SECONDS:
+        return
+    _LAST_SESSION_SWEEP[key] = now
+    connection.execute("DELETE FROM mangoo_sessions WHERE expires_at <= ?", (now,))
+
+
 def initialize_auth_db(database_path: str | Path | dict) -> None:
     """Create or upgrade the authentication schema without external services.
 
@@ -533,7 +557,7 @@ def authenticate_session(database_path: str | Path | dict, token: str) -> User |
     connection = _connect(database_path)
     try:
         now = int(time.time())
-        connection.execute("DELETE FROM mangoo_sessions WHERE expires_at <= ?", (now,))
+        _sweep_expired_sessions_if_due(connection, database_path, now)
         row = connection.execute(
             "SELECT u.* FROM mangoo_sessions s JOIN mangoo_users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?",
             (sha256(token.encode()).hexdigest(), now),
@@ -563,7 +587,7 @@ def list_sessions(database_path: str | Path | dict, user: User) -> list[SessionS
     connection = _connect(database_path)
     try:
         now = int(time.time())
-        connection.execute("DELETE FROM mangoo_sessions WHERE expires_at <= ?", (now,))
+        _sweep_expired_sessions_if_due(connection, database_path, now)
         connection.commit()
         rows = connection.execute("SELECT id, expires_at, created_at, ip_address, user_agent FROM mangoo_sessions WHERE user_id = ? ORDER BY created_at DESC", (user.id,)).fetchall()
         return [SessionSummary(row["id"], row["created_at"], row["expires_at"], row["ip_address"], row["user_agent"]) for row in rows]

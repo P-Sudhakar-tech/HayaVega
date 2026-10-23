@@ -1,3 +1,4 @@
+import hashlib
 import sqlite3
 import tempfile
 import time
@@ -256,3 +257,52 @@ class InitializeAuthDbCachingTests(unittest.TestCase):
         initialize_auth_db(database)
         user = create_user(database, "alice", "alice@example.com", PASSWORD)
         self.assertEqual(user.username, "alice")
+
+
+class SessionSweepTests(unittest.TestCase):
+    """`authenticate_session`/`list_sessions` no longer delete expired
+    `mangoo_sessions` rows on every call -- only at most once per
+    `auth_module._SESSION_SWEEP_INTERVAL_SECONDS` per database, since the
+    SELECT each one runs already filters on `expires_at > ?` itself; the
+    physical delete is housekeeping, not a correctness dependency."""
+
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.database = Path(self.temporary_directory.name) / "users.sqlite3"
+        auth_module._LAST_SESSION_SWEEP.clear()
+        self.user = create_user(self.database, "alice", "alice@example.com", PASSWORD)
+
+    def test_an_expired_token_is_rejected_even_when_the_sweep_is_not_due(self):
+        token = create_session(self.database, self.user, duration_seconds=-1)
+        # The first call ever for this database always sweeps (cold start,
+        # nothing recorded yet) -- rejection must not depend on that.
+        self.assertIsNone(authenticate_session(self.database, token))
+        # A second, immediate call is within the interval -- still rejected.
+        self.assertIsNone(authenticate_session(self.database, token))
+
+    def test_the_physical_delete_is_skipped_within_the_interval_and_runs_once_due(self):
+        key = auth_module._auth_db_key(self.database)
+        # Prime the sweep timestamp so this test's own session isn't swept
+        # on its first check below -- isolates "skipped within the interval"
+        # from the unconditional cold-start sweep.
+        auth_module._LAST_SESSION_SWEEP[key] = time.time()
+        token = create_session(self.database, self.user, duration_seconds=-1)
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+        authenticate_session(self.database, token)
+        connection = auth_module._connect(self.database)
+        try:
+            still_present = connection.execute("SELECT 1 FROM mangoo_sessions WHERE token_hash = ?", (token_hash,)).fetchone()
+        finally:
+            connection.close()
+        self.assertIsNotNone(still_present, "the row should still physically exist within the sweep interval")
+
+        auth_module._LAST_SESSION_SWEEP[key] = time.time() - auth_module._SESSION_SWEEP_INTERVAL_SECONDS - 1
+        authenticate_session(self.database, token)
+        connection = auth_module._connect(self.database)
+        try:
+            gone = connection.execute("SELECT 1 FROM mangoo_sessions WHERE token_hash = ?", (token_hash,)).fetchone()
+        finally:
+            connection.close()
+        self.assertIsNone(gone, "the row should be swept once the interval has elapsed")

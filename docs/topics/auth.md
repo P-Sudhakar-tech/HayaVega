@@ -194,6 +194,12 @@ new_token = rotate_session(DATABASE, old_token)  # fresh identifier, same sessio
 revoke_all_sessions(DATABASE, user, except_token=current_token)
 ```
 
+Expired sessions are swept lazily (at most once a minute per database,
+not on every `authenticate_session` check) -- a still-physically-present
+expired row is never treated as valid either way, so this only affects
+how promptly `mangoo_sessions` itself shrinks back down, not whether an
+expired token is rejected.
+
 ## Audit events
 
 Every step above emits a persistent audit event
