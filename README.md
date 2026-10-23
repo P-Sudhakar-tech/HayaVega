@@ -429,13 +429,13 @@ shadowed: the built-in always wins.
 ## Testing and CI
 
 Install the development extra and run the suite with `pip install -e ".[dev]"`
-then `pytest`. This enforces an 85% coverage gate by default (see
+then `pytest`. This enforces a 100% coverage gate by default (see
 `pyproject.toml`); pass `--no-cov` to skip it locally. GitHub Actions
 (`.github/workflows/ci.yml`) runs the suite on Python 3.10, 3.11, 3.12, and
 3.15 for every push and pull request, plus a separate job that builds the
-`mangoo_native` Rust extension and runs the tests it backs, and a separate job
-that runs the opt-in PostgreSQL integration test against a `postgres:16`
-service container.
+`mangoo_native` Rust extension and runs the tests it backs, and separate
+opt-in jobs that run the PostgreSQL, MySQL/MariaDB, and Redis integration
+tests against real `postgres:16`/`mysql:8`/`redis:7` service containers.
 
 Lint and format with [ruff](https://docs.astral.sh/ruff/): `ruff check .` and
 `ruff format .` (the latter without `--check` applies fixes). Both run as a

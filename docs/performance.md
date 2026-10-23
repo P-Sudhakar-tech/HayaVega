@@ -54,6 +54,42 @@ class server:
 Slowloris defenses all included) with zero measured performance cost.
 See [Rust runtime](topics/rust-runtime.md).
 
+## More Rust-acceleration wins since
+
+The two results above are the original, broadest ones; a handful of
+narrower candidates cleared the same "benchmark first, wire in only on
+a decisive win" bar since. Full reasoning and the complete rejected-
+candidate history live in `RUST_CORE_REWRITE_ROADMAP.md`.
+
+| Candidate | Result | Status |
+|---|---:|---|
+| `SerializedConnection` (one Rust-serialized SQLite connection, a hot read path) | **1.5&ndash;1.7&times;** | Wired in, opt-in ([Models](topics/models.md)) |
+| GraphQL lexer+parser (Rust port, executor stays Python &mdash; resolvers are arbitrary user code) | **2.7&ndash;3.9&times;** | Wired in automatically ([GraphQL](topics/graphql.md)) |
+
+## Two more wins, found via a real cross-framework comparison
+
+Building the same sample e-commerce API in Mangoo, FastAPI, and Django
+and benchmarking all three (not a synthetic microbenchmark) surfaced
+two real framework-level fixes:
+
+- **Lazy session sweep**: `authenticate_session()` ran a session-
+  cleanup `DELETE` + commit on *every* authenticated request, not just
+  a read. Gated to run at most once a minute per database instead
+  (`DELETE` is housekeeping, not a correctness dependency &mdash; the
+  `SELECT`'s own `expires_at > ?` filter already rejects an expired
+  session regardless). A real authenticated endpoint that had been
+  losing to equivalent FastAPI/Django endpoints despite Mangoo winning
+  every other scenario went from behind to a decisive **~2.7&ndash;2.9&times;**
+  win. See [Authentication](topics/auth.md).
+- **Opt-in SQLite WAL mode**: SQLite's untouched defaults
+  (`journal_mode=DELETE`, `synchronous=FULL`) cost ~6.4&ndash;6.9ms per
+  write-transaction commit on this project's own Windows environment,
+  almost entirely `fsync` overhead. `db.enable_wal_mode()` (SQLite's
+  own recommended pairing for write-heavy workloads) drops that to
+  ~0.15&ndash;0.17ms &mdash; a **~39&ndash;47&times;** improvement, confirmed at the
+  HTTP level too (a write-heavy endpoint moved from a near-tie with
+  FastAPI to a **2.0&ndash;2.4&times;** win). See [Models](topics/models.md).
+
 ## Losses, disclosed rather than smoothed over
 
 This project's standing rule: publish what loses, not only what wins.
