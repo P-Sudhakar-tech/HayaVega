@@ -35,8 +35,8 @@ theme:
         icon: material/weather-night
         name: Switch to system preference
   font: false
-  logo: assets/logo.svg
-  favicon: assets/favicon.svg
+  logo: assets/logo.png
+  favicon: assets/favicon.ico
   features:
     - navigation.tabs
     - navigation.tabs.sticky
@@ -146,10 +146,6 @@ plugins:
         Reference:
           - performance.md
           - reference/api.md
-
-extra:
-  version:
-    provider: mike
 
 nav:
   - Home: index.md

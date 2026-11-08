@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Mangoo is an early, runnable Python web framework with its own clear project conventions, automatic interactive API docs, and a Rust core taking over performance-critical paths as it matures.">
 <title>Mangoo</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Ctext y='104' font-size='104'%3E%F0%9F%A5%AD%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+<link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,400..600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -61,7 +62,7 @@
   header.site{position:sticky; top:0; z-index:40; background:color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter:blur(6px); border-bottom:1px solid var(--line);}
   nav{display:flex; align-items:center; justify-content:space-between; height:64px; gap:24px;}
   .brand{display:inline-flex; align-items:center; gap:10px; font-family:"Fraunces"; font-weight:600; font-size:1.28rem; letter-spacing:-.01em;}
-  .brand svg{width:30px; height:30px;}
+  .brand svg, .brand img{width:30px; height:30px; object-fit:contain;}
   .navlinks{display:flex; align-items:center; gap:28px; font-size:.92rem; color:var(--muted);}
   .navlinks a{color:var(--muted);}
   .navlinks a:hover{color:var(--ink);}
@@ -178,16 +179,7 @@
 <header class="site">
   <div class="wrap"><nav>
     <a class="brand" href="#top">
-      <svg viewBox="0 0 128 128" role="img" aria-label="Mangoo mark">
-        <defs>
-          <linearGradient id="skin" x1="24" y1="17" x2="105" y2="113" gradientUnits="userSpaceOnUse"><stop stop-color="#4FBE79"/><stop offset="1" stop-color="#0B5D3A"/></linearGradient>
-          <linearGradient id="flesh" x1="53" y1="43" x2="78" y2="91" gradientUnits="userSpaceOnUse"><stop stop-color="#FBD98A"/><stop offset="1" stop-color="#D97423"/></linearGradient>
-        </defs>
-        <path fill="#0A4B30" d="M70 24c6-13 18-18 31-15-4 12-14 20-28 21l-3-6Z"/>
-        <path fill="url(#skin)" d="M104 29C83 14 52 18 34 38 14 60 19 94 42 110c8 5 18 3 24-4l43-53c7-8 5-18-5-24Z"/>
-        <path fill="url(#flesh)" d="M66 44c3 0 6 1 8 4l14 20c2 3 2 7 0 10L71 100c-3 4-9 4-12 0L41 78c-2-3-2-7 0-10l17-20c2-3 5-4 8-4Z"/>
-        <path fill="#0A4B30" d="M61 60a4 4 0 0 1 0 6l-7 7 7 7a4 4 0 1 1-6 6L45 76a4 4 0 0 1 0-6l10-10a4 4 0 0 1 6 0Zm12 0a4 4 0 0 1 6 0l10 10a4 4 0 0 1 0 6L79 86a4 4 0 1 1-6-6l7-7-7-7a4 4 0 0 1 0-6Z"/>
-      </svg>
+      <img src="assets/logo.png" alt="Mangoo mark" width="30" height="28">
       mangoo
     </a>
     <div class="navlinks">
