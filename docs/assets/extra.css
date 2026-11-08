@@ -475,3 +475,13 @@ body { background: var(--paper); }
 .md-footer-copyright * {
   text-align: center !important;
 }
+
+/* Hide "Made with Material for MkDocs" footer credit */
+.md-footer-copyright__highlight {
+  display: none !important;
+}
+.md-footer-copyright a[href*="squidfunk"],
+.md-footer-copyright a[href*="material"],
+.md-footer-meta__inner > *:not(.md-footer-copyright):not(.md-footer-social) {
+  display: none !important;
+}
