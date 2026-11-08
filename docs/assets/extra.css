@@ -475,3 +475,13 @@ body { background: var(--paper); }
 .md-footer-copyright * {
   text-align: center !important;
 }
+/* Tagline line between copyright and Contact us */
+.md-footer-copyright::after {
+  content: "Built in India, made for the world.";
+  display: block !important;
+  text-align: center !important;
+  width: 100% !important;
+  margin-top: 0.5rem !important;
+  color: var(--md-footer-fg-color--light);
+  font-size: 0.7rem !important;
+}
