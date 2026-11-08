@@ -15,8 +15,10 @@ jobs:
           python-version: "3.12"
       - name: Install build tooling
         run: pip install build
-      - name: Build sdist and wheel (pure-Python fallback, no Rust toolchain on this runner)
+      - name: Build sdist and wheel (forced pure-Python: a non-manylinux binary wheel is rejected by PyPI)
         run: python -m build
+        env:
+          MANGOO_SKIP_NATIVE_BUILD: "1"
       - uses: actions/upload-artifact@v4
         with:
           name: dist
