@@ -1,10 +1,6 @@
 site_name: Mangoo
 site_description: A structured Python web framework with automatic, interactive API documentation and a Rust-accelerated core
-# Not published yet -- docs deployment to Vercel is temporarily
-# disabled (see README.md); this is the URL it would have once that's
-# fixed, set now only because the llmstxt plugin below needs a real
-# canonical base to generate correct absolute links against.
-site_url: https://mangoo-framework.vercel.app/docs/
+site_url: https://mangoo-framework.vercel.app/
 copyright: Released under the MIT License.
 
 docs_dir: docs

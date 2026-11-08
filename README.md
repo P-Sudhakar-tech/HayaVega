@@ -6,15 +6,15 @@ Mangoo is an early, runnable experiment in a conventional, batteries-included pr
 
 **A browsable documentation site** (tutorials, topic guides, a generated
 API reference, and the published benchmark numbers) lives in
-[`docs/`](docs/index.md). Publishing it alongside the landing page at
-mangoo-framework.vercel.app/docs/ is temporarily disabled -- the mkdocs
-build step was failing in Vercel's build environment and blocking the
-simple landing-page deploy, so for now only the landing page ships
-there; the docs site stays local-only until that's debugged. This
-README stays the first thing a repository visitor sees; the docs site
-is the deeper reference it points to.
+[`docs/`](docs/index.md) and is published at
+[mangoo-framework.vercel.app](https://mangoo-framework.vercel.app/)
+(built via `vercel.json`, which runs `mkdocs build` and serves its
+`site/` output directly -- the standalone `index.html` landing page is
+not part of this deploy). This README stays the first thing a
+repository visitor sees; the docs site is the deeper reference it
+points to.
 
-To build or browse it locally:
+To build or browse it locally instead:
 
 - `mkdocs build --strict` -- builds static HTML into the gitignored
   `site/` directory.
