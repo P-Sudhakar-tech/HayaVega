@@ -127,6 +127,46 @@ body { background: var(--paper); }
 }
 .md-tabs__link { color: var(--muted); opacity: 1; font-weight: 500; }
 .md-tabs__link:hover, .md-tabs__link--active { color: var(--stamp); }
+
+/* ---------- left sidebar nav: flat active-item styling, replacing
+   Material's default glowing white box-shadow (a soft blurred fade
+   meant to mask scrolled content behind a sticky active link) with a
+   plain color change and a left border, matching the same "flat,
+   no-shadow" treatment used everywhere else in this design.
+
+   Material's own rules here are unusually specific (three chained
+   classes, e.g. ".md-nav--lifted>.md-nav__list>.md-nav__item--active
+   >.md-nav__link"), so matching selectors plus !important is the
+   reliable way to override every one of them, including the
+   :focus/:hover state mkdocs-material's instant-navigation applies to
+   the active link after a page transition (which otherwise jumps to
+   the mango accent color instead of staying on the flat stamp-blue
+   active color used here). ---------- */
+.md-nav--lifted > .md-nav__list > .md-nav__item--active > .md-nav__link,
+.md-nav__item--active > .md-nav__link {
+  background: none !important;
+  box-shadow: none !important;
+  border-left: 2px solid var(--stamp);
+  padding-left: calc(0.6rem - 2px);
+  margin-left: -2px;
+}
+.md-nav--primary .md-nav__item--active > .md-nav__link,
+.md-nav__item .md-nav__link--active,
+.md-nav__item .md-nav__link--active code {
+  color: var(--stamp) !important;
+  font-weight: 600;
+}
+.md-nav--primary .md-nav__item--active > .md-nav__link:focus,
+.md-nav--primary .md-nav__item--active > .md-nav__link:hover {
+  color: var(--stamp-strong) !important;
+}
+/* Same glow trick on the sticky "On this page" / section titles --
+   keep the sticky pin, drop the blurred fade for a flat edge instead. */
+.md-nav--primary .md-nav__title,
+.md-nav--secondary .md-nav__title {
+  box-shadow: none !important;
+  border-bottom: 2px solid var(--ink);
+}
 .md-header__button, .md-header__topic { color: var(--ink); }
 .md-search__form { background-color: var(--surface); border: 1px solid var(--ink); border-radius: 2px; }
 [data-md-color-scheme="slate"] .md-search__form { background-color: var(--surface); }
