@@ -8,7 +8,7 @@ hide:
 
 <div class="mangoo-hero" markdown>
 
-Python web framework &middot; open source &middot; early and runnable
+Open-source Python framework
 {: .mangoo-eyebrow }
 
 # Mangoo
@@ -64,7 +64,7 @@ A conventional, batteries-included project structure. Automatic, interactive API
 ## See it in thirty seconds
 
 ```bash
-pip install -e .
+pip install mangoo
 mangoo-admin newproject mysite
 cd mysite
 python mango.py newapp blog

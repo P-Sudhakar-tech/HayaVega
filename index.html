@@ -9,36 +9,41 @@
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,400..600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* ---------- tokens ---------- */
+  /* ---------- tokens: a vintage citrus-crate shipping label -- kraft
+     paper, ink-stamp borders, flat spot colors. No gradients, no
+     rounded-card shadows, no tracked all-caps labels. ---------- */
   :root{
-    --ink:#1B2A1D; --paper:#FBF1DC; --surface:#FFF8E9; --surface-2:#F3E6C4;
-    --mango:#D97423; --mango-strong:#B85A16; --mango-tint:#FBE2BE;
-    --leaf:#0B5D3A; --leaf-strong:#0A4B30; --leaf-tint:#DCEEE0;
-    --rind:#A8432B; --rind-tint:#F1DAC9;
-    --line:#E4D2A2; --muted:#6E6248;
-    --code-bg:#16211A; --code-ink:#EFE9D6; --code-mut:#8FA391; --code-str:#F0B45E; --code-kw:#8FD1A6; --code-fn:#9EC7E8;
-    --focus:#0B5D3A;
-    --radius:3px;
+    --ink:#241C15; --paper:#E4D3AC; --surface:#EFE1BC; --surface-2:#D9C599;
+    --mango:#D97B1F; --mango-strong:#AD5A12; --mango-tint:#F2D3A0;
+    --leaf:#2B6B45; --leaf-strong:#1F4E33; --leaf-tint:#D6E6D4;
+    --stamp:#203E5C; --stamp-strong:#16283C; --stamp-tint:#D6DEE8;
+    --rind:#A23E22; --rind-tint:#EAD2BE;
+    --line:#B9A471; --muted:#6C6043;
+    --code-bg:#20170F; --code-ink:#EFE1C4; --code-mut:#9C8F6E; --code-str:#E8A95A; --code-kw:#8FC79F; --code-fn:#87AACB;
+    --focus:#203E5C;
+    --radius:2px;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --ink:#F1E9D3; --paper:#131C15; --surface:#182419; --surface-2:#213024;
-      --mango:#EFA25A; --mango-strong:#F6C08A; --mango-tint:#2E2213;
-      --leaf:#6FCB98; --leaf-strong:#8FDBB0; --leaf-tint:#16281E;
-      --rind:#E0916F; --rind-tint:#2C1D16;
-      --line:#33422F; --muted:#A79E86;
-      --focus:#8FDBB0;
+      --ink:#EDE1C3; --paper:#1B140D; --surface:#241B12; --surface-2:#2F2316;
+      --mango:#EF9B4C; --mango-strong:#F5BD83; --mango-tint:#34230F;
+      --leaf:#70B98D; --leaf-strong:#94D1AC; --leaf-tint:#172A1D;
+      --stamp:#7FA6CC; --stamp-strong:#A4C4E3; --stamp-tint:#18283A;
+      --rind:#D2845F; --rind-tint:#2C1A10;
+      --line:#3C301F; --muted:#AC9D77;
+      --focus:#7FA6CC;
     }
   }
   :root[data-theme="dark"]{
-    --ink:#F1E9D3; --paper:#131C15; --surface:#182419; --surface-2:#213024;
-    --mango:#EFA25A; --mango-strong:#F6C08A; --mango-tint:#2E2213;
-    --leaf:#6FCB98; --leaf-strong:#8FDBB0; --leaf-tint:#16281E;
-    --rind:#E0916F; --rind-tint:#2C1D16;
-    --line:#33422F; --muted:#A79E86;
-    --focus:#8FDBB0;
+    --ink:#EDE1C3; --paper:#1B140D; --surface:#241B12; --surface-2:#2F2316;
+    --mango:#EF9B4C; --mango-strong:#F5BD83; --mango-tint:#34230F;
+    --leaf:#70B98D; --leaf-strong:#94D1AC; --leaf-tint:#172A1D;
+    --stamp:#7FA6CC; --stamp-strong:#A4C4E3; --stamp-tint:#18283A;
+    --rind:#D2845F; --rind-tint:#2C1A10;
+    --line:#3C301F; --muted:#AC9D77;
+    --focus:#7FA6CC;
   }
 
   /* ---------- reset & base ---------- */
@@ -47,55 +52,53 @@
   @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
   body{
     margin:0; background:var(--paper); color:var(--ink);
-    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-family:"Space Grotesk", ui-sans-serif, system-ui, sans-serif;
     font-size:16px; line-height:1.6;
   }
-  h1,h2,h3{font-family:"Fraunces", ui-serif, Georgia, serif; text-wrap:balance; margin:0; color:var(--ink);}
-  a{color:var(--leaf); text-decoration-thickness:1px; text-underline-offset:2px;}
+  h1,h2,h3{font-family:"Zilla Slab", ui-serif, Georgia, serif; text-wrap:balance; margin:0; color:var(--ink);}
+  a{color:var(--stamp); text-decoration-thickness:1px; text-underline-offset:2px;}
   a:focus-visible, button:focus-visible, summary:focus-visible{outline:2px solid var(--focus); outline-offset:3px; border-radius:2px;}
-  code, pre, .mono{font-family:"IBM Plex Mono", ui-monospace, Consolas, monospace; font-variant-numeric:tabular-nums;}
+  code, pre, .mono{font-family:"JetBrains Mono", ui-monospace, Consolas, monospace; font-variant-numeric:tabular-nums;}
   img,svg{display:block; max-width:100%;}
   .wrap{width:min(1180px, calc(100% - 48px)); margin:0 auto;}
   .visually-hidden{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap;}
 
   /* ---------- nav ---------- */
-  header.site{position:sticky; top:0; z-index:40; background:color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter:blur(6px); border-bottom:1px solid var(--line);}
+  header.site{position:sticky; top:0; z-index:40; background:var(--paper); border-bottom:2px solid var(--ink);}
   nav{display:flex; align-items:center; justify-content:space-between; height:64px; gap:24px;}
-  .brand{display:inline-flex; align-items:center; gap:10px; font-family:"Fraunces"; font-weight:600; font-size:1.28rem; letter-spacing:-.01em;}
+  .brand{display:inline-flex; align-items:center; gap:10px; font-family:"Zilla Slab"; font-weight:700; font-size:1.28rem; letter-spacing:-.005em;}
   .brand svg, .brand img{width:30px; height:30px; object-fit:contain;}
-  .navlinks{display:flex; align-items:center; gap:28px; font-size:.92rem; color:var(--muted);}
+  .navlinks{display:flex; align-items:center; gap:28px; font-size:.92rem; color:var(--muted); font-weight:500;}
   .navlinks a{color:var(--muted);}
   .navlinks a:hover{color:var(--ink);}
-  .btn{display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:var(--radius); font-weight:600; font-size:.92rem; border:1px solid transparent; white-space:nowrap;}
-  .btn-primary{background:var(--leaf); color:var(--paper);}
+  .btn{display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:var(--radius); font-weight:600; font-size:.92rem; border:2px solid transparent; white-space:nowrap;}
+  .btn-primary{background:var(--leaf); border-color:var(--leaf-strong); color:var(--paper);}
   .btn-primary:hover{background:var(--leaf-strong);}
-  .btn-ghost{border-color:var(--line); color:var(--ink);}
-  .btn-ghost:hover{border-color:var(--ink);}
+  .btn-ghost{border-color:var(--ink); color:var(--ink);}
+  .btn-ghost:hover{border-color:var(--stamp); color:var(--stamp);}
 
   /* ---------- hero ---------- */
   .hero{padding:76px 0 44px;}
-  .eyebrow{display:inline-flex; align-items:center; gap:8px; font-family:"IBM Plex Mono"; font-size:.78rem; letter-spacing:.06em; text-transform:uppercase; color:var(--leaf); margin-bottom:18px;}
-  .eyebrow::before{content:""; width:7px; height:7px; border-radius:50%; background:var(--mango); display:inline-block;}
-  h1.headline{font-size:clamp(2.6rem, 5.4vw, 4.4rem); font-weight:600; line-height:1.02; letter-spacing:-.02em; max-width:18ch;}
-  h1.headline em{font-style:italic; font-weight:400; color:var(--leaf);}
+  .eyebrow{display:inline-block; font-family:"Space Grotesk"; font-weight:600; font-size:.9rem; color:var(--ink); border:2px solid var(--ink); border-radius:var(--radius); padding:5px 12px; margin-bottom:22px;}
+  h1.headline{font-size:clamp(2.6rem, 5.4vw, 4.4rem); font-weight:700; line-height:1.03; letter-spacing:-.015em; max-width:19ch;}
   .lead{font-size:1.15rem; color:var(--muted); max-width:52ch; margin:22px 0 30px;}
   .hero-actions{display:flex; gap:14px; flex-wrap:wrap;}
 
   /* ---------- ripeness strip ---------- */
   .ripeness{margin-top:64px;}
   .ripeness-head{display:flex; justify-content:space-between; align-items:baseline; gap:16px; margin-bottom:16px; flex-wrap:wrap;}
-  .ripeness-head h2{font-size:1.05rem; font-weight:600;}
+  .ripeness-head h2{font-size:1.05rem; font-weight:600; font-family:"Space Grotesk";}
   .ripeness-head p{margin:0; font-size:.86rem; color:var(--muted);}
   .ripeness-track{display:grid; grid-template-columns:repeat(8, 1fr); gap:3px;}
   .segment{padding:14px 4px 0; border-top:5px solid var(--seg); display:flex; flex-direction:column; gap:6px;}
   .segment .name{font-size:.76rem; font-weight:600; line-height:1.25;}
-  .segment .state{font-family:"IBM Plex Mono"; font-size:.68rem; letter-spacing:.02em; color:var(--muted); text-transform:uppercase;}
+  .segment .state{font-size:.72rem; color:var(--muted);}
   .legend{display:flex; gap:22px; margin-top:22px; flex-wrap:wrap; font-size:.82rem; color:var(--muted);}
   .legend span{display:inline-flex; align-items:center; gap:7px;}
   .dot{width:9px; height:9px; border-radius:50%; display:inline-block;}
 
   /* ---------- CLI band ---------- */
-  .cli-band{background:var(--code-bg); color:var(--code-ink); padding:56px 0; margin-top:72px;}
+  .cli-band{background:var(--code-bg); color:var(--code-ink); padding:56px 0; margin-top:72px; border-top:2px solid var(--ink); border-bottom:2px solid var(--ink);}
   .cli-band .wrap{display:grid; grid-template-columns:.85fr 1fr; gap:56px; align-items:start;}
   .cli-band h2{color:var(--code-ink); font-size:1.6rem; margin-bottom:14px;}
   .cli-band p{color:var(--code-mut); max-width:34ch; margin:0;}
@@ -108,12 +111,12 @@
   .tline .out{color:var(--code-str); font-size:.86rem; grid-column:1 / -1; padding-top:2px;}
 
   /* ---------- status board ---------- */
-  .board{padding:72px 0; border-bottom:1px solid var(--line);}
+  .board{padding:72px 0; border-bottom:2px solid var(--ink);}
   .board-head{max-width:60ch; margin-bottom:44px;}
   .board-head h2{font-size:clamp(1.8rem,3vw,2.4rem); margin-bottom:14px;}
   .board-head p{color:var(--muted); margin:0; font-size:1.02rem;}
   .board-cols{display:grid; grid-template-columns:repeat(3,1fr); gap:32px;}
-  .board-col h3{font-family:"IBM Plex Mono"; font-size:.82rem; text-transform:uppercase; letter-spacing:.05em; font-weight:600; display:flex; align-items:center; gap:8px; margin-bottom:16px; padding-bottom:12px; border-bottom:2px solid var(--col-accent);}
+  .board-col h3{font-family:"Space Grotesk"; font-size:1rem; font-weight:700; display:flex; align-items:center; gap:8px; margin-bottom:16px; padding-bottom:12px; border-bottom:3px solid var(--col-accent);}
   .board-col ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column;}
   .board-col li{padding:12px 0; border-bottom:1px solid var(--line); font-size:.94rem;}
   .board-col li:last-child{border-bottom:none;}
@@ -125,18 +128,18 @@
   .docs-shell{display:grid; grid-template-columns:230px 1fr; gap:56px; align-items:start;}
   .docs-rail{position:sticky; top:88px; max-height:calc(100vh - 110px); overflow-y:auto; padding-right:8px;}
   .docs-rail-group{margin-bottom:22px;}
-  .docs-rail-group h4{font-family:"IBM Plex Mono"; font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 8px;}
+  .docs-rail-group h4{font-family:"Space Grotesk"; font-size:.76rem; font-weight:600; color:var(--muted); margin:0 0 8px;}
   .docs-rail a{display:block; padding:6px 0; font-size:.88rem; color:var(--muted); border-left:2px solid transparent; padding-left:12px; margin-left:-1px;}
   .docs-rail a:hover{color:var(--ink);}
-  .docs-rail a.active{color:var(--leaf); border-left-color:var(--leaf); font-weight:600;}
+  .docs-rail a.active{color:var(--stamp); border-left-color:var(--stamp); font-weight:600;}
 
   .doc-section{padding-bottom:60px; margin-bottom:60px; border-bottom:1px solid var(--line); scroll-margin-top:84px;}
   .doc-section:last-child{border-bottom:none; margin-bottom:0;}
   .doc-kicker{display:flex; align-items:center; gap:12px; margin-bottom:10px;}
-  .tag{font-family:"IBM Plex Mono"; font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; padding:3px 8px; border-radius:2px; font-weight:600;}
-  .tag-shipped{background:var(--mango-tint); color:var(--mango-strong);}
-  .tag-progress{background:var(--leaf-tint); color:var(--leaf-strong);}
-  .tag-planned{background:var(--rind-tint); color:var(--rind);}
+  .tag{font-family:"Space Grotesk"; font-size:.76rem; font-weight:600; padding:3px 9px; border-radius:var(--radius); border:1px solid currentColor;}
+  .tag-shipped{color:var(--mango-strong); background:var(--mango-tint);}
+  .tag-progress{color:var(--leaf-strong); background:var(--leaf-tint);}
+  .tag-planned{color:var(--rind); background:var(--rind-tint);}
   .doc-section h3{font-size:1.55rem; margin-bottom:14px;}
   .doc-section > p{color:var(--muted); max-width:70ch; margin:0 0 18px; font-size:.98rem;}
   .doc-section p{max-width:70ch;}
@@ -145,21 +148,21 @@
 
   pre{background:var(--code-bg); color:var(--code-ink); margin:0; padding:16px 18px; border-radius:var(--radius); overflow-x:auto; font-size:.83rem; line-height:1.65;}
   pre .kw{color:var(--code-kw);} pre .fn{color:var(--code-fn);} pre .str{color:var(--code-str);} pre .mut{color:var(--code-mut);}
-  .snippet-label{font-family:"IBM Plex Mono"; font-size:.72rem; color:var(--muted); margin-bottom:6px;}
+  .snippet-label{font-family:"JetBrains Mono"; font-size:.72rem; color:var(--muted); margin-bottom:6px;}
   .callout{background:var(--surface-2); border-left:3px solid var(--leaf); padding:14px 16px; font-size:.9rem; border-radius:0 var(--radius) var(--radius) 0; margin-top:16px;}
   .callout strong{color:var(--leaf-strong);}
 
   table{width:100%; border-collapse:collapse; font-size:.87rem;}
   table caption{text-align:left; font-size:.8rem; color:var(--muted); margin-bottom:8px;}
   th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top;}
-  th{font-family:"IBM Plex Mono"; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600;}
+  th{font-family:"Space Grotesk"; font-size:.82rem; color:var(--muted); font-weight:600; border-bottom:2px solid var(--ink);}
   td code{background:var(--surface-2); padding:1px 5px; border-radius:2px; font-size:.82rem;}
   .table-wrap{overflow-x:auto;}
 
   ul.plain{margin:0; padding-left:1.1em;} ul.plain li{margin-bottom:6px; font-size:.95rem;}
 
   /* ---------- footer ---------- */
-  footer{border-top:1px solid var(--line); padding:36px 0; background:var(--surface);}
+  footer{border-top:2px solid var(--ink); padding:36px 0; background:var(--surface);}
   footer .wrap{display:flex; justify-content:space-between; align-items:center; gap:20px; flex-wrap:wrap; font-size:.86rem; color:var(--muted);}
   footer a{color:var(--muted);}
   footer a:hover{color:var(--ink);}
@@ -194,8 +197,8 @@
 <main id="top">
 
   <section class="hero wrap">
-    <div class="eyebrow">Python web framework &middot; open source &middot; published on PyPI</div>
-    <h1 class="headline">Its own shape. <em>Automatic docs.</em></h1>
+    <div class="eyebrow">Open-source Python framework</div>
+    <h1 class="headline">Its own shape, automatic docs</h1>
     <p class="lead">Mangoo gives Python projects a conventional routing, entities, and migrations layer of its own, automatic OpenAPI docs and Swagger UI, hardened authentication with a full lifecycle, and a native Rust core that already wins every published benchmark scenario it's wired into. <code>pip install mangoo</code> and it's a real, tested framework, not a prototype &mdash; see exactly what's shipped below.</p>
     <div class="hero-actions">
       <a class="btn btn-primary" href="#getting-started">Read the quickstart</a>
@@ -488,7 +491,7 @@ pytest</pre>
 
 <footer>
   <div class="wrap">
-    <span>Mangoo &middot; an early, runnable experiment &mdash; not yet a finished framework.</span>
+    <span>Mangoo &mdash; published on PyPI, under active development.</span>
     <span><a href="https://github.com/P-Sudhakar-tech/mangoo-framework" target="_blank" rel="noopener">Source</a> &middot; <a href="https://github.com/P-Sudhakar-tech/mangoo-framework/blob/main/UPCOMING_IMPROVEMENT_ROADMAP.md" target="_blank" rel="noopener">Roadmap</a> &middot; <a href="https://github.com/P-Sudhakar-tech/mangoo-framework/blob/main/DEPLOYMENT.md" target="_blank" rel="noopener">Deployment guide</a></span>
   </div>
 </footer>
