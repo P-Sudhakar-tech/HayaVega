@@ -6,7 +6,7 @@ site_description: A structured Python web framework with automatic, interactive 
 # generate correct absolute links against; it doesn't claim the site is
 # live today, and nothing here triggers a deploy.
 site_url: https://p-sudhakar-tech.github.io/mangoo-framework/
-copyright: Released under the MIT License.
+copyright: Released under the MIT License. &middot; <a href="https://www.linkedin.com/in/ponugoti-sudhakar-37029a18b" target="_blank" rel="noopener">Contact us</a>
 
 docs_dir: docs
 site_dir: site
