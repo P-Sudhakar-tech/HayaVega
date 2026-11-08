@@ -1,11 +1,9 @@
 site_name: Mangoo
 site_description: A structured Python web framework with automatic, interactive API documentation and a Rust-accelerated core
-# Not published yet (see README.md) -- this is the URL the site would have
-# if published via `mkdocs gh-deploy` to this repo's GitHub Pages, set now
-# only because the llmstxt plugin below needs a real canonical base to
-# generate correct absolute links against; it doesn't claim the site is
-# live today, and nothing here triggers a deploy.
-site_url: https://p-sudhakar-tech.github.io/mangoo-framework/
+# The site is live at this URL (see vercel.json -- it's built into
+# dist/docs alongside the root index.html landing page) and llmstxt
+# needs a real canonical base to generate correct absolute links.
+site_url: https://mangoo-framework.vercel.app/docs/
 copyright: Released under the MIT License.
 
 docs_dir: docs

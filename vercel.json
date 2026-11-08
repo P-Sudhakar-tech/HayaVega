@@ -1,0 +1,5 @@
+{
+  "buildCommand": "MANGOO_SKIP_NATIVE_BUILD=1 pip install -e \".[docs]\" && mkdocs build -d dist/docs && mkdir -p dist && cp index.html dist/index.html && cp -r assets dist/assets",
+  "outputDirectory": "dist",
+  "framework": null
+}

@@ -6,14 +6,13 @@ Mangoo is an early, runnable experiment in a conventional, batteries-included pr
 
 **A browsable documentation site** (tutorials, topic guides, a generated
 API reference, and the published benchmark numbers) lives in
-[`docs/`](docs/index.md) -- build it locally with `mkdocs serve` (after
-`pip install -e ".[docs]"`), or read the source directly in that
-directory. This README stays the first thing a repository visitor sees;
-the docs site is the deeper reference it points to.
+[`docs/`](docs/index.md) and is published at
+[mangoo-framework.vercel.app/docs/](https://mangoo-framework.vercel.app/docs/)
+(deployed via `vercel.json` alongside the landing page at the site root).
+This README stays the first thing a repository visitor sees; the docs
+site is the deeper reference it points to.
 
-The site isn't published anywhere (the repository is private, and
-publishing docs publicly is a separate decision from writing them) -- it's
-built and browsed entirely locally:
+To build or browse it locally instead:
 
 - `mkdocs build --strict` -- builds static HTML into the gitignored
   `site/` directory.
