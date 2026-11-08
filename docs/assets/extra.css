@@ -321,7 +321,10 @@ body { background: var(--paper); }
    the primary color ---------- */
 .mangoo-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  /* 145px wasn't quite wide enough to fit "template_render req/s" as
+     one unbroken label -- Material's base .md-typeset overflow-wrap
+     rule then force-split it mid-word ("template_re" / "nder"). */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
   margin: 1.6rem 0 0.8rem;
 }
