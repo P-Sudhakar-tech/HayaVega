@@ -461,9 +461,9 @@ body { background: var(--paper); }
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
-  justify-content: center !important;
-  gap: 1rem !important;
+  gap: 0.5rem !important;
   width: 100% !important;
+  justify-content: center !important;
 }
 .md-footer-copyright {
   text-align: center !important;
@@ -471,17 +471,18 @@ body { background: var(--paper); }
   margin: 0 auto !important;
   display: block !important;
 }
+.md-footer-copyright__highlight,
+.md-footer-copyright__highlight span {
+  text-align: center !important;
+  display: block !important;
+  margin: 0 auto !important;
+}
+.md-footer-social {
+  text-align: center !important;
+  width: 100% !important;
+  justify-content: center !important;
+}
 .md-footer-copyright p,
 .md-footer-copyright * {
   text-align: center !important;
-}
-/* Tagline line between copyright and Contact us */
-.md-footer-copyright::after {
-  content: "Built in India, made for the world.";
-  display: block !important;
-  text-align: center !important;
-  width: 100% !important;
-  margin-top: 0.5rem !important;
-  color: var(--md-footer-fg-color--light);
-  font-size: 0.7rem !important;
 }
