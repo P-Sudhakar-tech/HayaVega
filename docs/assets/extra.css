@@ -417,21 +417,32 @@ body { background: var(--paper); }
   border-radius: 4px;
 }
 
-/* ---------- footer copyright link ("Contact us"): sit inline with the
-   surrounding text at the same baseline/size, and keep the focus ring
-   tight to the link's own box instead of a padded floating pill. ---------- */
-.md-copyright a {
-  color: inherit;
-  font-size: inherit;
-  line-height: inherit;
-  vertical-align: baseline;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+/* ---------- footer "Contact us": paired with its own icon on the
+   right side of the footer, instead of a bare icon with only a hover
+   tooltip and an unrelated text link sitting apart from it on the
+   left. There's exactly one social link in extra.social (LinkedIn),
+   so the label is added via ::after rather than templating. ---------- */
+.md-social__link {
+  width: auto !important;
+  height: auto !important;
+  line-height: 1.6rem;
+  text-align: left !important;
+  padding: 0 2px;
+  white-space: nowrap;
 }
-.md-copyright a:hover {
+.md-social__link svg {
+  vertical-align: middle;
+}
+.md-social__link::after {
+  content: "Contact us";
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  vertical-align: middle;
+  color: var(--md-footer-fg-color--light);
+  white-space: nowrap;
+}
+.md-social__link:hover::after {
   color: var(--mango-strong);
-}
-.md-copyright a:focus-visible {
-  outline-offset: 1px;
-  border-radius: 2px;
 }
