@@ -2,16 +2,15 @@
    just borrow its accent color. Every token below (names and values) is
    copied straight from index.html's :root -- this file's only job is to
    map Material for MkDocs' own --md-* variables onto those same tokens,
-   plus a handful of component overrides (header, tabs, hero, buttons)
-   where Material's structure doesn't leave a variable for the thing
-   index.html actually does differently (a flat stamped panel instead of
-   a rounded shadow-card, a bordered label badge instead of a tracked
-   all-caps eyebrow, etc). The visual reference is a vintage citrus-crate
-   shipping label: kraft paper, ink-stamp borders, flat spot colors --
-   no gradients-as-decoration, no soft card shadows, no rounded corners
-   standing in for hierarchy. */
+   plus a handful of component overrides (header, tabs, hero, buttons,
+   cards) where Material's structure doesn't leave a variable for the
+   thing index.html actually does differently. The visual reference is
+   the register of reflex.dev / uv / angular.dev / react.dev: a deep
+   dark background by default, one confident mango accent, code-forward
+   content, flat elevated panels with soft rounded corners -- not
+   whimsical decoration, not a light-cream background. */
 
-@import url("https://fonts.googleapis.com/css2?family=Zilla+Slab:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 /* Defensive: nothing in this file should ever force horizontal page
    scroll on a narrow viewport -- internal scrollable elements (code
@@ -33,42 +32,46 @@ html { scroll-behavior: smooth; }
 ::selection { background: var(--leaf-tint); color: var(--leaf-strong); }
 .md-typeset :focus-visible { outline-color: var(--stamp); }
 
-/* ---------- index.html's own tokens, copied verbatim ---------- */
-:root {
-  --ink: #241C15; --paper: #E4D3AC; --surface: #EFE1BC; --surface-2: #D9C599;
-  --mango: #D97B1F; --mango-strong: #AD5A12; --mango-tint: #F2D3A0;
-  --leaf: #2B6B45; --leaf-strong: #1F4E33; --leaf-tint: #D6E6D4;
-  --stamp: #203E5C; --stamp-strong: #16283C; --stamp-tint: #D6DEE8;
-  --rind: #A23E22; --rind-tint: #EAD2BE;
-  --line: #B9A471; --muted: #6C6043;
-  --code-bg: #20170F; --code-ink: #EFE1C4; --code-mut: #9C8F6E; --code-str: #E8A95A; --code-kw: #8FC79F; --code-fn: #87AACB;
-}
+/* ---------- index.html's own tokens, copied verbatim. [data-md-color-
+   scheme="slate"] is Material's own name for its dark scheme, listed
+   first (and default) in mkdocs.yml, so it carries the dark palette;
+   "default" carries light, for the manual toggle only. ---------- */
 [data-md-color-scheme="slate"] {
-  --ink: #EDE1C3; --paper: #1B140D; --surface: #241B12; --surface-2: #2F2316;
-  --mango: #EF9B4C; --mango-strong: #F5BD83; --mango-tint: #34230F;
-  --leaf: #70B98D; --leaf-strong: #94D1AC; --leaf-tint: #172A1D;
-  --stamp: #7FA6CC; --stamp-strong: #A4C4E3; --stamp-tint: #18283A;
-  --rind: #D2845F; --rind-tint: #2C1A10;
-  --line: #3C301F; --muted: #AC9D77;
+  --ink: #F2EDE4; --paper: #0D1117; --surface: #131A22; --surface-2: #1A222C;
+  --mango: #FF8A3D; --mango-strong: #FFA668; --mango-tint: rgba(255, 138, 61, 0.14);
+  --leaf: #34D399; --leaf-strong: #6EE7B7; --leaf-tint: rgba(52, 211, 153, 0.14);
+  --stamp: #5B9DF9; --stamp-strong: #8CBBFB; --stamp-tint: rgba(91, 157, 249, 0.14);
+  --rind: #F87171; --rind-tint: rgba(248, 113, 113, 0.14);
+  --line: #232B36; --muted: #8B96A5;
+  --code-bg: #090C10; --code-ink: #E8EDF2; --code-mut: #6B7685; --code-str: #FFA668; --code-kw: #34D399; --code-fn: #5B9DF9;
+}
+[data-md-color-scheme="default"] {
+  --ink: #0D1117; --paper: #FFFFFF; --surface: #F6F8FA; --surface-2: #EBEEF1;
+  --mango: #E8691A; --mango-strong: #C2550F; --mango-tint: rgba(232, 105, 26, 0.10);
+  --leaf: #0F9D63; --leaf-strong: #0B7A4D; --leaf-tint: rgba(15, 157, 99, 0.10);
+  --stamp: #2563EB; --stamp-strong: #1D4FC4; --stamp-tint: rgba(37, 99, 235, 0.10);
+  --rind: #DC2626; --rind-tint: rgba(220, 38, 38, 0.10);
+  --line: #E2E5E9; --muted: #5B6672;
   /* Code blocks stay terminal-dark in both modes, same as index.html. */
+  --code-bg: #090C10; --code-ink: #E8EDF2; --code-mut: #6B7685; --code-str: #FFA668; --code-kw: #34D399; --code-fn: #5B9DF9;
 }
 
 /* ---------- map Material's variables onto those tokens ---------- */
-:root, [data-md-color-scheme="slate"] {
+[data-md-color-scheme="slate"], [data-md-color-scheme="default"] {
   --md-text-font: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --md-code-font: "JetBrains Mono", ui-monospace, Consolas, monospace;
 
-  /* index.html's primary action color is leaf-green (its .btn-primary,
-     nav links, h1 accent) -- mango is the secondary/decorative accent
-     (the label stamp, "shipped" tag), which is what --md-accent-fg-color
-     is for here. */
-  --md-primary-fg-color: var(--leaf);
-  --md-primary-fg-color--light: var(--leaf-tint);
-  --md-primary-fg-color--dark: var(--leaf-strong);
+  /* index.html's primary action color is the mango gradient (its
+     .btn-primary) -- mango is also this site's single confident accent,
+     so both primary and accent point at it; stamp (sky blue) carries
+     links instead, matching index.html's `a{color:var(--stamp)}`. */
+  --md-primary-fg-color: var(--mango);
+  --md-primary-fg-color--light: var(--mango-tint);
+  --md-primary-fg-color--dark: var(--mango-strong);
   --md-primary-bg-color: var(--paper);
   --md-primary-bg-color--light: var(--paper);
   --md-accent-fg-color: var(--mango);
-  --md-accent-fg-color--transparent: color-mix(in srgb, var(--mango) 15%, transparent);
+  --md-accent-fg-color--transparent: var(--mango-tint);
   --md-accent-bg-color: var(--paper);
 
   --md-default-fg-color: var(--ink);
@@ -106,7 +109,7 @@ html { scroll-behavior: smooth; }
   --md-typeset-del-color: color-mix(in srgb, var(--rind) 18%, transparent);
   --md-typeset-table-color: color-mix(in srgb, var(--ink) 14%, transparent);
   --md-typeset-table-color--light: color-mix(in srgb, var(--ink) 6%, transparent);
-  --md-typeset-mark-color: color-mix(in srgb, var(--mango) 35%, transparent);
+  --md-typeset-mark-color: var(--mango-tint);
 
   --md-footer-bg-color: var(--surface);
   --md-footer-bg-color--dark: color-mix(in srgb, var(--surface) 85%, var(--ink));
@@ -117,13 +120,15 @@ html { scroll-behavior: smooth; }
 
 body { background: var(--paper); }
 
-/* ---------- header & tabs: a flat kraft bar with a stamped ink rule
-   underneath, instead of Material's default solid-primary-color bar ---------- */
+/* ---------- header & tabs: a translucent blurred bar over the dark
+   background, like a modern dev-tool site's sticky nav, instead of
+   Material's default solid-primary-color bar ---------- */
 .md-header, .md-tabs {
-  background-color: var(--paper);
+  background-color: color-mix(in srgb, var(--paper) 86%, transparent);
+  backdrop-filter: blur(10px);
   color: var(--ink);
   box-shadow: none;
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line);
 }
 .md-tabs__link { color: var(--muted); opacity: 1; font-weight: 500; }
 .md-tabs__link:hover, .md-tabs__link--active { color: var(--stamp); }
@@ -131,8 +136,7 @@ body { background: var(--paper); }
 /* ---------- left sidebar nav: flat active-item styling, replacing
    Material's default glowing white box-shadow (a soft blurred fade
    meant to mask scrolled content behind a sticky active link) with a
-   plain color change and a left border, matching the same "flat,
-   no-shadow" treatment used everywhere else in this design.
+   plain color change and a left border.
 
    Material's own rules here are unusually specific (three chained
    classes, e.g. ".md-nav--lifted>.md-nav__list>.md-nav__item--active
@@ -140,8 +144,8 @@ body { background: var(--paper); }
    reliable way to override every one of them, including the
    :focus/:hover state mkdocs-material's instant-navigation applies to
    the active link after a page transition (which otherwise jumps to
-   the mango accent color instead of staying on the flat stamp-blue
-   active color used here). ---------- */
+   the mango accent color instead of staying on the stamp-blue active
+   color used here). ---------- */
 .md-nav--lifted > .md-nav__list > .md-nav__item--active > .md-nav__link,
 .md-nav__item--active > .md-nav__link {
   background: none !important;
@@ -165,11 +169,10 @@ body { background: var(--paper); }
 .md-nav--primary .md-nav__title,
 .md-nav--secondary .md-nav__title {
   box-shadow: none !important;
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line);
 }
 .md-header__button, .md-header__topic { color: var(--ink); }
-.md-search__form { background-color: var(--surface); border: 1px solid var(--ink); border-radius: 2px; }
-[data-md-color-scheme="slate"] .md-search__form { background-color: var(--surface); }
+.md-search__form { background-color: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
 .md-search__input::placeholder { color: var(--muted); }
 
 /* Logo mark in the nav -- Material sizes a font-icon logo via its own
@@ -177,22 +180,24 @@ body { background: var(--paper); }
    height here or it can render at zero size in some header states. */
 .md-header__button.md-logo,
 .md-header__button.md-logo img {
-  height: 1.6rem;
-  width: 1.6rem;
+  height: 1.5rem;
+  width: 1.5rem;
   display: inline-flex;
 }
 .md-header__button.md-logo img {
   object-fit: contain;
 }
 
-/* ---------- buttons: flat stamped rectangles -- square corners, a
-   solid 2px ink-colored border, no gradient, no drop shadow ---------- */
+/* ---------- buttons: a mango gradient primary action, rounded like
+   the reference sites' CTAs -- no shadow-heavy SaaS look, just a soft
+   glow ring on hover ---------- */
 .md-button {
-  border-radius: 2px;
-  border-width: 2px;
+  border-radius: 10px;
+  border-width: 1px;
   font-weight: 600;
-  border-color: var(--ink);
+  border-color: var(--line);
   color: var(--ink);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .md-button:hover {
   border-color: var(--stamp);
@@ -200,18 +205,19 @@ body { background: var(--paper); }
   background: none;
 }
 .md-button--primary {
-  background-color: var(--leaf);
-  border-color: var(--leaf-strong);
-  color: var(--paper);
+  background: linear-gradient(135deg, var(--mango), var(--mango-strong));
+  border-color: transparent;
+  color: #1A1206;
 }
 .md-button--primary:hover {
-  background-color: var(--leaf-strong);
-  border-color: var(--leaf-strong);
-  color: var(--paper);
+  box-shadow: 0 0 0 4px var(--mango-tint);
+  border-color: transparent;
+  color: #1A1206;
 }
 
-/* ---------- hero: plain kraft background, a stamped slab headline --
-   the same restrained treatment as index.html's hero ---------- */
+/* ---------- hero: plain dark background with a soft mango glow behind
+   it, a bold sans headline -- the same restrained treatment as
+   index.html's hero ---------- */
 .mangoo-hero {
   background: none;
   padding: 0;
@@ -221,13 +227,25 @@ body { background: var(--paper); }
   box-sizing: border-box;
   max-width: 100%;
   overflow-wrap: break-word;
+  position: relative;
+}
+.mangoo-hero::before {
+  content: "";
+  position: absolute;
+  top: -80px;
+  left: -40px;
+  width: 700px;
+  height: 420px;
+  background: radial-gradient(ellipse at center, var(--mango-tint), transparent 70%);
+  pointer-events: none;
+  z-index: -1;
 }
 .mangoo-hero h1 {
   color: var(--ink);
-  font-family: "Zilla Slab", ui-serif, Georgia, serif;
+  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   font-size: clamp(2.2rem, 5vw, 3.4rem);
   line-height: 1.05;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.02em;
   margin: 0 0 0.8rem;
   font-weight: 700;
 }
@@ -238,25 +256,26 @@ body { background: var(--paper); }
   margin: 0 0 1.6rem;
 }
 .mangoo-hero p.mangoo-welcome {
-  font-family: "Zilla Slab", ui-serif, Georgia, serif;
-  font-style: italic;
-  font-weight: 500;
-  font-size: 1.2rem;
-  color: var(--leaf-strong);
-  max-width: 40ch;
-  margin: 0.6rem 0 0;
+  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 1.15rem;
+  color: var(--mango-strong);
+  max-width: 42ch;
+  margin: 0.8rem 0 0;
 }
-/* The label badge above the hero H1 -- a small bordered ink-stamp
-   rectangle, not tracked all-caps text with a middle-dot list. */
+/* The label badge above the hero H1 -- a small rounded pill, the same
+   convention every one of the reference sites (reflex.dev, uv, React,
+   Angular) uses for its hero eyebrow. */
 .mangoo-eyebrow {
   display: inline-block;
   font-family: "Space Grotesk", ui-sans-serif, sans-serif;
-  font-size: 0.86rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  color: var(--ink);
-  border: 2px solid var(--ink);
-  padding: 4px 11px;
-  border-radius: 2px;
+  color: var(--mango-strong);
+  background: var(--mango-tint);
+  padding: 6px 14px;
+  border-radius: 999px;
   margin: 0 0 18px;
 }
 @media screen and (max-width: 44em) {
@@ -269,25 +288,25 @@ body { background: var(--paper); }
   }
 }
 
-/* ---------- feature grid: flat kraft-surface panels with a thick
-   top rule for hierarchy, instead of Material's rounded-card-with-
-   shadow kit. Hover thickens the rule rather than lifting the card. ---------- */
+/* ---------- feature grid: flat elevated panels with soft rounded
+   corners and a subtle border, like the reference sites' feature
+   cards -- no drop shadow, hover brightens the border instead of
+   lifting the card. ---------- */
 .grid.cards > ul > li {
   background: var(--surface);
-  border: none;
-  border-top: 4px solid var(--line);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
   box-shadow: none;
-  transition: border-top-color 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 .grid.cards > ul > li:hover {
   transform: none;
   box-shadow: none;
-  border-top-color: var(--leaf);
+  border-color: var(--mango);
 }
 
 /* ---------- benchmark stat tiles on the performance page: terminal-dark
-   tile, square corners, mango value -- same accent role mango plays in
+   tile, rounded corners, mango value -- same accent role mango plays in
    index.html's "shipped" status tags, a highlighted callout rather than
    the primary color ---------- */
 .mangoo-stats {
@@ -298,9 +317,10 @@ body { background: var(--paper); }
 }
 .mangoo-stat {
   background: var(--code-bg);
-  border-radius: 0;
+  border-radius: 10px;
   padding: 1.1rem 1.3rem;
-  border-left: 4px solid var(--mango);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--mango);
 }
 .mangoo-stat .value {
   font-size: 1.7rem;
@@ -320,8 +340,8 @@ body { background: var(--paper); }
 .md-typeset .admonition.tip,
 .md-typeset .admonition.example {
   border-color: var(--leaf);
-  border-radius: 0;
-  background-color: var(--surface-2);
+  border-radius: 8px;
+  background-color: var(--surface);
 }
 .md-typeset .tip > .admonition-title,
 .md-typeset .example > .admonition-title {
@@ -336,40 +356,46 @@ body { background: var(--paper); }
 .md-typeset pre > code {
   font-size: 0.82rem;
 }
+.md-typeset .highlight {
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
 
-/* Tables: index.html's ink-tan rule instead of Material's default */
+/* Tables: dark surface, subtle border */
 .md-typeset table:not([class]) {
-  border-color: var(--ink);
-  border-radius: 0;
+  border-color: var(--line);
+  border-radius: 8px;
 }
 .md-typeset table:not([class]) th,
 .md-typeset table:not([class]) td {
   border-bottom-color: var(--line);
 }
 .md-typeset table:not([class]) th {
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
 }
 
-/* ---------- headings: Zilla Slab for section headings, matching the
-   stamped-label feel of the hero rather than Material's thin sans default ---------- */
+/* ---------- headings: Space Grotesk throughout, matching index.html's
+   bold sans headlines -- no serif, no slab, no vintage register ---------- */
 .md-typeset h1, .md-typeset h2, .md-typeset h3 {
-  font-family: "Zilla Slab", ui-serif, Georgia, serif;
+  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
 }
-.md-typeset h1 { font-weight: 700; letter-spacing: -0.01em; }
-.md-typeset h2 { font-weight: 600; letter-spacing: -0.005em; }
+.md-typeset h1 { font-weight: 700; letter-spacing: -0.02em; }
+.md-typeset h2 { font-weight: 600; letter-spacing: -0.01em; }
 .md-typeset h3 { font-weight: 600; }
 
 /* ---------- more generous vertical rhythm -- index.html's sections run
    72-100px of padding; Material's default article padding is much
-   tighter, which feels cramped by comparison. A thick ink rule divides
-   sections, like a ruled ledger page, instead of a thin hairline. ---------- */
+   tighter, which feels cramped by comparison. A thin rule divides
+   sections, matching the restrained hairline convention of the
+   reference sites. ---------- */
 .md-content__inner {
   padding-top: 1.6rem;
 }
 .md-typeset h2 {
   margin-top: 2.2em;
   padding-top: 0.5em;
-  border-top: 2px solid var(--ink);
+  border-top: 1px solid var(--line);
 }
 .md-typeset > h2:first-child {
   margin-top: 0;
@@ -378,15 +404,15 @@ body { background: var(--paper); }
 }
 
 /* Rules and quotes in the brand palette instead of Material's neutral gray */
-.md-typeset hr { border-bottom: 2px solid var(--ink); }
+.md-typeset hr { border-bottom: 1px solid var(--line); }
 .md-typeset blockquote {
   border-left: 3px solid var(--stamp);
   color: var(--muted);
 }
 
-/* Inline code: a warm surface tint instead of Material's flat gray chip */
+/* Inline code: a subtle surface tint instead of Material's flat gray chip */
 .md-typeset code:not(pre code) {
   background-color: var(--surface-2);
   color: var(--ink);
-  border-radius: 2px;
+  border-radius: 4px;
 }

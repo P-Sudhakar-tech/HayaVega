@@ -18,7 +18,7 @@ Welcome to Mangoo &mdash; the super-fastest Python web framework.
 
 A conventional, batteries-included project structure. Automatic, interactive API documentation, generated from your code. A Rust core where it actually wins the benchmark, and honestly disclosed where it doesn't.
 
-[Get started :material-arrow-right:](getting-started/index.md){ .md-button }
+[Get started :material-arrow-right:](getting-started/index.md){ .md-button .md-button--primary }
 
 </div>
 

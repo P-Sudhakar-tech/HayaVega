@@ -13,27 +13,23 @@ site_dir: site
 
 theme:
   name: material
+  # Dark is the unconditional default (first scheme listed, no `media`
+  # condition) -- matching reflex.dev/uv/etc., which default to dark
+  # regardless of system preference and only switch on an explicit
+  # manual toggle click, not automatically via prefers-color-scheme.
   palette:
-    - media: "(prefers-color-scheme)"
-      primary: deep orange
-      accent: orange
-      toggle:
-        icon: material/brightness-auto
-        name: Switch to light mode
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
+    - scheme: slate
       primary: deep orange
       accent: orange
       toggle:
         icon: material/weather-sunny
-        name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
+        name: Switch to light mode
+    - scheme: default
       primary: deep orange
       accent: orange
       toggle:
         icon: material/weather-night
-        name: Switch to system preference
+        name: Switch to dark mode
   font: false
   logo: assets/logo.png
   favicon: assets/favicon.ico
