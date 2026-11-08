@@ -5,24 +5,20 @@
 - Python 3.10 or newer
 - (Optional, recommended) [Rust](https://rustup.rs/) and `cargo` on `PATH`, for the native `mangoo_native` extension
 
-## From PyPI (not yet published)
-
-Once a release goes out, this will be the normal way to install Mangoo:
+## From PyPI
 
 ```bash
-pip install mangoo-framework
+pip install mangoo
 ```
 
-That isn't live yet -- until a first release is published, use the
-from-source steps below instead. The package will install as
-`mangoo-framework` on PyPI (`mangoo` itself was already taken), but the
-importable module stays `mangoo` either way: `import mangoo` works the
-same regardless of which install path got it there, the same way
-`pip install beautifulsoup4` gives you `import bs4`.
+This is the normal way to install Mangoo. The published wheel is the
+pure-Python build; see [Install from source](#install-from-source) below
+if you want the optional Rust-native extension built locally.
 
 ## Install from source
 
-Mangoo isn't published to PyPI yet &mdash; install it directly from a local checkout of the repository:
+To build the optional Rust-native extension, or to work on Mangoo itself,
+install directly from a local checkout of the repository instead:
 
 ```bash
 cd mangoo-framework

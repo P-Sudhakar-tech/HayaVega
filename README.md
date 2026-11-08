@@ -53,17 +53,26 @@ full methodology, scope, and honest caveats in
 
 ## Quick start
 
-Not yet published to PyPI -- once a release goes out, `pip install mangoo-framework` will be the normal install path (the importable module stays `mangoo` either way, the same as `pip install beautifulsoup4` giving you `import bs4`). Until then, install from this checkout:
+Published on PyPI as `mangoo`:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install mangoo
+mangoo-admin newproject mysite
+cd mysite
+python mango.py newapp blog
+python mango.py launch
+```
+
+Working from this repository checkout instead (e.g. to build the optional
+Rust-native extension)? Install editable from source:
 
 ```powershell
 cd D:\separate_code\mangoo
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e .
-mangoo-admin newproject mysite
-cd mysite
-python mango.py newapp blog
-python mango.py launch
 ```
 
 Open `http://127.0.0.1:8000/`.
