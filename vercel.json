@@ -1,5 +1,5 @@
 {
-  "buildCommand": "python3 -m pip install -e \".[docs]\" && python3 -m mkdocs build",
+  "buildCommand": "python3 -m pip install --break-system-packages -e \".[docs]\" && python3 -m mkdocs build",
   "outputDirectory": "site",
   "framework": null
 }
