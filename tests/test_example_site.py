@@ -12,7 +12,7 @@ class ExampleSiteTests(unittest.TestCase):
             routes = importlib.import_module("config.routes")
             home_route = next(route for route in routes.urlpatterns if route.pattern == "")
             response = home_route.view(None)
-            self.assertIn("Its own shape.", response.body)
+            self.assertIn("Its own shape, automatic docs", response.body)
             self.assertIn("<title>Mangoo", response.body)
         finally:
             sys.path.remove(str(example_root))
