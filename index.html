@@ -9,22 +9,26 @@
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   /* ---------- tokens: dark-first developer-product site, in the
      register of reflex.dev / uv / angular.dev / react.dev -- deep
-     background, one confident mango accent, code-forward, minimal
+     background, one confident accent, code-forward, minimal
      decoration. Dark is the default; a light variant is offered for
-     prefers-color-scheme/manual toggle, same as those sites provide. ---------- */
+     prefers-color-scheme/manual toggle, same as those sites provide.
+     Cool navy background (not a neutral warm gray-black) and a vivid
+     saturated flame-orange (not a muted dusty terracotta) -- deliberately
+     distinct from the nearby "dark bg + warm accent + Space Grotesk"
+     combination that's become a genre default of its own. ---------- */
   :root{
-    --ink:#F2EDE4; --paper:#0D1117; --surface:#131A22; --surface-2:#1A222C;
-    --mango:#FF8A3D; --mango-strong:#FFA668; --mango-tint:rgba(255,138,61,.14);
-    --leaf:#34D399; --leaf-strong:#6EE7B7; --leaf-tint:rgba(52,211,153,.14);
-    --stamp:#5B9DF9; --stamp-strong:#8CBBFB; --stamp-tint:rgba(91,157,249,.14);
-    --rind:#F87171; --rind-tint:rgba(248,113,113,.14);
-    --line:#232B36; --muted:#8B96A5;
-    --code-bg:#090C10; --code-ink:#E8EDF2; --code-mut:#6B7685; --code-str:#FFA668; --code-kw:#34D399; --code-fn:#5B9DF9;
-    --focus:#5B9DF9;
+    --ink:#EAF0F7; --paper:#0A0F1A; --surface:#111929; --surface-2:#182236;
+    --mango:#FF7A1A; --mango-strong:#FFA148; --mango-tint:rgba(255,122,26,.16);
+    --leaf:#22C55E; --leaf-strong:#5EEBA0; --leaf-tint:rgba(34,197,94,.14);
+    --stamp:#38BDF8; --stamp-strong:#7DD3FC; --stamp-tint:rgba(56,189,248,.14);
+    --rind:#F43F5E; --rind-tint:rgba(244,63,94,.14);
+    --line:#222C40; --muted:#8A94A6;
+    --code-bg:#070A12; --code-ink:#E6ECF5; --code-mut:#64708A; --code-str:#FFA148; --code-kw:#22C55E; --code-fn:#38BDF8;
+    --focus:#38BDF8;
     --radius:10px;
   }
   /* Dark is the unconditional default, matching the reference sites'
@@ -34,13 +38,13 @@
      and would otherwise silently override the intended dark-first
      identity for a large share of visitors). */
   :root[data-theme="light"]{
-    --ink:#0D1117; --paper:#FFFFFF; --surface:#F6F8FA; --surface-2:#EBEEF1;
-    --mango:#E8691A; --mango-strong:#C2550F; --mango-tint:rgba(232,105,26,.10);
-    --leaf:#0F9D63; --leaf-strong:#0B7A4D; --leaf-tint:rgba(15,157,99,.10);
-    --stamp:#2563EB; --stamp-strong:#1D4FC4; --stamp-tint:rgba(37,99,235,.10);
+    --ink:#0A0F1A; --paper:#FFFFFF; --surface:#F3F5F9; --surface-2:#E7EBF2;
+    --mango:#E8640A; --mango-strong:#C2530A; --mango-tint:rgba(232,100,10,.10);
+    --leaf:#15803D; --leaf-strong:#0F6B30; --leaf-tint:rgba(21,128,61,.10);
+    --stamp:#0284C7; --stamp-strong:#026AA2; --stamp-tint:rgba(2,132,199,.10);
     --rind:#DC2626; --rind-tint:rgba(220,38,38,.10);
-    --line:#E2E5E9; --muted:#5B6672;
-    --focus:#2563EB;
+    --line:#DCE1EA; --muted:#5B6578;
+    --focus:#0284C7;
   }
 
   /* ---------- reset & base ---------- */
@@ -50,13 +54,13 @@
   @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
   body{
     margin:0; background:var(--paper); color:var(--ink);
-    font-family:"Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    font-family:"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
     font-size:16px; line-height:1.6;
   }
-  h1,h2,h3{font-family:"Space Grotesk", ui-sans-serif, system-ui, sans-serif; text-wrap:balance; margin:0; color:var(--ink); font-weight:700; letter-spacing:-.015em;}
+  h1,h2,h3{font-family:"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif; text-wrap:balance; margin:0; color:var(--ink); font-weight:700; letter-spacing:-.015em;}
   a{color:var(--stamp); text-decoration-thickness:1px; text-underline-offset:2px;}
   a:focus-visible, button:focus-visible, summary:focus-visible{outline:2px solid var(--focus); outline-offset:3px; border-radius:4px;}
-  code, pre, .mono{font-family:"JetBrains Mono", ui-monospace, Consolas, monospace; font-variant-numeric:tabular-nums;}
+  code, pre, .mono{font-family:"Fira Code", ui-monospace, Consolas, monospace; font-variant-numeric:tabular-nums;}
   img,svg{display:block; max-width:100%;}
   .wrap{width:min(1180px, calc(100% - 48px)); margin:0 auto;}
   .visually-hidden{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap;}
@@ -149,7 +153,7 @@
 
   pre{background:var(--code-bg); color:var(--code-ink); margin:0; padding:16px 18px; border-radius:var(--radius); overflow-x:auto; font-size:.83rem; line-height:1.65; border:1px solid var(--line);}
   pre .kw{color:var(--code-kw);} pre .fn{color:var(--code-fn);} pre .str{color:var(--code-str);} pre .mut{color:var(--code-mut);}
-  .snippet-label{font-family:"JetBrains Mono"; font-size:.72rem; color:var(--muted); margin-bottom:6px;}
+  .snippet-label{font-family:"Fira Code"; font-size:.72rem; color:var(--muted); margin-bottom:6px;}
   .callout{background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--leaf); padding:14px 16px; font-size:.9rem; border-radius:0 var(--radius) var(--radius) 0; margin-top:16px;}
   .callout strong{color:var(--leaf-strong);}
 

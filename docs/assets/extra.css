@@ -10,7 +10,7 @@
    content, flat elevated panels with soft rounded corners -- not
    whimsical decoration, not a light-cream background. */
 
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap");
 
 /* Defensive: nothing in this file should ever force horizontal page
    scroll on a narrow viewport -- internal scrollable elements (code
@@ -37,29 +37,29 @@ html { scroll-behavior: smooth; }
    first (and default) in mkdocs.yml, so it carries the dark palette;
    "default" carries light, for the manual toggle only. ---------- */
 [data-md-color-scheme="slate"] {
-  --ink: #F2EDE4; --paper: #0D1117; --surface: #131A22; --surface-2: #1A222C;
-  --mango: #FF8A3D; --mango-strong: #FFA668; --mango-tint: rgba(255, 138, 61, 0.14);
-  --leaf: #34D399; --leaf-strong: #6EE7B7; --leaf-tint: rgba(52, 211, 153, 0.14);
-  --stamp: #5B9DF9; --stamp-strong: #8CBBFB; --stamp-tint: rgba(91, 157, 249, 0.14);
-  --rind: #F87171; --rind-tint: rgba(248, 113, 113, 0.14);
-  --line: #232B36; --muted: #8B96A5;
-  --code-bg: #090C10; --code-ink: #E8EDF2; --code-mut: #6B7685; --code-str: #FFA668; --code-kw: #34D399; --code-fn: #5B9DF9;
+  --ink: #EAF0F7; --paper: #0A0F1A; --surface: #111929; --surface-2: #182236;
+  --mango: #FF7A1A; --mango-strong: #FFA148; --mango-tint: rgba(255, 122, 26, 0.16);
+  --leaf: #22C55E; --leaf-strong: #5EEBA0; --leaf-tint: rgba(34, 197, 94, 0.14);
+  --stamp: #38BDF8; --stamp-strong: #7DD3FC; --stamp-tint: rgba(56, 189, 248, 0.14);
+  --rind: #F43F5E; --rind-tint: rgba(244, 63, 94, 0.14);
+  --line: #222C40; --muted: #8A94A6;
+  --code-bg: #070A12; --code-ink: #E6ECF5; --code-mut: #64708A; --code-str: #FFA148; --code-kw: #22C55E; --code-fn: #38BDF8;
 }
 [data-md-color-scheme="default"] {
-  --ink: #0D1117; --paper: #FFFFFF; --surface: #F6F8FA; --surface-2: #EBEEF1;
-  --mango: #E8691A; --mango-strong: #C2550F; --mango-tint: rgba(232, 105, 26, 0.10);
-  --leaf: #0F9D63; --leaf-strong: #0B7A4D; --leaf-tint: rgba(15, 157, 99, 0.10);
-  --stamp: #2563EB; --stamp-strong: #1D4FC4; --stamp-tint: rgba(37, 99, 235, 0.10);
+  --ink: #0A0F1A; --paper: #FFFFFF; --surface: #F3F5F9; --surface-2: #E7EBF2;
+  --mango: #E8640A; --mango-strong: #C2530A; --mango-tint: rgba(232, 100, 10, 0.10);
+  --leaf: #15803D; --leaf-strong: #0F6B30; --leaf-tint: rgba(21, 128, 61, 0.10);
+  --stamp: #0284C7; --stamp-strong: #026AA2; --stamp-tint: rgba(2, 132, 199, 0.10);
   --rind: #DC2626; --rind-tint: rgba(220, 38, 38, 0.10);
-  --line: #E2E5E9; --muted: #5B6672;
+  --line: #DCE1EA; --muted: #5B6578;
   /* Code blocks stay terminal-dark in both modes, same as index.html. */
   --code-bg: #090C10; --code-ink: #E8EDF2; --code-mut: #6B7685; --code-str: #FFA668; --code-kw: #34D399; --code-fn: #5B9DF9;
 }
 
 /* ---------- map Material's variables onto those tokens ---------- */
 [data-md-color-scheme="slate"], [data-md-color-scheme="default"] {
-  --md-text-font: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --md-code-font: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --md-text-font: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --md-code-font: "Fira Code", ui-monospace, Consolas, monospace;
 
   /* index.html's primary action color is the mango gradient (its
      .btn-primary) -- mango is also this site's single confident accent,
@@ -242,7 +242,7 @@ body { background: var(--paper); }
 }
 .mangoo-hero h1 {
   color: var(--ink);
-  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: clamp(2.2rem, 5vw, 3.4rem);
   line-height: 1.05;
   letter-spacing: -0.02em;
@@ -256,7 +256,7 @@ body { background: var(--paper); }
   margin: 0 0 1.6rem;
 }
 .mangoo-hero p.mangoo-welcome {
-  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-style: normal;
   font-weight: 600;
   font-size: 1.15rem;
@@ -269,7 +269,7 @@ body { background: var(--paper); }
    Angular) uses for its hero eyebrow. */
 .mangoo-eyebrow {
   display: inline-block;
-  font-family: "Space Grotesk", ui-sans-serif, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, sans-serif;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--mango-strong);
@@ -378,7 +378,7 @@ body { background: var(--paper); }
 /* ---------- headings: Space Grotesk throughout, matching index.html's
    bold sans headlines -- no serif, no slab, no vintage register ---------- */
 .md-typeset h1, .md-typeset h2, .md-typeset h3 {
-  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
 }
 .md-typeset h1 { font-weight: 700; letter-spacing: -0.02em; }
 .md-typeset h2 { font-weight: 600; letter-spacing: -0.01em; }
