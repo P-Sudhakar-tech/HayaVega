@@ -237,6 +237,15 @@ body { background: var(--paper); }
   max-width: 56ch;
   margin: 0 0 1.6rem;
 }
+.mangoo-hero p.mangoo-welcome {
+  font-family: "Zilla Slab", ui-serif, Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.2rem;
+  color: var(--leaf-strong);
+  max-width: 40ch;
+  margin: 0.6rem 0 0;
+}
 /* The label badge above the hero H1 -- a small bordered ink-stamp
    rectangle, not tracked all-caps text with a middle-dot list. */
 .mangoo-eyebrow {
