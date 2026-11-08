@@ -461,10 +461,17 @@ body { background: var(--paper); }
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
+  justify-content: center !important;
   gap: 1rem !important;
+  width: 100% !important;
 }
 .md-footer-copyright {
   text-align: center !important;
   width: 100% !important;
   margin: 0 auto !important;
+  display: block !important;
+}
+.md-footer-copyright p,
+.md-footer-copyright * {
+  text-align: center !important;
 }
