@@ -416,3 +416,22 @@ body { background: var(--paper); }
   color: var(--ink);
   border-radius: 4px;
 }
+
+/* ---------- footer copyright link ("Contact us"): sit inline with the
+   surrounding text at the same baseline/size, and keep the focus ring
+   tight to the link's own box instead of a padded floating pill. ---------- */
+.md-copyright a {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md-copyright a:hover {
+  color: var(--mango-strong);
+}
+.md-copyright a:focus-visible {
+  outline-offset: 1px;
+  border-radius: 2px;
+}
