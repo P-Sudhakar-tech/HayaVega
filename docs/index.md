@@ -39,7 +39,7 @@ A conventional, batteries-included project structure. Automatic, interactive API
 
     ---
 
-    A native Rust WSGI server (1.4&ndash;2.7&times; faster than `waitress`), TLS via `rustls`, and Signals' worker-pool dispatcher &mdash; each one benchmarked before shipping, including the ideas that *didn't* pan out.
+    A native Rust WSGI server (1.4&ndash;2.7&times; faster than a reference pure-Python WSGI server), TLS via `rustls`, and Signals' worker-pool dispatcher &mdash; each one benchmarked before shipping, including the ideas that *didn't* pan out.
 
 -   :material-api:{ .lg .middle } **REST, GraphQL, and ASGI &mdash; one auth system**
 
