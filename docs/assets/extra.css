@@ -456,3 +456,13 @@ body { background: var(--paper); }
 .md-social__link:hover::after {
   color: var(--mango-strong);
 }
+
+/* ---------- footer copyright centered across the bottom of the site ---------- */
+.md-footer__inner {
+  flex-direction: column;
+  gap: 1rem;
+}
+.md-footer-copyright {
+  text-align: center;
+  width: 100%;
+}
