@@ -457,32 +457,26 @@ body { background: var(--paper); }
   color: var(--mango-strong);
 }
 
-.md-footer__inner {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  gap: 0.5rem !important;
-  width: 100% !important;
-  justify-content: center !important;
+/* Centering the copyright/social row: the classes that actually exist
+   in Material's footer markup are .md-footer-meta__inner (the row's
+   own flex container), .md-copyright (not .md-footer-copyright), and
+   .md-social (not .md-footer-social) -- five prior commits styled
+   selectors that matched nothing. The one that did match,
+   .md-footer__inner, is a *different* element entirely (the prev/next
+   pagination nav, not the copyright row), so forcing it into a
+   centered column layout was squeezing that nav's available width and
+   truncating page titles like "Getting started" into an ellipsis. */
+.md-footer-meta__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
 }
-.md-footer-copyright {
-  text-align: center !important;
-  width: 100% !important;
-  margin: 0 auto !important;
-  display: block !important;
+.md-copyright {
+  text-align: center;
+  width: 100%;
 }
-.md-footer-copyright__highlight,
-.md-footer-copyright__highlight span {
-  text-align: center !important;
-  display: block !important;
-  margin: 0 auto !important;
-}
-.md-footer-social {
-  text-align: center !important;
-  width: 100% !important;
-  justify-content: center !important;
-}
-.md-footer-copyright p,
-.md-footer-copyright * {
-  text-align: center !important;
+.md-social {
+  justify-content: center;
+  width: 100%;
 }
