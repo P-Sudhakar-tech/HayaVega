@@ -202,9 +202,9 @@
 <main id="top">
 
   <section class="hero wrap">
-    <div class="eyebrow">Python web framework &middot; open source &middot; early and runnable</div>
+    <div class="eyebrow">Python web framework &middot; open source &middot; published on PyPI</div>
     <h1 class="headline">Its own shape. <em>Automatic docs.</em></h1>
-    <p class="lead">Mangoo gives Python projects a conventional routing, entities, and migrations layer of its own, automatic OpenAPI docs and Swagger UI, and hardened authentication &mdash; with a native Rust core ripening in as it matures. It's a real, tested checkout, not a finished product: see exactly what's shipped and what isn't below.</p>
+    <p class="lead">Mangoo gives Python projects a conventional routing, entities, and migrations layer of its own, automatic OpenAPI docs and Swagger UI, hardened authentication with a full lifecycle, and a native Rust core that already wins every published benchmark scenario it's wired into. <code>pip install mangoo</code> and it's a real, tested framework, not a prototype &mdash; see exactly what's shipped below.</p>
     <div class="hero-actions">
       <a class="btn btn-primary" href="#getting-started">Read the quickstart</a>
       <a class="btn btn-ghost" href="https://github.com/P-Sudhakar-tech/mangoo-framework" target="_blank" rel="noopener">View source on GitHub</a>
@@ -217,13 +217,13 @@
       </div>
       <div class="ripeness-track">
         <div class="segment" style="--seg:var(--mango)"><span class="name">Data &amp; migrations</span><span class="state">Delivered</span></div>
-        <div class="segment" style="--seg:var(--leaf)"><span class="name">Production validation</span><span class="state">In progress</span></div>
-        <div class="segment" style="--seg:var(--leaf)"><span class="name">Runtime &amp; static assets</span><span class="state">In progress</span></div>
-        <div class="segment" style="--seg:var(--rind)"><span class="name">Auth lifecycle</span><span class="state">Planned</span></div>
-        <div class="segment" style="--seg:var(--rind)"><span class="name">API documentation</span><span class="state">Planned</span></div>
+        <div class="segment" style="--seg:var(--mango)"><span class="name">Production validation</span><span class="state">Delivered</span></div>
+        <div class="segment" style="--seg:var(--mango)"><span class="name">Runtime &amp; static assets</span><span class="state">Delivered</span></div>
+        <div class="segment" style="--seg:var(--mango)"><span class="name">Auth lifecycle</span><span class="state">Delivered</span></div>
+        <div class="segment" style="--seg:var(--mango)"><span class="name">API documentation</span><span class="state">Delivered</span></div>
         <div class="segment" style="--seg:var(--leaf)"><span class="name">Developer experience</span><span class="state">In progress</span></div>
         <div class="segment" style="--seg:var(--leaf)"><span class="name">Native runtime</span><span class="state">In progress</span></div>
-        <div class="segment" style="--seg:var(--mango)"><span class="name">Mangoo Pulse</span><span class="state">Delivered</span></div>
+        <div class="segment" style="--seg:var(--mango)"><span class="name">Mangoo Signals</span><span class="state">Delivered</span></div>
       </div>
       <div class="legend">
         <span><span class="dot" style="background:var(--mango)"></span> Delivered</span>
@@ -237,12 +237,12 @@
     <div class="wrap">
       <div>
         <h2>From nothing to a running server.</h2>
-        <p>The full path is five commands. No build step, no config wizard &mdash; SQLite works with Python alone.</p>
+        <p>The full path is five commands, straight from PyPI. No build step, no config wizard &mdash; SQLite works with Python alone.</p>
       </div>
       <div class="transcript">
         <div class="tline"><div class="cmd"><span class="p">&gt;</span>python -m venv .venv</div><div class="note">Creates an isolated environment</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>pip install -e .</div><div class="note">Installs Mangoo and its CLI entry points</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>mango newproject mysite</div><div class="note">Writes config/settings.py, config/routes.py, mango.py</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>pip install mangoo</div><div class="note">Installs Mangoo and its CLI entry points from PyPI</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>mangoo-admin newproject mysite</div><div class="note">Writes config/settings.py, config/routes.py, mango.py</div></div>
         <div class="tline"><div class="cmd"><span class="p">&gt;</span>python mango.py newapp blog</div><div class="note">Adds an app package under Settings.installed_apps</div></div>
         <div class="tline"><div class="cmd"><span class="p">&gt;</span>python mango.py launch</div><div class="out">Development server: http://127.0.0.1:8000/</div></div>
       </div>
@@ -252,34 +252,34 @@
   <section class="board wrap" id="board">
     <div class="board-head">
       <h2>What's actually true today</h2>
-      <p>Mangoo is under active, test-driven development. This is an honest split of what's shipped with tests, what's built but incomplete, and what's still just a plan &mdash; sourced from the project's own roadmap, refreshed August 2026.</p>
+      <p>Mangoo is under active, test-driven development and published on PyPI. This is an honest split of what's shipped with tests, what's built but still growing, and what's a deliberate, named gap &mdash; sourced from the project's own roadmap, refreshed November 2026.</p>
     </div>
     <div class="board-cols">
       <div class="board-col" style="--col-accent:var(--mango)">
         <h3><span class="dot" style="background:var(--mango)"></span>Shipped</h3>
         <ul>
-          <li><strong>Transactional, checksummed migrations</strong><span>Ordered SQL files, rollback-safe failure, altered-history detection</span></li>
-          <li><strong>Schema-diff detection</strong><span>makemigrations rejects silent type, nullability, or uniqueness drift</span></li>
-          <li><strong>Mangoo Pulse</strong><span>Opt-in event bus, always-async, Rust-native worker pool</span></li>
-          <li><strong>Hardened local auth</strong><span>scrypt, lockouts, TOTP, revocable sessions, CSRF, audit trail</span></li>
-          <li><strong>CI with a coverage gate</strong><span>Python 3.10&ndash;3.12 matrix, native-extension job, opt-in Postgres job</span></li>
+          <li><strong>Transactional, checksummed migrations</strong><span>Ordered SQL files, rollback-safe failure, schema-diff detection on altered columns</span></li>
+          <li><strong>Both WSGI and ASGI</strong><span>Async def views, WebSockets, AsyncTestClient &mdash; sync views keep working unmodified under either</span></li>
+          <li><strong>Full authentication lifecycle</strong><span>scrypt hashing, lockouts, TOTP 2FA, password reset, email verification, session listing/revocation, CSRF, audit trail</span></li>
+          <li><strong>Admin, caching, background jobs</strong><span>Filterable/searchable admin with bulk actions; three cache backends; a durable, no-broker job queue</span></li>
+          <li><strong>OpenAPI docs, Swagger UI, GraphQL</strong><span>Auto-generated from <code>api_route</code>; GraphQL supports arguments, variables, nesting, mutations, and depth limits</span></li>
+          <li><strong>CI at 100% line coverage</strong><span>Python 3.10&ndash;3.15 matrix, native-extension job, Postgres/MySQL/Redis integration jobs, dependency scanning</span></li>
         </ul>
       </div>
       <div class="board-col" style="--col-accent:var(--leaf)">
         <h3><span class="dot" style="background:var(--leaf)"></span>In progress</h3>
         <ul>
-          <li><strong>Production validation</strong><span>Secret key, host, HTTPS, and cookie checks land before boot; MySQL/MariaDB integration test still to come</span></li>
-          <li><strong>Native runtime</strong><span>mangoo_native now builds and loads via maturin; only Pulse's dispatcher runs on it so far</span></li>
-          <li><strong>Runtime observability</strong><span>Structured logs, request IDs, and audit events exist; metrics do not yet</span></li>
-          <li><strong>Developer experience</strong><span>CI and coverage are done; templates, admin depth, and GraphQL maturity are next</span></li>
+          <li><strong>Native runtime's reach</strong><span>Rust already backs Signals' dispatcher, the Models selection-plan compiler, and the GraphQL lexer/parser; request routing, JSON serialization, and auth operations are the next migration targets</span></li>
+          <li><strong>Rust acceleration on PyPI</strong><span>Published wheels are the pure-Python fallback today (a manylinux-compatible binary build is a deliberate follow-up, not yet done)</span></li>
+          <li><strong>Developer experience</strong><span>Core CI, lint, and type-checking are done; GraphQL fragments/directives and a richer admin are still growing</span></li>
         </ul>
       </div>
       <div class="board-col" style="--col-accent:var(--rind)">
-        <h3><span class="dot" style="background:var(--rind)"></span>Not started</h3>
+        <h3><span class="dot" style="background:var(--rind)"></span>Deliberately out of scope (for now)</h3>
         <ul>
-          <li><strong>Authentication lifecycle</strong><span>Password reset, email verification, session rotation, revoke-all</span></li>
-          <li><strong>Full API documentation</strong><span>Request/response OpenAPI schemas, error envelopes, API versioning</span></li>
-          <li><strong>Async/Rust HTTP runtime</strong><span>The dev server is still synchronous WSGI &mdash; a deliberate, unstarted rewrite</span></li>
+          <li><strong>GraphQL fragments &amp; directives</strong><span>Rejected with a clear error rather than a confusing parse failure</span></li>
+          <li><strong>A reactive/SPA frontend framework</strong><span>mangoo.ui ships a server-rendered, htmx-style hypermedia runtime instead; a Node.js/JSX-based SPA layer remains a separate, unscoped possibility</span></li>
+          <li><strong>Release automation beyond what shipped</strong><span>Trusted-publishing CI to PyPI/TestPyPI exists; deeper release tooling is deferred until it's actually needed</span></li>
         </ul>
       </div>
     </div>
@@ -307,7 +307,7 @@
         <div class="docs-rail-group">
           <h4>Interfaces</h4>
           <a href="#apis" data-rail>REST, GraphQL &amp; OpenAPI</a>
-          <a href="#pulse" data-rail>Mangoo Pulse</a>
+          <a href="#pulse" data-rail>Mangoo Signals</a>
           <a href="#rust" data-rail>Rust-native core</a>
         </div>
         <div class="docs-rail-group">
@@ -325,12 +325,12 @@
           <div class="snippet-label">powershell</div>
           <pre>python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e .
-mango newproject mysite
+pip install mangoo
+mangoo-admin newproject mysite
 cd mysite
 python mango.py newapp blog
 python mango.py launch</pre>
-          <p>Open <code>http://127.0.0.1:8000/</code>. During development, <code>./mango.cmd launch 8001</code> runs straight from a source checkout without installing, and watches files to restart the server automatically &mdash; press <code>Ctrl+C</code> once to stop it cleanly.</p>
+          <p>Open <code>http://127.0.0.1:8000/</code>. Working from a source checkout instead? <code>./mango.cmd launch 8001</code> runs straight from it without installing, and watches files to restart the server automatically &mdash; press <code>Ctrl+C</code> once to stop it cleanly.</p>
         </article>
 
         <article class="doc-section" id="settings">
@@ -414,7 +414,7 @@ items = (products.seek(price__above=5)
               <tr><td><code>POST /api/auth/logout</code></td><td>Revokes the session token</td></tr>
             </tbody>
           </table></div>
-          <p><code>python mango.py createadmin</code> creates the first administrator; <code>enable2fa &lt;username&gt;</code> turns on authenticator-app two-factor authentication. Only hashes of session tokens are ever stored, and audit events for logins, sessions, and admin actions are persisted without credentials.</p>
+          <p><code>python mango.py createadmin</code> creates the first administrator; <code>enable2fa &lt;username&gt;</code> turns on authenticator-app two-factor authentication. Only hashes of session tokens are ever stored, and audit events for logins, sessions, and admin actions are persisted without credentials. The full lifecycle ships too: password reset and email verification (single-use, expiring tokens, never logged in plain text), session listing with IP/user-agent, and a one-call revoke-all-other-sessions endpoint.</p>
         </article>
 
         <article class="doc-section" id="production">
@@ -450,32 +450,32 @@ items = (products.seek(price__above=5)
 path(<span class="str">'graphql'</span>, graphql_view(schema),
      methods=(<span class="str">'POST'</span>,))</pre></div>
           </div>
-          <p>GraphQL today supports a single root query field per request &mdash; arguments, mutations, and nesting are on the roadmap, not yet implemented.</p>
+          <p>GraphQL supports arguments, variables, recursive nesting, mutations, and depth/field limits enforced before any resolver runs &mdash; a small, dependency-free executor, not a full spec-compliant engine. Fragments and directives are rejected with a clear error rather than a confusing parse failure.</p>
         </article>
 
         <article class="doc-section" id="pulse">
           <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
-          <h3>Mangoo Pulse</h3>
-          <p>An opt-in, in-process event bus for application lifecycle hooks. It never wires itself into the runtime &mdash; an application adds no handlers, latency, or failure modes unless it creates and uses a <code>PulseBus</code>.</p>
+          <h3>Mangoo Signals</h3>
+          <p>An opt-in, in-process event bus for application lifecycle hooks. It never wires itself into the runtime &mdash; an application adds no handlers, latency, or failure modes unless it creates and uses a <code>SignalBus</code>.</p>
           <div class="snippet-label">any view or startup module</div>
-          <pre><span class="kw">from</span> mangoo.addons.pulse <span class="kw">import</span> PulseBus
+          <pre><span class="kw">from</span> mangoo.addons.signals <span class="kw">import</span> SignalBus
 
-bus = PulseBus()
+bus = SignalBus()
 bus.connect(<span class="str">"auth.login_succeeded"</span>, on_login)
 bus.publish(<span class="str">"auth.login_succeeded"</span>, actor_id=user.id)</pre>
-          <p>There is no sync-versus-async choice to make: <code>publish</code>/<code>emit</code> always hand delivery to a small persistent worker pool and return immediately &mdash; a Rust-native thread pool (<code>mangoo_native.PulseDispatcher</code>) when the optional extension is built, or a behavior-compatible Python <code>ThreadPoolExecutor</code> otherwise. Pass the same bus as <code>pulse=</code> to <code>create_application</code>, <code>auth_routes</code>, <code>admin_routes</code>, or <code>migrations.apply</code> to receive request, auth, admin, and migration events.</p>
+          <p>There is no sync-versus-async choice to make: <code>publish</code>/<code>emit</code> always hand delivery to a small persistent worker pool and return immediately, isolating subscriber failures &mdash; a Rust-native thread pool (<code>mangoo_native.SignalDispatcher</code>) when the optional extension is built, or a behavior-compatible Python <code>ThreadPoolExecutor</code> otherwise. Pass the same bus as <code>signals=</code> to <code>create_application</code>, <code>auth_routes</code>, <code>admin_routes</code>, or <code>migrations.apply</code> to receive request, auth, admin, and migration events. This add-on shipped originally as "Pulse" &mdash; <code>mangoo.addons.pulse</code> and <code>pulse=</code> still work as deprecated aliases.</p>
         </article>
 
         <article class="doc-section" id="rust">
           <div class="doc-kicker"><span class="tag tag-progress">In progress</span></div>
           <h3>Rust-native core</h3>
-          <p>Performance-sensitive types get a Rust implementation with a behavior-compatible Python fallback, so nothing requires a Rust toolchain to run.</p>
+          <p>Performance-sensitive types get a Rust implementation with a behavior-compatible Python fallback, so nothing requires a Rust toolchain to run. A benchmark-first rule governs every candidate: wire in only on a decisive, measured win, and publish the losses too.</p>
           <div class="snippet-label">python</div>
           <pre><span class="kw">from</span> mangoo <span class="kw">import</span> mango_list
 
 items = mango_list([<span class="str">"first"</span>, <span class="str">"second"</span>])
 items.append(<span class="str">"third"</span>)</pre>
-          <p><code>mango_list</code> works with no extra steps. Build the extension with <code>maturin develop --manifest-path crates/mangoo-python/Cargo.toml</code> &mdash; point it at that crate specifically, not the repository root, since both currently share the project name <code>mangoo</code> and a root build silently replaces the real Python package. Request routing, JSON serialization, authentication operations, and database execution are the next migration targets.</p>
+          <p><code>mango_list</code> works with no extra steps, automatically Rust-backed once the extension is built. Rust already accelerates Signals' dispatcher, one SQLite hot-read path in Models, and the GraphQL lexer/parser (2.7&ndash;3.9&times; there). Request routing, JSON serialization, and authentication operations are the next migration targets &mdash; build the extension yourself with <code>maturin develop --manifest-path crates/mangoo-python/Cargo.toml</code>, pointed at that crate specifically, not the repository root, since both currently share the project name <code>mangoo</code> and a root build silently replaces the real Python package.</p>
         </article>
 
         <article class="doc-section" id="testing">
@@ -485,7 +485,7 @@ items.append(<span class="str">"third"</span>)</pre>
           <div class="snippet-label">powershell</div>
           <pre>pip install -e ".[dev]"
 pytest</pre>
-          <p><code>pytest</code> runs with an 85% coverage gate by default. GitHub Actions runs the suite on Python 3.10&ndash;3.12 for every push and pull request, plus a job that builds <code>mangoo_native</code> and runs the tests it backs, and a job that runs the opt-in PostgreSQL integration test against a real <code>postgres:16</code> container.</p>
+          <p><code>pytest</code> runs with a 100% line coverage gate by default (pass <code>--no-cov</code> to skip it locally). GitHub Actions runs the suite on Python 3.10, 3.11, 3.12, and 3.15 for every push and pull request, plus a job that builds <code>mangoo_native</code> and runs the tests it backs, opt-in jobs against real <code>postgres:16</code>/<code>mysql:8</code>/<code>redis:7</code> containers, a required lint/format/type-check gate, and a dependency-vulnerability scan with weekly Dependabot updates.</p>
         </article>
 
       </div>
