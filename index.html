@@ -30,6 +30,12 @@
     --code-bg:#070A12; --code-ink:#E6ECF5; --code-mut:#64708A; --code-str:#FFA148; --code-kw:#22C55E; --code-fn:#38BDF8;
     --focus:#38BDF8;
     --radius:10px;
+    /* A warm glow reads fine against a near-black page -- it's the
+       dark mode's whole point -- but the same warm tint washed over a
+       white light-mode background turns it pale cream/pink, landing
+       on the exact "warm off-white + orange" look this is meant to
+       avoid. Light mode gets a cool, barely-there glow instead. */
+    --glow:var(--mango-tint);
   }
   /* Dark is the unconditional default, matching the reference sites'
      own behavior -- a manual [data-theme="light"] toggle is the only
@@ -45,6 +51,7 @@
     --rind:#DC2626; --rind-tint:rgba(220,38,38,.10);
     --line:#DCE1EA; --muted:#5B6578;
     --focus:#0284C7;
+    --glow:rgba(2,132,199,.05);
   }
 
   /* ---------- reset & base ---------- */
@@ -81,8 +88,8 @@
 
   /* ---------- hero ---------- */
   .hero{padding:88px 0 48px; position:relative;}
-  .hero::before{content:""; position:absolute; top:-120px; left:50%; width:900px; height:560px; transform:translateX(-38%); background:radial-gradient(ellipse at center, var(--mango-tint), transparent 70%); pointer-events:none; z-index:-1;}
-  .eyebrow{display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:.85rem; color:var(--mango-strong); background:var(--mango-tint); border-radius:999px; padding:6px 14px; margin-bottom:22px;}
+  .hero::before{content:""; position:absolute; top:-120px; left:50%; width:900px; height:560px; transform:translateX(-38%); background:radial-gradient(ellipse at center, var(--glow), transparent 70%); pointer-events:none; z-index:-1;}
+  .eyebrow{display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:.85rem; color:var(--mango-strong); background:var(--mango-tint); border-radius:var(--radius); padding:6px 14px; margin-bottom:22px;}
   h1.headline{font-size:clamp(2.6rem, 5.4vw, 4.4rem); font-weight:700; line-height:1.03; letter-spacing:-.02em; max-width:19ch;}
   .welcome{font-weight:600; font-size:1.2rem; color:var(--mango-strong); margin:16px 0 0; max-width:42ch;}
   .lead{font-size:1.15rem; color:var(--muted); max-width:52ch; margin:18px 0 30px;}

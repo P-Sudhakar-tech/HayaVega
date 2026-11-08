@@ -44,6 +44,12 @@ html { scroll-behavior: smooth; }
   --rind: #F43F5E; --rind-tint: rgba(244, 63, 94, 0.14);
   --line: #222C40; --muted: #8A94A6;
   --code-bg: #070A12; --code-ink: #E6ECF5; --code-mut: #64708A; --code-str: #FFA148; --code-kw: #22C55E; --code-fn: #38BDF8;
+  /* A warm glow reads fine against a near-black page; the same tint
+     washed over a white light-mode background turns it pale cream/
+     pink -- landing on the exact "warm off-white + orange" look this
+     palette is meant to avoid. Light mode gets a cool, barely-there
+     glow instead (see [data-md-color-scheme="default"] below). */
+  --glow: var(--mango-tint);
 }
 [data-md-color-scheme="default"] {
   --ink: #0A0F1A; --paper: #FFFFFF; --surface: #F3F5F9; --surface-2: #E7EBF2;
@@ -52,8 +58,9 @@ html { scroll-behavior: smooth; }
   --stamp: #0284C7; --stamp-strong: #026AA2; --stamp-tint: rgba(2, 132, 199, 0.10);
   --rind: #DC2626; --rind-tint: rgba(220, 38, 38, 0.10);
   --line: #DCE1EA; --muted: #5B6578;
+  --glow: rgba(2, 132, 199, 0.05);
   /* Code blocks stay terminal-dark in both modes, same as index.html. */
-  --code-bg: #090C10; --code-ink: #E8EDF2; --code-mut: #6B7685; --code-str: #FFA668; --code-kw: #34D399; --code-fn: #5B9DF9;
+  --code-bg: #070A12; --code-ink: #E6ECF5; --code-mut: #64708A; --code-str: #FFA148; --code-kw: #22C55E; --code-fn: #38BDF8;
 }
 
 /* ---------- map Material's variables onto those tokens ---------- */
@@ -236,7 +243,7 @@ body { background: var(--paper); }
   left: -40px;
   width: 700px;
   height: 420px;
-  background: radial-gradient(ellipse at center, var(--mango-tint), transparent 70%);
+  background: radial-gradient(ellipse at center, var(--glow), transparent 70%);
   pointer-events: none;
   z-index: -1;
 }
@@ -264,9 +271,12 @@ body { background: var(--paper); }
   max-width: 42ch;
   margin: 0.8rem 0 0;
 }
-/* The label badge above the hero H1 -- a small rounded pill, the same
-   convention every one of the reference sites (reflex.dev, uv, React,
-   Angular) uses for its hero eyebrow. */
+/* The label badge above the hero H1. A full pill shape is the common
+   convention for this (reflex.dev, uv, React, Angular all use one),
+   but a rounded-rect badge at this design's own --radius keeps the
+   same "small bordered label" idea without matching that exact pill
+   shape, which (paired with a warm accent) is also the shape the
+   user's own portfolio site uses for its buttons. */
 .mangoo-eyebrow {
   display: inline-block;
   font-family: "Plus Jakarta Sans", ui-sans-serif, sans-serif;
@@ -275,7 +285,7 @@ body { background: var(--paper); }
   color: var(--mango-strong);
   background: var(--mango-tint);
   padding: 6px 14px;
-  border-radius: 999px;
+  border-radius: 10px;
   margin: 0 0 18px;
 }
 @media screen and (max-width: 44em) {
