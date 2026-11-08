@@ -143,6 +143,12 @@ plugins:
           - performance.md
           - reference/api.md
 
+extra:
+  social:
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/ponugoti-sudhakar-37029a18b
+      name: Contact
+
 nav:
   - Home: index.md
   - Getting started:
