@@ -460,26 +460,25 @@ body { background: var(--paper); }
   color: var(--mango-strong);
 }
 
-/* Centering the copyright/social row: the classes that actually exist
-   in Material's footer markup are .md-footer-meta__inner (the row's
-   own flex container), .md-copyright (not .md-footer-copyright), and
-   .md-social (not .md-footer-social) -- five prior commits styled
-   selectors that matched nothing. The one that did match,
-   .md-footer__inner, is a *different* element entirely (the prev/next
-   pagination nav, not the copyright row), so forcing it into a
-   centered column layout was squeezing that nav's available width and
-   truncating page titles like "Getting started" into an ellipsis. */
+/* Footer bottom row: copyright on the left, "Contact us" on the right,
+   both inside the same .md-footer-meta__inner div (Material's actual
+   classes -- .md-footer-copyright/.md-footer-social, used by five
+   prior commits, don't exist in its markup and matched nothing).
+   The "Built in India" tagline sits on its own centered line below
+   that row, added as generated content on the container itself so it
+   spans the full width rather than being pinned to the left column
+   alongside the copyright text. */
 .md-footer-meta__inner {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
 }
-.md-copyright {
+.md-footer-meta__inner::after {
+  content: "Built in India (Bharat), made for the world.";
+  flex-basis: 100%;
   text-align: center;
-  width: 100%;
-}
-.md-social {
-  justify-content: center;
-  width: 100%;
+  margin-top: 0.6rem;
+  color: var(--md-footer-fg-color--lighter);
+  font-size: 0.7rem;
 }

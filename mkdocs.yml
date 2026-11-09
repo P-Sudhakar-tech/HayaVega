@@ -1,7 +1,7 @@
 site_name: Mangoo
 site_description: A structured Python web framework with automatic, interactive API documentation and a Rust-accelerated core
 site_url: https://mangoo-framework.vercel.app/
-copyright: Released under the MIT License.<br/>Built in India, made for the world.
+copyright: Released under the MIT License.
 
 docs_dir: docs
 site_dir: site
