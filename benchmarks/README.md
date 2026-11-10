@@ -25,13 +25,26 @@ once someone is ready to take on that setup.
 
 ```powershell
 cargo install oha   # or download a prebuilt binary -- see "About oha" below
-pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress
-python benchmarks/run.py --duration 10s --connections 30
+pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress requests
+python benchmarks/run.py --duration 10s --connections 200 --runs 5
 ```
 
 `uvicorn` (already in the command above) serves both the FastAPI target and
 the Hayavega (ASGI) target added when Phase 3 introduced `hayavega.asgi`; no
 extra dependency is needed for it.
+
+**`--runs N`** repeats every scenario `N` times per target and reports the
+median req/s (plus the observed min/max spread) instead of a single
+sample -- the recommended, and now published, way to run this suite,
+since a single `oha` run on a shared dev machine can swing 5-15% run to
+run (see "Reproducibility" below). `--duration` and `--connections` still
+work exactly as they always did; the recommended connection count moved
+from 30 to 200 alongside the move to `--runs` so the published numbers
+reflect a more realistic concurrent load, not just a less noisy one.
+`--duration 10s --connections 200 --runs 5` is the exact invocation used
+for every Windows number published in `docs/performance.md` under the new
+methodology; the Linux CI job below uses the same flags with a shorter
+`--duration 5s` to keep CI job time down.
 
 `benchmarks/tortoise_vs_hayavega.py` (see "Tortoise ORM: the async-driver
 comparison" below) additionally needs `tortoise-orm` and `aiosqlite`:
@@ -40,6 +53,46 @@ comparison" below) additionally needs `tortoise-orm` and `aiosqlite`:
 Results are written to `benchmarks/results/RESULTS.md`. Each target's
 server log is written to `benchmarks/results/<name>_server.log` for the
 duration of that target's run (overwritten each run, not meant to be kept).
+
+## Running it in CI (Linux): a second environment, side by side with Windows
+
+Every number in this document was, until now, measured on one Windows
+dev machine -- see `docs/performance.md`'s "Methodology notes worth
+knowing" for why that already mattered even before cross-OS was a
+question (an "environment ceiling" specific to that machine was found and
+disclosed there). A number that only ever existed on one machine,
+measured by the person making the "faster than X" claim, is weaker
+evidence than the same suite run a second time, unattended, on a
+different OS. A `benchmark-linux` job in `.github/workflows/ci.yml` runs
+exactly that: `python benchmarks/run.py --duration 5s --connections 200
+--runs 5` on `ubuntu-latest` (currently gated to `github.event_name ==
+'push'` on `main`), uploading `benchmarks/results/RESULTS.md` as the
+`benchmark-results-linux` artifact.
+
+**Known, disclosed limitation: the Django target does not complete on
+this CI runner.** Hayavega (WSGI), Hayavega (ASGI), and FastAPI all
+complete cleanly on `ubuntu-latest` with 100% success. Django, run under
+the identical `waitress` server configuration used for every other
+Windows run in this document, times out on every single request at the
+full `--connections 200` load -- `oha` reports `Error distribution: [200]
+aborted due to deadline`, `Success rate: NaN%`, zero requests completing
+in the 5s test window. This is specific to the real GitHub Actions Linux
+runner: the identical Django target, run locally on this project's own
+Windows dev machine at the same `--connections 200` (both 16- and
+8-thread waitress configurations tried), completes with 100% success
+every time, so it is not reproducible locally. Three genuine debugging
+attempts were made across real CI runs (`42807757302`, `42810228220`,
+`42812292945`): fixing a missing `requests` import (which affected the
+other three targets too, now reflected in the install command above),
+sizing waitress's `--connection-limit` to the actual concurrency, and
+reducing Django's thread count from 16 to 8 to rule out GIL thrashing
+under the CI runner's tighter CPU constraints. Each fixed a real, separate
+issue, but none resolved Django's specific failure on this runner. Per
+this project's "stop after 2-3 genuine attempts and disclose" standard,
+this is published as an open, disclosed gap -- the Django row is kept in
+every published Linux table with an explicit `error` cell, never
+silently dropped. See `docs/performance.md` for the published Linux
+numbers (run `42812292945`).
 
 ## What each scenario measures
 

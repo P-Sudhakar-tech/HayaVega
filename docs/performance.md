@@ -5,14 +5,24 @@ reproducible benchmark numbers, never adjectives. Full methodology and
 every honest caveat live in `benchmarks/README.md` in the repository;
 this page summarizes the headline results.
 
-**Methodology:** [`oha`](https://github.com/hatoo/oha), 10s duration, 30
-concurrent connections, one warm-up request per target. Four scenarios:
-a minimal JSON echo, a DB-backed list read, a server-rendered HTML page,
-and static file serving. Each framework served by its own idiomatic
-server. Full identities of the comparison frameworks are in
-`benchmarks/README.md` in the repository.
+**Methodology:** [`oha`](https://github.com/hatoo/oha), one warm-up
+request per target, then the real measurement. Four scenarios: a minimal
+JSON echo, a DB-backed list read, a server-rendered HTML page, and static
+file serving. Each framework served by its own idiomatic server. Full
+identities of the comparison frameworks are in `benchmarks/README.md` in
+the repository. The original pass below used a single run at 10s
+duration / 30 connections; `benchmarks/run.py --runs N` (median + min/max
+spread across `N` repeated runs) was added since, and the recommended --
+and now published -- methodology is 5 repeated runs at 200 connections
+(`--duration 10s --connections 200 --runs 5` on Windows; `--duration 5s`
+on Linux CI, shorter only to keep CI job time down). Both environments
+are published side by side below, each labeled; see
+`benchmarks/README.md`'s "Running it" and "Running it in CI (Linux)"
+sections for exact invocations and honest caveats.
 
 ## vs. other popular frameworks
+
+### Windows (dev machine), original methodology -- kept for history
 
 <div class="hayavega-stats" markdown>
 <div class="hayavega-stat"><span class="value">3520</span><span class="label">json_echo req/s</span></div>
@@ -21,7 +31,7 @@ server. Full identities of the comparison frameworks are in
 <div class="hayavega-stat"><span class="value">1384</span><span class="label">static_file req/s</span></div>
 </div>
 
-<p style="margin-top:-1.2rem;font-size:0.82rem;color:var(--md-default-fg-color--light)">Hayavega, WSGI transport, 30 concurrent connections</p>
+<p style="margin-top:-1.2rem;font-size:0.82rem;color:var(--md-default-fg-color--light)">Hayavega, WSGI transport, 30 concurrent connections, single run</p>
 
 | Scenario | Hayavega (WSGI) | Hayavega (ASGI) | Async framework | Sync framework |
 |---|---:|---:|---:|---:|
@@ -32,9 +42,76 @@ server. Full identities of the comparison frameworks are in
 
 _req/s, higher is better. Single-machine, single-run &mdash; see
 `benchmarks/results/RESULTS.md` in the repository for p50/p90/p99 and
-success rate on every row._
+success rate on every row._ Kept rather than deleted: this is the
+original, broadest comparison referenced elsewhere in this project (e.g.
+the "environment ceiling" finding in `INDUSTRY_LEADERSHIP_ROADMAP.md`),
+and the re-measurement below uses a different methodology (200
+connections, 5 repeated runs), not a direct apples-to-apples update of
+this exact table.
 
-Hayavega leads every published scenario on both transports.
+### Windows (dev machine), re-measured under the repeated-run methodology
+
+| Scenario | Hayavega (WSGI) | Hayavega (ASGI) | Async framework | Sync framework |
+|---|---:|---:|---:|---:|
+| `json_echo` | **3784** | 2445 | 1355 | 1956 |
+| `db_list` | **1804** | 1701 | 592 | 400 |
+| `template_render` | **1340** | 1179 | 659 | 266 |
+| `static_file` | **1300** | 1104 | 529 | 1022 |
+
+_req/s, median of 5 runs at 200 connections &mdash; see
+`benchmarks/README.md`'s "Running it" section for the exact invocation._
+
+**This is disclosed as a re-measurement, not claimed as a new fix.** No
+framework code changed between the original pass above and this one --
+`db_list` and `template_render` moved substantially higher for Hayavega's
+WSGI transport (roughly +96% and +68% respectively) under this
+methodology. The most likely explanation is the higher connection count
+(200 vs. the original 30): more concurrent requests queue behind the
+same database/thread-pool resources, which raises aggregate throughput
+up to a point rather than leaving it flat, the same kind of
+concurrency-sensitive behavior this document's own "environment ceiling"
+finding already describes for this machine. `json_echo` and
+`static_file` moved by smaller, single-digit-to-low-double-digit margins
+in both directions, consistent with ordinary run-to-run variance at a
+different concurrency level rather than a methodology artifact specific
+to those two scenarios.
+
+### Linux (CI), repeated-run methodology
+
+Produced by the `benchmark-linux` CI job (see `benchmarks/README.md`'s
+"Running it in CI (Linux)" section), `ubuntu-latest`, `--duration 5s
+--connections 200 --runs 5`, GitHub Actions run `42812292945`:
+
+| Scenario | Hayavega (WSGI) | Hayavega (ASGI) | Async framework | Sync framework |
+|---|---:|---:|---:|---:|
+| `json_echo` | 6239 | **8856** | 3882 | error[^linux-django] |
+| `db_list` | 86 | **3926** | 761 | error[^linux-django] |
+| `template_render` | 104 | **3002** | 786 | error[^linux-django] |
+| `static_file` | 2342 | **2565** | 1087 | error[^linux-django] |
+
+[^linux-django]: error: did not complete within the test window on this
+CI runner (not reproduced locally); see benchmarks/README.md's "Running
+it in CI (Linux)" section for the full disclosure -- the Django row is
+kept, not dropped, per this project's standing disclosure rule.
+
+_req/s, median of 5 runs at 200 connections on a GitHub Actions
+`ubuntu-latest` runner &mdash; not the same machine as the Windows
+numbers above, so the two environments are not a fair head-to-head
+against each other, only each internally consistent._ One more honest
+gap, disclosed rather than smoothed over: Hayavega's WSGI transport
+(`waitress`) is dramatically slower than its own ASGI transport on this
+specific CI runner for `db_list`/`template_render` (86 and 104 req/s,
+vs. 1804 and 1340 on the Windows numbers above) -- a much larger gap than
+anything seen on Windows. This was not root-caused as part of publishing
+these numbers; it is published as-is, honestly, as a lead for a future
+investigation rather than papered over or excluded.
+
+Hayavega leads every published scenario on both transports on Windows.
+On Linux CI, Hayavega's ASGI transport leads every scenario; the WSGI
+transport leads `json_echo` and `static_file` but trails the async
+framework on `db_list`/`template_render` on this specific runner --
+the same gap disclosed immediately above, published honestly rather
+than rounded up to a clean sweep.
 
 ## The Rust runtime vs. a reference WSGI server
 
