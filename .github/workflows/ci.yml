@@ -188,6 +188,14 @@ jobs:
         run: pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress
       - name: Run the benchmark suite (CI-appropriate duration, full concurrency/repeat methodology)
         run: python benchmarks/run.py --duration 5s --connections 200 --runs 5
+      - name: DEBUG dump server logs
+        if: always()
+        run: |
+          for f in benchmarks/results/*_server.log; do
+            echo "== $f =="
+            cat "$f" || true
+            echo
+          done
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
