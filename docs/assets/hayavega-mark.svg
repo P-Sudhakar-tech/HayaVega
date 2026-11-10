@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Hayavega framework logo</title>
+  <desc id="desc">An "H" mark with speed lines trailing into it and a forward-pointing arrow at its centre, in an orange-to-red gradient.</desc>
+  <defs>
+    <linearGradient id="hayavega-bar" x1="18" y1="20" x2="18" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f7941d"/>
+      <stop offset="1" stop-color="#d62828"/>
+    </linearGradient>
+    <linearGradient id="hayavega-arrow" x1="74" y1="54" x2="98" y2="76" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f26a21"/>
+      <stop offset="1" stop-color="#c81e3a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- speed lines -->
+  <rect x="4" y="30" width="20" height="7" rx="3.5" fill="#f7941d" opacity=".45"/>
+  <rect x="4" y="46" width="14" height="7" rx="3.5" fill="#f7941d" opacity=".65"/>
+  <rect x="4" y="62" width="9"  height="7" rx="3.5" fill="#f7941d" opacity=".9"/>
+
+  <!-- left bar of the H -->
+  <rect x="26" y="20" width="18" height="88" rx="4" fill="url(#hayavega-bar)"/>
+
+  <!-- right bar of the H -->
+  <rect x="56" y="20" width="18" height="88" rx="4" fill="url(#hayavega-bar)"/>
+
+  <!-- crossbar -->
+  <rect x="26" y="57" width="48" height="16" fill="url(#hayavega-bar)"/>
+
+  <!-- forward arrow bursting from the crossbar -->
+  <path d="M74 54 L100 65 L74 76 Z" fill="url(#hayavega-arrow)"/>
+</svg>
