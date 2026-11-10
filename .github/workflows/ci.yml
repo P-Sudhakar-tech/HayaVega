@@ -185,7 +185,7 @@ jobs:
       - name: Install oha
         run: cargo install oha --locked
       - name: Install Hayavega and comparison frameworks
-        run: pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress
+        run: pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress requests
       - name: Run the benchmark suite (CI-appropriate duration, full concurrency/repeat methodology)
         run: python benchmarks/run.py --duration 5s --connections 200 --runs 5
       - name: DEBUG dump server logs

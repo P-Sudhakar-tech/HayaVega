@@ -78,13 +78,20 @@ def aggregate(results: list[ScenarioResult]) -> AggregatedResult:
     )
 
 
-def build_targets() -> list[Target]:
+def build_targets(connections: int = 50) -> list[Target]:
     python = sys.executable
+    # waitress refuses new connections past --connection-limit (default 100)
+    # and queues the rest instead of serving them -- with the benchmark's
+    # own --connections exceeding that default, every waitress-backed target
+    # would otherwise queue most of its load for the whole run and report
+    # "aborted due to deadline" on nearly everything, not a real performance
+    # result. Size the limit to the actual concurrency being driven.
+    connection_limit = max(connections, 100)
     return [
         Target(
             "Hayavega",
             9001,
-            [python, "-m", "waitress", "--host=127.0.0.1", "--port=9001", "--threads=16", "--call", "benchmarks.hayavega_app.app:build_application"],
+            [python, "-m", "waitress", "--host=127.0.0.1", "--port=9001", "--threads=16", f"--connection-limit={connection_limit}", "--call", "benchmarks.hayavega_app.app:build_application"],
             "waitress (Windows substitute for gunicorn; see README)",
         ),
         Target(
@@ -102,7 +109,7 @@ def build_targets() -> list[Target]:
         Target(
             "Django",
             9003,
-            [python, "-m", "waitress", "--host=127.0.0.1", "--port=9003", "--threads=16", "benchmarks.django_app.app:application"],
+            [python, "-m", "waitress", "--host=127.0.0.1", "--port=9003", "--threads=16", f"--connection-limit={connection_limit}", "benchmarks.django_app.app:application"],
             "waitress (Windows substitute for gunicorn; see README)",
         ),
     ]
@@ -236,7 +243,7 @@ def main() -> None:
         raise SystemExit("oha is not on PATH. See benchmarks/README.md for install instructions.")
 
     RESULTS_DIR.mkdir(exist_ok=True)
-    results = [benchmark_target(target, duration=args.duration, connections=args.connections, warmup_requests=args.warmup_requests, runs=args.runs) for target in build_targets()]
+    results = [benchmark_target(target, duration=args.duration, connections=args.connections, warmup_requests=args.warmup_requests, runs=args.runs) for target in build_targets(args.connections)]
 
     for result in results:
         status = f"error: {result.error}" if result.error else "ok"
