@@ -123,6 +123,18 @@ class WebSocketHardeningTests(unittest.IsolatedAsyncioTestCase):
         async with connect_websocket(app, "/ws/echo", headers={"Host": "anything.example"}) as session:
             self.assertTrue(session.accepted)
 
+    async def test_oversized_message_is_rejected_when_hardening_configures_max_request_bytes(self):
+        """``max_request_bytes`` already bounds HTTP request bodies when hardening is
+        configured; a WebSocket message should be bounded by the same setting instead
+        of being silently unlimited just because it arrives over a different transport."""
+        options = HardeningOptions(max_request_bytes=16)
+        app = create_asgi_application([], hardening=options, websocket_patterns=[websocket_path("ws/echo", _echo)])
+        async with connect_websocket(app, "/ws/echo") as session:
+            await session.send_text("this text is definitely longer than sixteen bytes")
+            with self.assertRaises(WebSocketClosed) as ctx:
+                await session.receive_text()
+            self.assertEqual(ctx.exception.code, 1009)
+
     async def test_rejection_publishes_a_signal(self):
         from threading import Event
 

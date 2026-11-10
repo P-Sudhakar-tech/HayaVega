@@ -171,7 +171,8 @@ async def _handle_websocket(scope: dict, receive, send, *, route: WebSocketRoute
     if route is None:
         await send({"type": "websocket.close", "code": 1000})
         return
-    ws = WebSocket(scope, receive, send)
+    max_message_bytes = hardening_layer.options.max_request_bytes if hardening_layer is not None else None
+    ws = WebSocket(scope, receive, send, max_message_bytes=max_message_bytes)
     if signals is not None:
         signals.publish("websocket.connected", data={"path": path})
     try:

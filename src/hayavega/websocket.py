@@ -83,10 +83,11 @@ class WebSocket:
     socket with the default ASGI close code).
     """
 
-    def __init__(self, scope: dict, receive, send):
+    def __init__(self, scope: dict, receive, send, *, max_message_bytes: int | None = None):
         self.scope = scope
         self._receive = receive
         self._send = send
+        self._max_message_bytes = max_message_bytes
         self.path = scope.get("path", "/")
         query_string = scope.get("query_string", b"").decode("latin-1")
         self.query_params = parse_qs(query_string)
@@ -107,7 +108,11 @@ class WebSocket:
         message = await self._receive()
         if message["type"] == "websocket.disconnect":
             raise WebSocketDisconnect(message.get("code", 1000))
-        return message.get("text") or ""
+        text = message.get("text") or ""
+        if self._max_message_bytes is not None and len(text.encode("utf-8")) > self._max_message_bytes:
+            await self.close(code=1009)
+            raise WebSocketDisconnect(1009)
+        return text
 
     async def receive_json(self) -> Any:
         return msgspec.json.decode(await self.receive_text())
