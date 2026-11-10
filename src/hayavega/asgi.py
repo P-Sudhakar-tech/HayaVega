@@ -27,12 +27,11 @@ from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs
-from uuid import uuid4
 
 from . import db
 from .hardening import Hardening, HardeningOptions
 from .middleware import build_chain
-from .request import Request
+from .request import Request, generate_request_id
 from .response import Response, json_response
 from .swagger import documentation_routes
 from .websocket import WebSocket, WebSocketDisconnect
@@ -115,7 +114,7 @@ def _request_from_scope(scope: dict, body: bytes) -> Request:
     return Request(
         method=scope.get("method", "GET").upper(),
         path=scope.get("path", "/"),
-        query_params=parse_qs(query_string),
+        query_params=parse_qs(query_string) if query_string else {},
         body=body,
         headers=headers,
         remote_addr=client[0],
@@ -346,7 +345,7 @@ def create_asgi_application(
         body = b"" if size_rejection is not None else await _read_body(receive)
         request = _request_from_scope(scope, body)
         incoming_id = request.headers.get("X-Request-Id", "")
-        request_id = incoming_id if _REQUEST_ID.fullmatch(incoming_id) else uuid4().hex
+        request_id = incoming_id if _REQUEST_ID.fullmatch(incoming_id) else generate_request_id()
         if signals is not None:
             signals.publish("request.started", data={"method": request.method, "path": request.path})
         rejection = size_rejection or (hardening_layer.reject(request) if hardening_layer else None)

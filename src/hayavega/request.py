@@ -3,9 +3,39 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from os import urandom
 from urllib.parse import parse_qs
 
 import msgspec
+
+
+def _parse_query_string(raw: str) -> dict[str, list[str]]:
+    """`parse_qs`, short-circuited for the common empty-query-string case.
+
+    `parse_qs("")` already returns `{}`, so this changes no behavior -- it
+    just skips the function call (which still builds a `parse_qsl()`
+    generator and iterates it) for every request with no query string,
+    found by profiling a trivial route's end-to-end WSGI cost
+    (`cProfile` against `benchmarks/hayavega_app/app.py`'s `/echo`, which
+    has none) and seeing `parse_qs`/`parse_qsl` show up at a measurable
+    share of total per-request time despite having nothing to parse.
+    """
+    return parse_qs(raw) if raw else {}
+
+
+def generate_request_id() -> str:
+    """A fast, sufficiently random request ID for requests that didn't send
+    their own `X-Request-Id`.
+
+    `uuid4().hex` was used here and in `hayavega.asgi` until profiling
+    found it costing ~9x more than this per call (`uuid.UUID.__init__`
+    does RFC 4122 version/variant bit manipulation and validation this
+    code has no use for -- nothing downstream requires an actual UUID
+    shape, only `_REQUEST_ID`'s `^[A-Za-z0-9_-]{1,64}$` pattern, which a
+    plain random hex string already satisfies with the same 128 bits of
+    randomness `uuid4()` provides).
+    """
+    return urandom(16).hex()
 
 
 @dataclass(frozen=True)
@@ -90,7 +120,7 @@ class Request:
         return cls(
             method=environ.get("REQUEST_METHOD", "GET").upper(),
             path=environ.get("PATH_INFO", "/"),
-            query_params=parse_qs(environ.get("QUERY_STRING", "")),
+            query_params=_parse_query_string(environ.get("QUERY_STRING", "")),
             body=body,
             headers=headers,
             remote_addr=environ.get("REMOTE_ADDR", ""),

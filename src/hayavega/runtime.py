@@ -6,13 +6,12 @@ import re
 import warnings
 from time import perf_counter
 from typing import TYPE_CHECKING
-from uuid import uuid4
 from wsgiref.simple_server import make_server
 
 from . import db
 from .hardening import Hardening, HardeningOptions
 from .middleware import build_chain
-from .request import Request
+from .request import Request, generate_request_id
 from .response import Response, json_response
 from .swagger import documentation_routes
 
@@ -170,7 +169,7 @@ def create_application(
         size_rejection = hardening_layer.reject_content_length(content_length) if hardening_layer else None
         request = Request.from_wsgi(environ, read_body=size_rejection is None)
         incoming_id = request.headers.get("X-Request-Id", "")
-        request_id = incoming_id if _REQUEST_ID.fullmatch(incoming_id) else uuid4().hex
+        request_id = incoming_id if _REQUEST_ID.fullmatch(incoming_id) else generate_request_id()
         if signals is not None:
             signals.publish("request.started", data={"method": request.method, "path": request.path})
         rejection = size_rejection or (hardening_layer.reject(request) if hardening_layer else None)

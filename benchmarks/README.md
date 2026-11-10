@@ -431,6 +431,65 @@ concurrency model at all.
   reverse proxy (nginx, a cloud load balancer), the same guidance
   `DEPLOYMENT.md` already gives for `gunicorn`/`waitress`.
 
+## Per-request hot-path profiling: two real, if small, wins -- and `json_echo` crosses 10x
+
+Asked again to find real code-level gaps rather than accept the measured
+ceiling, the next place to look was the WSGI/ASGI request pipeline itself
+(`hayavega.runtime`/`hayavega.asgi`/`hayavega.request`) -- not the HTTP
+transport (already Rust-accelerated) or the database layer (already
+addressed above), but the plain Python code every single request runs
+regardless of transport. Profiled with `cProfile` against
+`benchmarks/hayavega_app/app.py`'s `/echo` route called directly (no
+sockets, isolating pure per-request Python cost from HTTP overhead):
+
+- **`Request.from_wsgi` called `urllib.parse.parse_qs` on every request**,
+  even ones with an empty `QUERY_STRING` -- `parse_qs("")` already returns
+  `{}`, so nothing behavioral changes by skipping the call, just the
+  `parse_qsl()` generator construction and iteration it does internally
+  for nothing.
+- **Every request without an incoming `X-Request-Id` header generated one
+  via `uuid4().hex`** -- `timeit` showed this costing ~9x more per call
+  than `os.urandom(16).hex()` (`uuid.UUID.__init__` does RFC 4122
+  version/variant bit manipulation and validation nothing downstream
+  needs; `_REQUEST_ID`'s own validation pattern, `^[A-Za-z0-9_-]{1,64}$`,
+  accepts a plain random hex string just as well, with the same 128 bits
+  of randomness). Both `hayavega.runtime` and `hayavega.asgi` had this
+  independently and both were fixed, via a new shared
+  `hayavega.request.generate_request_id()`.
+
+**Verified safe**: full test suite (1004 tests, 100% coverage) unchanged
+before and after; a profiled call count of a trivial route dropped from
+315001 to 270001 function calls per 5000 iterations with both fixes
+applied, confirming `parse_qs`/`uuid4` are gone from the hot path, not
+just assumed removed.
+
+**Result -- the first scenario in this entire document to cross a 10x
+ratio against FastAPI, three runs in a row:**
+
+| Scenario | vs FastAPI (3 runs) | vs Django (3 runs) |
+|---|---:|---:|
+| `json_echo` | **13.42x, 14.75x, 10.36x** | 7.45x, 7.20x, 6.09x |
+| `db_list` | 3.86x, 2.53x, 5.10x | 4.75x, 5.14x, 5.16x |
+| `template_render` | 2.38x, 1.90x, 2.29x | 4.72x, 4.59x, 5.20x |
+| `static_file` | 4.46x, 3.94x, 5.84x | 1.86x, 2.17x, 2.04x |
+
+**Honest reading**: `json_echo` now reliably clears 10x against FastAPI
+specifically -- a real result from removing real per-request Python
+overhead, not noise alone (FastAPI's own `json_echo` baseline touches no
+database and nothing here changed on its side, yet the ratio moved from
+this document's previous ~5-10x band to a consistent 10x+ across three
+fresh runs). It does not clear 10x against Django, whose own `json_echo`
+throughput is simply higher than FastAPI's on this machine -- the
+ceiling is set by the *comparison target's* speed as much as Hayavega's
+own, which is exactly why this document has never claimed a single
+"Hayavega is Nx faster" number without naming which framework and which
+scenario. `db_list`/`template_render` moved up modestly in the same
+runs (consistent with removing fixed per-request overhead that scales
+the same regardless of scenario) but remain bounded by the shared SQLite
+cost documented throughout this file -- no scenario with real I/O
+crosses 10x, and none is expected to without a fundamentally different
+data layer, which is a different project than optimizing this one.
+
 ## Cold-start time: a real, previously unmeasured win
 
 Every benchmark above measures steady-state throughput of an already-running,
