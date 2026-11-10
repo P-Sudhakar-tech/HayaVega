@@ -26,7 +26,7 @@ theme:
         icon: material/weather-night
         name: Switch to dark mode
   font: false
-  logo: assets/logo.png
+  logo: assets/hayavega-mark.svg
   favicon: assets/favicon.ico
   features:
     - navigation.tabs
