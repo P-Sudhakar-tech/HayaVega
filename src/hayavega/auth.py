@@ -242,7 +242,10 @@ def common_password_validator(denylist: Iterable[str]) -> Callable[[str], None]:
 
 
 def _run_validators(password: str, validators: Iterable[Callable[[str], None]] | None) -> None:
-    for validator in validators if validators is not None else (validate_password,):
+    resolved = tuple(validators) if validators is not None else (validate_password,)
+    if not resolved:
+        raise ValueError("`validators=[]` would skip every password check; pass `validators=None` for the default policy or a non-empty list of validators instead.")
+    for validator in resolved:
         validator(password)
 
 
@@ -438,19 +441,16 @@ def verify_totp(secret: str, code: str, timestamp: int | None = None) -> bool:
 def enable_totp(database_path: str | Path | dict, username: str, *, secret_key: str | None = None) -> str:
     """Generate a TOTP secret, store it, and return the plaintext secret
     (for the admin to hand to the user's authenticator app -- never the
-    stored value, which is encrypted when `secret_key` is given and
-    `cryptography` is installed; see `crypto.py`). Without `secret_key`,
-    or without `cryptography` installed, the secret is stored in plaintext
-    -- `hayavega diagnose` reports that fallback.
+    stored value, which is encrypted when `secret_key` is given; see
+    `crypto.py`). Without `secret_key`, the secret is stored in plaintext
+    as a deliberate opt-out -- `hayavega diagnose` reports that case.
+    Passing `secret_key` is a request to encrypt; if `cryptography` isn't
+    installed, this raises `crypto.EncryptionUnavailableError` rather than
+    silently storing the secret in plaintext anyway.
     """
     initialize_auth_db(database_path)
     secret = generate_totp_secret()
-    stored_secret = secret
-    if secret_key:
-        try:
-            stored_secret = crypto.encrypt(secret_key, secret)
-        except crypto.EncryptionUnavailableError:
-            pass
+    stored_secret = crypto.encrypt(secret_key, secret) if secret_key else secret
     connection = _connect(database_path)
     try:
         cursor = connection.execute("UPDATE hayavega_users SET totp_secret = ?, totp_enabled = 1 WHERE username = ?", (stored_secret, username))

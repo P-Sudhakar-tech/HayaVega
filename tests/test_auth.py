@@ -136,10 +136,23 @@ class AuthenticationTests(unittest.TestCase):
         self.assertIsNone(authenticate(self.database, "admin", PASSWORD, code, secret_key="a-different-secret"))
 
     @patch("hayavega.auth.crypto.encrypt")
-    def test_totp_secret_falls_back_to_plaintext_when_cryptography_is_unavailable(self, encrypt):
+    def test_enable_totp_raises_instead_of_silently_storing_plaintext_when_a_secret_key_was_given(self, encrypt):
+        """Passing `secret_key=` is an explicit request to encrypt the stored
+        secret; silently falling back to plaintext when `cryptography` turns
+        out to be unavailable would downgrade that request without telling
+        the caller -- it must fail loudly instead, the same standard this
+        project applies to its other security-relevant fallbacks."""
         encrypt.side_effect = crypto.EncryptionUnavailableError("cryptography is not installed")
         create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
-        secret = enable_totp(self.database, "admin", secret_key="a-real-unique-secret")
+        with self.assertRaises(crypto.EncryptionUnavailableError):
+            enable_totp(self.database, "admin", secret_key="a-real-unique-secret")
+
+    def test_enable_totp_still_stores_plaintext_when_no_secret_key_is_given_at_all(self):
+        """Omitting `secret_key` entirely is a deliberate opt-out (reported
+        by `hayavega diagnose`), unlike the case above -- that path is
+        unchanged."""
+        create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
+        secret = enable_totp(self.database, "admin")
         self.assertEqual(self._raw_totp_secret(), secret)
         code = _totp_code(secret, int(time.time()))
         self.assertIsNotNone(authenticate(self.database, "admin", PASSWORD, code))
@@ -253,6 +266,15 @@ class PasswordValidatorTests(unittest.TestCase):
     def test_create_user_runs_every_validator_in_the_given_list(self):
         with self.assertRaises(ValueError):
             create_user(self.database, "alice", "alice@example.com", "password123", validators=[min_length_validator(8), common_password_validator(["password123"])])
+
+    def test_create_user_rejects_an_empty_validators_list_instead_of_silently_skipping_all_checks(self):
+        """`validators=None` (the default) means 'use the standard policy';
+        `validators=[]` is never a deliberate 'skip all password checks'
+        feature -- it is indistinguishable from a caller accidentally passing
+        an empty list, so it must fail loudly rather than let an empty-string
+        password through with zero validation."""
+        with self.assertRaises(ValueError):
+            create_user(self.database, "alice", "alice@example.com", "", validators=[])
 
     def test_create_superuser_passes_validators_through(self):
         user = create_superuser(self.database, "root", "root@example.com", "short-pw", validators=[min_length_validator(4)])
