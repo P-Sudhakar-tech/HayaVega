@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 
 import hayavega.graphql as graphql_module
-from hayavega.graphql import GraphQLSyntaxError, Schema, _depth, _Parser, _tokenize, graphql_view, login_required_resolver, permission_required_resolver
+from hayavega.graphql import GraphQLSyntaxError, Schema, _depth, _Parser, _tokenize, graphql_view, login_required_resolver, permission_required_resolver, superuser_required_resolver
 
 
 class SchemaArgumentsTests(unittest.TestCase):
@@ -292,6 +292,29 @@ class MutationAuthorizationTests(unittest.TestCase):
         self.assertEqual(result["data"]["deleteAccount"], None)
         self.assertEqual(result["errors"][0]["message"], "Authentication required.")
         self.assertEqual(called, [])
+
+    def test_login_required_resolver_runs_the_resolver_for_an_authenticated_caller(self):
+        @login_required_resolver("unused.db")
+        def whoami(request):
+            return {"ok": True}
+
+        schema = Schema(query={}, mutation={"whoami": whoami})
+        with mock.patch("hayavega.graphql.request_user", return_value=mock.Mock()):
+            result = schema.execute("mutation { whoami { ok } }", _AnonymousRequest())
+        self.assertEqual(result, {"data": {"whoami": {"ok": True}}})
+
+    def test_superuser_required_resolver_allows_a_superuser_and_rejects_a_non_superuser(self):
+        @superuser_required_resolver("unused.db")
+        def purge(request):
+            return {"ok": True}
+
+        schema = Schema(query={}, mutation={"purge": purge})
+        with mock.patch("hayavega.graphql.request_user", return_value=mock.Mock(is_superuser=True)):
+            allowed = schema.execute("mutation { purge { ok } }", _AnonymousRequest())
+        self.assertEqual(allowed, {"data": {"purge": {"ok": True}}})
+        with mock.patch("hayavega.graphql.request_user", return_value=mock.Mock(is_superuser=False)):
+            denied = schema.execute("mutation { purge { ok } }", _AnonymousRequest())
+        self.assertEqual(denied["errors"][0]["message"], "Administrator permission required.")
 
     def test_permission_required_resolver_rejects_a_caller_failing_the_predicate(self):
         @permission_required_resolver("unused.db", lambda user: user.is_superuser, message="Administrator permission required.")
