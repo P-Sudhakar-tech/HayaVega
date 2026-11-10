@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 
 import hayavega.graphql as graphql_module
-from hayavega.graphql import GraphQLSyntaxError, Schema, _depth, _Parser, _tokenize, graphql_view
+from hayavega.graphql import GraphQLSyntaxError, Schema, _depth, _Parser, _tokenize, graphql_view, login_required_resolver, permission_required_resolver
 
 
 class SchemaArgumentsTests(unittest.TestCase):
@@ -265,6 +265,57 @@ class MutationTests(unittest.TestCase):
         schema = Schema(query={}, mutation={"createUser": lambda request: {}})
         result = schema.execute("mutation { deleteUser }", None)
         self.assertIn("Cannot query field 'deleteUser'", result["errors"][0]["message"])
+
+
+class _AnonymousRequest:
+    """Enough of a Request to satisfy `request_user()`: no Bearer token, no session cookie."""
+
+    headers: dict = {}
+    cookies: dict = {}
+
+
+class MutationAuthorizationTests(unittest.TestCase):
+    """GraphQL resolvers get no equivalent of REST's `permission_required`/`secured=` --
+    protecting a mutation is otherwise entirely on the app author remembering to call
+    `request_user()` inside their own resolver body. These wrappers close that gap."""
+
+    def test_login_required_resolver_rejects_an_unauthenticated_caller_without_running_the_resolver(self):
+        called = []
+
+        @login_required_resolver("unused.db")
+        def delete_account(request):
+            called.append(True)
+            return {"ok": True}
+
+        schema = Schema(query={}, mutation={"deleteAccount": delete_account})
+        result = schema.execute("mutation { deleteAccount }", _AnonymousRequest())
+        self.assertEqual(result["data"]["deleteAccount"], None)
+        self.assertEqual(result["errors"][0]["message"], "Authentication required.")
+        self.assertEqual(called, [])
+
+    def test_permission_required_resolver_rejects_a_caller_failing_the_predicate(self):
+        @permission_required_resolver("unused.db", lambda user: user.is_superuser, message="Administrator permission required.")
+        def delete_account(request):
+            return {"ok": True}
+
+        schema = Schema(query={}, mutation={"deleteAccount": delete_account})
+        with mock.patch("hayavega.graphql.request_user", return_value=mock.Mock(is_superuser=False)):
+            result = schema.execute("mutation { deleteAccount }", _AnonymousRequest())
+        self.assertEqual(result["errors"][0]["message"], "Administrator permission required.")
+
+    def test_authorization_error_message_is_never_hidden_by_debug_false(self):
+        """Unlike an unexpected resolver exception (hidden unless debug=True, since it
+        might carry confidential internal details), an authorization rejection's message
+        is deliberately chosen by the app author to be shown -- the same as a REST 401/403's
+        `detail` -- so it must not be suppressed by the schema's default `debug=False`."""
+
+        @login_required_resolver("unused.db")
+        def delete_account(request):
+            return {"ok": True}
+
+        schema = Schema(query={}, mutation={"deleteAccount": delete_account}, debug=False)
+        result = schema.execute("mutation { deleteAccount }", _AnonymousRequest())
+        self.assertEqual(result["errors"][0]["message"], "Authentication required.")
 
 
 class ValidationAndErrorHandlingTests(unittest.TestCase):

@@ -20,9 +20,11 @@ import json as _json
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from functools import wraps
 from typing import Any, cast
 
 from .response import json_response
+from .security import request_user
 
 try:
     from hayavega_native import parse_graphql_document as _native_parse_graphql_document
@@ -36,6 +38,50 @@ _MAX_STRUCTURAL_DEPTH = 64
 
 class GraphQLSyntaxError(ValueError):
     """Raised for a malformed or unsupported GraphQL document."""
+
+
+class GraphQLAuthorizationError(Exception):
+    """Raised by `permission_required_resolver`/`login_required_resolver` to reject
+    an unauthenticated or unauthorized caller.
+
+    Unlike an arbitrary resolver exception -- whose message is hidden unless
+    `Schema(debug=True)`, since it might carry confidential internal details
+    (a database driver's own connection-failure message, for example) -- this
+    error's message is always shown to the client, the same as a REST
+    `permission_required` view's 401/403 `detail`: the app author chose this
+    exact message to be read by the caller, so suppressing it would make the
+    rejection unactionable for no security benefit.
+    """
+
+
+def permission_required_resolver(database_path, predicate, *, message: str = "Permission denied."):
+    """Require an authenticated user satisfying `predicate(user)` before a GraphQL
+    resolver runs -- the GraphQL-side equivalent of `hayavega.security.permission_required`
+    for REST views. Without this (or an equivalent manual `request_user()` check written
+    into the resolver itself), a mutation runs for any caller regardless of authentication.
+    """
+
+    def decorate(resolver):
+        @wraps(resolver)
+        def protected(request, **kwargs):
+            user = request_user(request, database_path)
+            if user is None:
+                raise GraphQLAuthorizationError("Authentication required.")
+            if not predicate(user):
+                raise GraphQLAuthorizationError(message)
+            return resolver(request, **kwargs)
+
+        return protected
+
+    return decorate
+
+
+def login_required_resolver(database_path):
+    return permission_required_resolver(database_path, lambda user: True)
+
+
+def superuser_required_resolver(database_path):
+    return permission_required_resolver(database_path, lambda user: user.is_superuser, message="Administrator permission required.")
 
 
 # ---------------------------------------------------------------------------
@@ -466,6 +512,9 @@ class Schema:
             value = resolver(request, **arguments)
         except GraphQLSyntaxError as exc:
             errors.append({"message": str(exc)})
+            return None
+        except GraphQLAuthorizationError as exc:
+            errors.append({"message": str(exc), "error_type": type(exc).__name__})
             return None
         except Exception as exc:
             LOGGER.exception("Unhandled resolver error field=%s", field_node.name)
