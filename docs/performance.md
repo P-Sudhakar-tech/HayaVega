@@ -100,11 +100,17 @@ numbers above, so the two environments are not a fair head-to-head
 against each other, only each internally consistent._ One more honest
 gap, disclosed rather than smoothed over: Hayavega's WSGI transport
 (`waitress`) is dramatically slower than its own ASGI transport on this
-specific CI runner for `db_list`/`template_render` (86 and 104 req/s,
-vs. 1804 and 1340 on the Windows numbers above) -- a much larger gap than
-anything seen on Windows. This was not root-caused as part of publishing
-these numbers; it is published as-is, honestly, as a lead for a future
-investigation rather than papered over or excluded.
+specific CI runner for `db_list`/`template_render` -- roughly a 45x gap
+(86 vs. 3926 req/s) and a 29x gap (104 vs. 3002 req/s) respectively,
+computed entirely from the Linux numbers above. It's the *size* of this
+WSGI/ASGI gap that's unusual, not a cross-machine throughput comparison:
+on Windows the same two transports were close to each other (see the
+table above), so this split is specific to the Linux runner. The gap
+occurs at a 100% success rate -- no timeouts or errors are depressing
+the WSGI figure -- but with genuine tail-latency contention, e.g. p99
+around 4.6s vs. p50 around 75ms on `db_list`. This was not root-caused
+as part of publishing these numbers; it is published as-is, honestly, as
+a lead for a future investigation rather than papered over or excluded.
 
 Hayavega leads every published scenario on both transports on Windows.
 On Linux CI, Hayavega's ASGI transport leads every scenario; the WSGI
