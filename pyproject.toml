@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "hayavega"
+name = "hayavega-framework"
 version = "0.1.0"
 description = "A Python web framework with a conventional project structure, automatic interactive API docs, and a Rust core"
 readme = "README.md"
