@@ -182,10 +182,7 @@ def benchmark_target(target: Target, *, duration: str, connections: int, warmup_
             # Warm up (import caches, JIT-ish effects, DB file creation) before measuring.
             run_oha(f"{base_url}{scenarios[0][2]}", "GET", duration="2s", connections=min(connections, 10))
             for name, method, path in scenarios:
-                result.scenarios[name] = [
-                    run_oha(f"{base_url}{path}", method, duration=duration, connections=connections)
-                    for _ in range(runs)
-                ]
+                result.scenarios[name] = [run_oha(f"{base_url}{path}", method, duration=duration, connections=connections) for _ in range(runs)]
         except Exception as error:  # noqa: BLE001 -- record and continue to the next target
             result.error = str(error)
         finally:
