@@ -431,6 +431,59 @@ concurrency model at all.
   reverse proxy (nginx, a cloud load balancer), the same guidance
   `DEPLOYMENT.md` already gives for `gunicorn`/`waitress`.
 
+## Cold-start time: a real, previously unmeasured win
+
+Every benchmark above measures steady-state throughput of an already-running,
+already-warmed-up server -- none of them say anything about how fast a
+process actually boots, which matters for serverless/container cold starts,
+CLI dev-server restarts, and autoreload cycles. `benchmarks/startup_time.py`
+measures wall-clock time from process launch to the first successful
+`GET /echo`, across every target this suite already runs.
+
+Profiling `import hayavega` in isolation (`python -X importtime`) found the
+cause of a real, fixable cost: `hayavega/__init__.py` imported all ~20
+submodules unconditionally at package-import time, including ones almost
+never needed on a hot request path -- `testing` (pulls in asyncio machinery
+for `AsyncTestClient`), `mail` (`smtplib`/`urllib.parse`), `admin`/`security`
+(`dis`/`tokenize`, pulled in transitively via `dataclasses`/`inspect`). Bare
+`import hayavega` cost ~800-1040ms before this fix -- slower than Django's
+own bare import (~185-610ms, admittedly without `django.setup()`) despite
+Hayavega's HTTP layer winning every throughput comparison above.
+
+**Fixed with PEP 562 lazy module attributes**: `hayavega/__init__.py` now
+resolves every public name through a module-level `__getattr__` on first
+access, caching it afterward, instead of importing all ~20 submodules
+eagerly. `from hayavega import Entity` and `hayavega.Entity` both still work
+exactly as before -- Python's import machinery calls `__getattr__`
+automatically for any name not already bound on the module object -- so this
+is invisible to every existing caller. Verified by the full test suite
+(1004 tests, 100% coverage, including a dedicated `tests/test_package_lazy_imports.py`)
+before and after.
+
+**Result: bare `import hayavega` dropped from ~800-1040ms to ~140-160ms**, a
+~5-6x reduction. At the full server-boot level (process launch to first
+successful request, 7 trials each):
+
+| Target | Median boot time |
+|---|---:|
+| Hayavega (waitress) | 1028.8 ms |
+| Hayavega (Rust runtime) | 1044.9 ms |
+| Hayavega (ASGI/uvicorn) | 1026.6 ms |
+| Django (waitress) | 1026.7 ms |
+| FastAPI (uvicorn) | 1569.0 ms |
+
+**Hayavega now boots ~1.5x faster than FastAPI**, consistent with
+`import fastapi` alone costing several times more than `import hayavega`
+(`pydantic-core`/OpenAPI schema machinery). Django and every Hayavega
+transport now land in the same ~1020-1050ms band -- the remaining floor is
+shared process-spawn/interpreter-startup overhead on this environment
+(confirmed: a bare `python -c "pass"` subprocess alone costs ~75-125ms, and
+`python -m <server>`'s own module-resolution/socket-bind cost accounts for
+most of the rest), not something either framework's own import graph
+controls. This is the first startup-time number this suite has ever
+published, and it moved a real amount from a fix that also helps every real
+deployment, not just this benchmark.
+
 ## About `oha`
 
 [`oha`](https://github.com/hatoo/oha) is a Rust-based HTTP load generator,
