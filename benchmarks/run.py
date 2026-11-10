@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import time
@@ -51,8 +52,30 @@ class ScenarioResult:
 @dataclass
 class TargetResult:
     target: Target
-    scenarios: dict[str, ScenarioResult] = field(default_factory=dict)
+    scenarios: dict[str, list[ScenarioResult]] = field(default_factory=dict)
     error: str | None = None
+
+
+@dataclass
+class AggregatedResult:
+    requests_per_sec_median: float
+    requests_per_sec_min: float
+    requests_per_sec_max: float
+    p50_ms_median: float
+    success_rate_min: float
+
+
+def aggregate(results: list[ScenarioResult]) -> AggregatedResult:
+    requests_per_sec = [r.requests_per_sec for r in results]
+    p50_ms = [r.p50_ms for r in results]
+    success_rate = [r.success_rate for r in results]
+    return AggregatedResult(
+        requests_per_sec_median=statistics.median(requests_per_sec),
+        requests_per_sec_min=min(requests_per_sec),
+        requests_per_sec_max=max(requests_per_sec),
+        p50_ms_median=statistics.median(p50_ms),
+        success_rate_min=min(success_rate),
+    )
 
 
 def build_targets() -> list[Target]:
@@ -132,7 +155,7 @@ def run_oha(url: str, method: str, *, duration: str, connections: int) -> Scenar
     return parse_oha_output(completed.stdout)
 
 
-def benchmark_target(target: Target, *, duration: str, connections: int, warmup_requests: int, scenarios: list[tuple[str, str, str]] | None = None) -> TargetResult:
+def benchmark_target(target: Target, *, duration: str, connections: int, warmup_requests: int, scenarios: list[tuple[str, str, str]] | None = None, runs: int = 1) -> TargetResult:
     scenarios = SCENARIOS if scenarios is None else scenarios
     result = TargetResult(target)
     log_slug = re.sub(r"[^a-z0-9]+", "_", target.name.lower()).strip("_")
@@ -152,7 +175,10 @@ def benchmark_target(target: Target, *, duration: str, connections: int, warmup_
             # Warm up (import caches, JIT-ish effects, DB file creation) before measuring.
             run_oha(f"{base_url}{scenarios[0][2]}", "GET", duration="2s", connections=min(connections, 10))
             for name, method, path in scenarios:
-                result.scenarios[name] = run_oha(f"{base_url}{path}", method, duration=duration, connections=connections)
+                result.scenarios[name] = [
+                    run_oha(f"{base_url}{path}", method, duration=duration, connections=connections)
+                    for _ in range(runs)
+                ]
         except Exception as error:  # noqa: BLE001 -- record and continue to the next target
             result.error = str(error)
         finally:
@@ -182,8 +208,18 @@ def render_markdown(results: list[TargetResult], *, duration: str, connections: 
             if result.error:
                 lines.append(f"| {result.target.name} | {result.target.server} | -- | -- | -- | -- | error: {result.error} |")
                 continue
-            scenario = result.scenarios[name]
-            lines.append(f"| {result.target.name} | {result.target.server} | {scenario.requests_per_sec:.0f} | {scenario.p50_ms:.2f} | {scenario.p90_ms:.2f} | {scenario.p99_ms:.2f} | {scenario.success_rate:.1f}% |")
+            runs = result.scenarios[name]
+            scenario = runs[0]
+            if len(runs) > 1:
+                agg = aggregate(runs)
+                req_s = f"{agg.requests_per_sec_median:.0f} (min {agg.requests_per_sec_min:.0f}, max {agg.requests_per_sec_max:.0f})"
+                p50 = f"{agg.p50_ms_median:.2f}"
+                success = f"{agg.success_rate_min:.1f}%"
+            else:
+                req_s = f"{scenario.requests_per_sec:.0f}"
+                p50 = f"{scenario.p50_ms:.2f}"
+                success = f"{scenario.success_rate:.1f}%"
+            lines.append(f"| {result.target.name} | {result.target.server} | {req_s} | {p50} | {scenario.p90_ms:.2f} | {scenario.p99_ms:.2f} | {success} |")
         lines.append("")
     return "\n".join(lines)
 
@@ -193,13 +229,14 @@ def main() -> None:
     parser.add_argument("--duration", default="10s", help="oha -z duration per scenario (default: 10s)")
     parser.add_argument("--connections", type=int, default=50, help="oha -c concurrency (default: 50)")
     parser.add_argument("--requests-warmup", type=int, default=50, dest="warmup_requests")
+    parser.add_argument("--runs", type=int, default=1, help="Repeat each scenario this many times and report median + spread (default: 1)")
     args = parser.parse_args()
 
     if shutil.which("oha") is None:
         raise SystemExit("oha is not on PATH. See benchmarks/README.md for install instructions.")
 
     RESULTS_DIR.mkdir(exist_ok=True)
-    results = [benchmark_target(target, duration=args.duration, connections=args.connections, warmup_requests=args.warmup_requests) for target in build_targets()]
+    results = [benchmark_target(target, duration=args.duration, connections=args.connections, warmup_requests=args.warmup_requests, runs=args.runs) for target in build_targets()]
 
     for result in results:
         status = f"error: {result.error}" if result.error else "ok"
