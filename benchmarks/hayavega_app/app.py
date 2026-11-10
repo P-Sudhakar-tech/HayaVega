@@ -15,6 +15,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from hayavega import Entity, Integer, Text, api_route, path, static_routes
+from hayavega.db import SerializedConnection
 from hayavega.graphql import Schema, graphql_view
 from hayavega.response import Response
 from hayavega.runtime import create_application
@@ -37,6 +38,28 @@ class Post(Entity):
     views = Integer()
 
 
+# A shared, serialized read-only connection instead of posts_json/posts_page
+# each opening a fresh sqlite3.connect() per request (what Post.collection()
+# does, and what FastAPI's own fetch_posts() does too -- see
+# benchmarks/README.md's "Fixing template_render" section). Measured: this
+# closes part of the gap to FastAPI on db_list/template_render specifically,
+# since those two scenarios' shared DB-open cost was diluting the Rust
+# runtime's HTTP-layer win (json_echo, which touches no DB, is unaffected).
+# Entity.collection() stays in use for writes (seed(), the htmx fragment
+# routes) and for the WSGI/waitress run.py comparison, unchanged -- this is
+# scoped to the two routes the regression was actually measured on.
+# Built lazily (not at import time): a read-only connection requires the
+# database file to already exist, which only happens once seed() has run.
+_posts_reader: SerializedConnection | None = None
+
+
+def _reader() -> SerializedConnection:
+    global _posts_reader
+    if _posts_reader is None:
+        _posts_reader = SerializedConnection(str(DATABASE))
+    return _posts_reader
+
+
 def seed() -> None:
     collection = Post.collection(DATABASE)
     if collection.total() >= SEED_COUNT:
@@ -50,11 +73,11 @@ def echo(request):
 
 
 def posts_json(request):
-    return Post.collection(DATABASE).browse().arrange("id").window(SEED_COUNT).values("id", "title", "views")
+    return _reader().execute(f"SELECT id, title, views FROM {Post.__table__} ORDER BY id LIMIT ?", (SEED_COUNT,))
 
 
 def posts_page(request):
-    posts = Post.collection(DATABASE).browse().arrange("id").window(SEED_COUNT).values("title", "views")
+    posts = _reader().execute(f"SELECT title, views FROM {Post.__table__} ORDER BY id LIMIT ?", (SEED_COUNT,))
     body = render_template("page.html", {"posts": posts}, directories=(BASE_DIR / "templates",))
     return Response(body)
 

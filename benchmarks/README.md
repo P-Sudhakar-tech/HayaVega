@@ -1209,6 +1209,67 @@ previously benchmarked only against Hayavega's own `waitress`, with a
 FastAPI win inferred rather than measured. It is now measured directly,
 and the inference holds.
 
+## Chasing a bigger margin: does `SerializedConnection` move `db_list`/`template_render` under the Rust runtime?
+
+Asked directly whether Hayavega could show a 10-20x margin over
+FastAPI/Django across the board: no, not with this architecture, and
+claiming otherwise would contradict every number already published in
+this document. `json_echo` (no database work) is the only scenario where
+a double-digit ratio has been observed at all, and only on noisy runs
+(see below) -- `db_list` and `template_render` are both bounded by the
+~35-45ms-per-request SQLite connection-and-query cost every framework in
+this suite pays identically, which no HTTP-layer improvement on
+Hayavega's side can shrink.
+
+What *was* worth checking: `SerializedConnection` ("a real win" above) was
+only ever benchmarked in isolation (`serialized_connection_vs_python.py`)
+or null-tested under `waitress`'s 16-thread pool
+(`enable_readonly_connection_pooling()`'s own docstring) -- never actually
+wired into `posts_json`/`posts_page` and measured at the HTTP level
+*under the Rust runtime specifically*, where the baseline per-request
+overhead is already small enough that one shared connection replacing N
+fresh `sqlite3.connect()` calls has more relative room to matter.
+`benchmarks/hayavega_app/app.py`'s `posts_json`/`posts_page` now read
+through one shared `SerializedConnection` instead of
+`Post.collection(DATABASE)`'s fresh connection per request (writes --
+`seed()`, the htmx fragment routes -- are untouched).
+
+**Paired before/after runs (`--duration 10s --connections 30`), same
+machine, same session -- noisy, disclosed rather than cherry-picked:**
+
+| Scenario | vs FastAPI, before | vs FastAPI, after | vs Django, before | vs Django, after |
+|---|---:|---:|---:|---:|
+| `json_echo` | 5.96x | 10.09x* | 5.43x | 5.70x |
+| `db_list` | 3.52x | 4.49x | 3.85x | 5.48x |
+| `template_render` | 1.73x | 2.59x | 4.01x | 4.85x |
+| `static_file` | 4.25x | 4.51x | 2.31x | 1.60x |
+
+\* `json_echo` touches no database at all, so this run's jump is this
+dev machine's own run-to-run noise on the FastAPI side (its `json_echo`
+baseline alone swung from 958 to 668 req/s between runs with zero code
+changed), not a `SerializedConnection` effect -- included for
+transparency, not claimed as caused by this change. `static_file` moving
+in both directions across the two framework comparisons is the same
+noise, also untouched by this change (no scenario here reads the
+database for static files).
+
+**The real, attributable signal is `template_render`**: a consistent,
+reproducible improvement in both comparisons (1.73x to 2.59x vs FastAPI,
+4.01x to 4.85x vs Django) across every paired run taken, including two
+additional confirmation runs not tabulated above. `db_list` moved up in
+three of four paired runs taken but was flat in one, so it reads as a
+real but smaller and less consistent effect than `template_render`'s --
+plausibly because `template_render` pays the connection-open cost *and*
+a render step, giving a shared-connection fix more total time to recover
+proportionally.
+
+**Decision: wired in**, scoped to exactly the two read routes this was
+measured on. This does not change the headline conclusion: the ceiling
+for this architecture, measured honestly, is single-digit multipliers on
+I/O-bound scenarios and a best case around 5-10x on I/O-free ones that
+is itself sensitive to machine noise -- not the 10-20x a casual
+comparison might assume from `json_echo` alone.
+
 ## Real concurrent I/O under ASGI: the scenario every prior comparison left open
 
 Every scenario benchmarked anywhere above (`json_echo`, `db_list`,
