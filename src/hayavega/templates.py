@@ -25,6 +25,7 @@ to the interpreter, which remains fully supported and unchanged.
 from __future__ import annotations
 
 import re
+import stat
 from collections.abc import Callable
 from dataclasses import dataclass
 from html import escape
@@ -640,19 +641,27 @@ _cache_lock = Lock()
 _template_cache: dict[Path, tuple[float, _CompiledTemplate]] = {}
 
 
-def _find_template_file(template_name: str, directories) -> Path:
+def _find_template_file(template_name: str, directories) -> tuple[Path, float]:
+    """Returns the matching path and its mtime from the same `stat()` call
+    that locates it, instead of a separate `is_file()` check (one syscall)
+    followed by the caller's own `.stat()` (a second syscall on the exact
+    same file) -- found via `cProfile` showing `nt.stat` at a real,
+    measurable share of `template_render`'s per-request cost."""
     if Path(template_name).is_absolute() or ".." in Path(template_name).parts:
         raise ValueError("Template paths must stay inside a template directory.")
     for directory in map(Path, directories):
         candidate = directory / template_name
-        if candidate.is_file():
-            return candidate
+        try:
+            result = candidate.stat()
+        except OSError:
+            continue
+        if stat.S_ISREG(result.st_mode):
+            return candidate, result.st_mtime
     raise TemplateNotFound(template_name)
 
 
 def _compile_cached(template_name: str, directories) -> _CompiledTemplate:
-    path = _find_template_file(template_name, directories)
-    mtime = path.stat().st_mtime
+    path, mtime = _find_template_file(template_name, directories)
     with _cache_lock:
         cached = _template_cache.get(path)
         if cached is not None and cached[0] == mtime:
