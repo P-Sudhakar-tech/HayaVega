@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, worktree-benchmark-credibility]
   pull_request:
 
 jobs:
