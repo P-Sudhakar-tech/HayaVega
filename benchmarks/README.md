@@ -25,13 +25,22 @@ once someone is ready to take on that setup.
 
 ```powershell
 cargo install oha   # or download a prebuilt binary -- see "About oha" below
-pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress requests
+pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress granian requests
 python benchmarks/run.py --duration 10s --connections 200 --runs 5
 ```
 
 `uvicorn` (already in the command above) serves both the FastAPI target and
 the Hayavega (ASGI) target added when Phase 3 introduced `hayavega.asgi`; no
 extra dependency is needed for it.
+
+`granian` (also in the command above) is a Rust-core ASGI/RSGI server,
+installed to serve `benchmarks/raw_asgi_app/app.py`'s raw ASGI baseline --
+a server, not a framework, so it needs no application code of its own.
+Verified standalone: `granian --interface asgi
+benchmarks.raw_asgi_app.app:application --host 127.0.0.1 --port 9021`, then
+`curl http://127.0.0.1:9021/echo` returns `{"status": "ok"}`. Ships a
+prebuilt wheel on PyPI for Windows, so a plain `pip install granian` (as
+above) is enough -- no Rust toolchain needed.
 
 **`--runs N`** repeats every scenario `N` times per target and reports the
 median req/s (plus the observed min/max spread) instead of a single
