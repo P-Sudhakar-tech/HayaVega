@@ -89,7 +89,7 @@ def _settings_checks(settings) -> list[CheckMessage]:
 def _crypto_checks() -> list[CheckMessage]:
     if crypto.available():
         return []
-    return [CheckMessage("info", "`cryptography` is not installed; any `enable_totp()` secret is stored in plaintext instead of encrypted.", "Run `uv add cryptography` (or `pip install cryptography`) to encrypt TOTP secrets at rest.")]
+    return [CheckMessage("info", "`cryptography` is not installed; `enable_totp()` without `secret_key=` stores its secret in plaintext, and a call that does pass `secret_key=` will raise instead of encrypting it.", "Run `uv add cryptography` (or `pip install cryptography`) to encrypt TOTP secrets at rest.")]
 
 
 def _pending_migration_checks(settings) -> list[CheckMessage]:
