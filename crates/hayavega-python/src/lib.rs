@@ -477,6 +477,75 @@ impl PySignalDispatcher {
     }
 }
 
+/// One bound parameter, converted from a Python value to a form rusqlite
+/// can bind without needing the GIL again once the worker actually runs
+/// the query. Covers every type this project's own call sites pass
+/// (`int`/`str`/`float`/`bytes`/`None`/`bool`) -- not a general Python-to-
+/// SQLite marshaler, since `SerializedConnection.execute()` is documented
+/// as accepting a plain parameter tuple for a raw SQL string, not
+/// arbitrary Python objects.
+#[derive(Clone)]
+enum BoundParam {
+    Null,
+    Integer(i64),
+    Real(f64),
+    Text(String),
+    Blob(Vec<u8>),
+}
+
+impl rusqlite::types::ToSql for BoundParam {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        use rusqlite::types::{ToSqlOutput, Value};
+        Ok(match self {
+            BoundParam::Null => ToSqlOutput::Owned(Value::Null),
+            BoundParam::Integer(v) => ToSqlOutput::Owned(Value::Integer(*v)),
+            BoundParam::Real(v) => ToSqlOutput::Owned(Value::Real(*v)),
+            BoundParam::Text(v) => ToSqlOutput::Owned(Value::Text(v.clone())),
+            BoundParam::Blob(v) => ToSqlOutput::Owned(Value::Blob(v.clone())),
+        })
+    }
+}
+
+fn python_param_to_bound(value: &Bound<'_, PyAny>) -> PyResult<BoundParam> {
+    if value.is_none() {
+        Ok(BoundParam::Null)
+    } else if let Ok(v) = value.extract::<bool>() {
+        Ok(BoundParam::Integer(v as i64))
+    } else if let Ok(v) = value.extract::<i64>() {
+        Ok(BoundParam::Integer(v))
+    } else if let Ok(v) = value.extract::<f64>() {
+        Ok(BoundParam::Real(v))
+    } else if let Ok(v) = value.extract::<Vec<u8>>() {
+        Ok(BoundParam::Blob(v))
+    } else if let Ok(v) = value.extract::<String>() {
+        Ok(BoundParam::Text(v))
+    } else {
+        Err(pyo3::exceptions::PyTypeError::new_err(format!("SerializedConnection.execute() cannot bind parameter of type {}", value.get_type().name()?)))
+    }
+}
+
+/// One already-fetched result row: column name paired with its value,
+/// converted from SQLite's own type system to a Python-ready form while
+/// still off the GIL -- only the final `PyDict`/`PyList` construction
+/// needs Python at all.
+enum CellValue {
+    Null,
+    Integer(i64),
+    Real(f64),
+    Text(String),
+    Blob(Vec<u8>),
+}
+
+fn cell_to_python<'py>(py: Python<'py>, value: &CellValue) -> Bound<'py, PyAny> {
+    match value {
+        CellValue::Null => py.None().into_bound(py),
+        CellValue::Integer(v) => v.into_pyobject(py).unwrap().into_any(),
+        CellValue::Real(v) => v.into_pyobject(py).unwrap().into_any(),
+        CellValue::Text(v) => v.into_pyobject(py).unwrap().into_any(),
+        CellValue::Blob(v) => PyBytes::new(py, v).into_any(),
+    }
+}
+
 /// One query request, and the channel its result comes back on.
 struct QueryJob {
     sql: String,
@@ -484,48 +553,102 @@ struct QueryJob {
     respond_to: Sender<PyResult<Py<PyAny>>>,
 }
 
-fn run_query_job(connection: &Py<PyAny>, job: QueryJob) {
-    let result = Python::attach(|py| -> PyResult<Py<PyAny>> {
-        let cursor = connection.bind(py).call_method1("execute", (job.sql, job.params))?;
-        let rows = cursor.call_method0("fetchall")?;
-        let dict_ctor = py.import("builtins")?.getattr("dict")?;
-        let result_list = PyList::empty(py);
-        for row in rows.try_iter()? {
-            result_list.append(dict_ctor.call1((row?,))?)?;
+/// Runs the query entirely through `rusqlite` -- a native Rust SQLite
+/// driver, not Python's own `sqlite3` module -- so the worker thread does
+/// not need the GIL at all for the actual statement preparation,
+/// execution, and row fetching, only for reading the incoming parameter
+/// tuple beforehand and building the resulting `list[dict]` afterward.
+/// Replaces an earlier version that called back into Python's `sqlite3`
+/// module for every query *and* called Python's `dict()` constructor once
+/// per returned row -- measured (`benchmarks/serialized_connection_vs_python.py`
+/// and direct `cProfile` profiling of `benchmarks/hayavega_app/app.py`'s
+/// `/posts.json`) at ~140-220us/call for a trivial 20-row `SELECT`, the
+/// single largest cost in that route's entire request. See
+/// `RUST_CORE_REWRITE_ROADMAP.md` for the benchmarked result.
+fn run_query_job(connection: &Mutex<rusqlite::Connection>, job: QueryJob) {
+    let bound_params: PyResult<Vec<BoundParam>> = Python::attach(|py| {
+        let tuple = job.params.bind(py).cast::<PyTuple>().map_err(|_| pyo3::exceptions::PyTypeError::new_err("SerializedConnection.execute() params must be a tuple"))?;
+        tuple.iter().map(|item| python_param_to_bound(&item)).collect()
+    });
+    let result = (|| -> PyResult<(Vec<String>, Vec<Vec<CellValue>>)> {
+        let bound_params = bound_params?;
+        let conn = connection.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut statement = conn.prepare(&job.sql).map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
+        let column_names: Vec<String> = statement.column_names().into_iter().map(String::from).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = bound_params.iter().map(|p| p as &dyn rusqlite::types::ToSql).collect();
+        let rows = statement
+            .query_map(param_refs.as_slice(), |row| {
+                let mut cells = Vec::with_capacity(column_names.len());
+                for index in 0..column_names.len() {
+                    let cell = match row.get_ref(index)? {
+                        rusqlite::types::ValueRef::Null => CellValue::Null,
+                        rusqlite::types::ValueRef::Integer(v) => CellValue::Integer(v),
+                        rusqlite::types::ValueRef::Real(v) => CellValue::Real(v),
+                        rusqlite::types::ValueRef::Text(v) => CellValue::Text(String::from_utf8_lossy(v).into_owned()),
+                        rusqlite::types::ValueRef::Blob(v) => CellValue::Blob(v.to_vec()),
+                    };
+                    cells.push(cell);
+                }
+                Ok(cells)
+            })
+            .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
+        let mut materialized_rows = Vec::new();
+        for row in rows {
+            materialized_rows.push(row.map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?);
         }
-        Ok(result_list.into_any().unbind())
+        Ok((column_names, materialized_rows))
+    })();
+    // Each column-name string is converted to a Python object exactly once
+    // per query and reused across every row's dict -- not once per
+    // (row, column) pair, which `PyDict::set_item(&String, ...)` would do
+    // if called with a fresh Rust `String` reference each time. Profiling
+    // found this interning absent entirely: a 20-row result paid for 60
+    // fresh `PyUnicode` allocations (3 columns x 20 rows) instead of 3,
+    // the single largest remaining cost in `db_list`/`template_render`
+    // after switching this type to `rusqlite`.
+    let final_result = result.and_then(|(column_names, rows)| {
+        Python::attach(|py| -> PyResult<Py<PyAny>> {
+            let keys: Vec<_> = column_names.iter().map(|name| name.into_pyobject(py).unwrap()).collect();
+            let result_list = PyList::empty(py);
+            for cells in &rows {
+                let dict = PyDict::new(py);
+                for (key, cell) in keys.iter().zip(cells.iter()) {
+                    dict.set_item(key, cell_to_python(py, cell))?;
+                }
+                result_list.append(dict)?;
+            }
+            Ok(result_list.into_any().unbind())
+        })
     });
-    let _ = job.respond_to.send(result);
+    let _ = job.respond_to.send(final_result);
 }
 
-fn close_connection(connection: &Py<PyAny>) {
-    Python::attach(|py| {
-        let _ = connection.bind(py).call_method0("close");
-    });
-}
-
-/// Phase 3 of `RUST_CORE_REWRITE_ROADMAP.md`: one Python `sqlite3`
-/// read-only connection (opened the same way `db.py`'s `_open_readonly`
-/// does, `row_factory = sqlite3.Row`), owned by a single dedicated native
-/// thread, serializing every query through one `mpsc` channel instead of
-/// each caller thread holding its own connection -- the genuinely
-/// different architecture from Python's existing per-thread pooling (see
-/// `db.py`'s `enable_readonly_connection_pooling`), not a Rust port of
-/// that pool's bookkeeping. No new Rust SQLite dependency: the worker
-/// thread calls back into the same C-level `sqlite3` module already in
-/// use, via `Python::attach`, exactly the way `run_signal_job` calls a
-/// subscriber -- what's different is there is only ever one connection.
+/// Phase 3 of `RUST_CORE_REWRITE_ROADMAP.md`: one read-only SQLite
+/// connection, owned by a single dedicated native thread, serializing
+/// every query through one `mpsc` channel instead of each caller thread
+/// holding its own connection -- the genuinely different architecture
+/// from Python's existing per-thread pooling (see `db.py`'s
+/// `enable_readonly_connection_pooling`), not a Rust port of that pool's
+/// bookkeeping.
+///
+/// **Uses `rusqlite` (a native Rust SQLite driver), not Python's own
+/// `sqlite3` module.** An earlier version called back into Python's
+/// `sqlite3` for every query and called Python's `dict()` constructor
+/// once per returned row -- profiling found that cross-GIL round trip
+/// costing ~140-220us for a trivial 20-row `SELECT` on this codebase's
+/// own benchmark app, the single largest cost in that route's entire
+/// request (see `RUST_CORE_REWRITE_ROADMAP.md`'s benchmarked result and
+/// `benchmarks/serialized_connection_vs_python.py`). The worker thread
+/// now does statement preparation, execution, and row fetching entirely
+/// off the GIL; it attaches to Python only twice per query, briefly: once
+/// to read the incoming parameter tuple before releasing the GIL to run
+/// the query, once to build the resulting `list[dict]` from already-
+/// materialized Rust values afterward.
 ///
 /// `execute()` releases the GIL (`py.detach`) while waiting for the
-/// worker's response -- required, not optional: the worker thread's own
-/// `Python::attach` call (needed to actually run the query) would
-/// otherwise deadlock against the calling thread still holding the GIL
-/// while blocked in `response.recv()`.
-///
-/// Benchmarked at full HTTP level against both Python options (no
-/// pooling, `enable_readonly_connection_pooling()`) -- see
-/// `benchmarks/serialized_connection_vs_python.py`; not wired into
-/// `db.py` unless that benchmark shows a decisive win over both.
+/// worker's response, same as before this change -- not because the
+/// worker needs it back (it mostly doesn't, now), but so the calling
+/// thread doesn't block other Python threads while it waits.
 #[pyclass(name = "SerializedConnection")]
 struct PySerializedConnection {
     sender: Option<Sender<QueryJob>>,
@@ -535,36 +658,21 @@ struct PySerializedConnection {
 #[pymethods]
 impl PySerializedConnection {
     #[new]
-    fn new(py: Python<'_>, path: String) -> PyResult<Self> {
-        let sqlite3 = py.import("sqlite3")?;
+    fn new(path: String) -> PyResult<Self> {
         let uri = format!("file:{path}?mode=ro");
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("uri", true)?;
-        // The connection is opened on the thread that calls SerializedConnection(...)
-        // but only ever used afterward on this struct's own dedicated worker
-        // thread -- different threads, by design. Python's sqlite3 module's
-        // default check_same_thread=True would reject that as unsafe cross-
-        // thread use; it's safe here specifically because this type's own
-        // serialization guarantees only one thread (the worker) ever touches
-        // the connection, and always one query at a time, never concurrently.
-        kwargs.set_item("check_same_thread", false)?;
-        let raw_connection = sqlite3.call_method("connect", (uri,), Some(&kwargs))?;
-        raw_connection.setattr("row_factory", sqlite3.getattr("Row")?)?;
-        let connection: Py<PyAny> = raw_connection.unbind();
+        let flags = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let raw_connection = rusqlite::Connection::open_with_flags(&uri, flags).map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
+        let connection = Mutex::new(raw_connection);
 
         let (sender, receiver) = channel::<QueryJob>();
         let worker = thread::spawn(move || {
             while let Ok(job) = receiver.recv() {
                 run_query_job(&connection, job);
             }
-            // The sender was dropped (close() called, or this object was
-            // garbage collected) -- close the connection deterministically
-            // here rather than leaving it to whenever Py<PyAny>'s own drop
-            // happens to run. close() joins this thread before returning,
-            // so the file handle is actually released by the time it does
-            // -- dropping the sender alone only *starts* that shutdown, it
-            // doesn't wait for it.
-            close_connection(&connection);
+            // connection (and the rusqlite::Connection it wraps) drops here,
+            // closing the file handle deterministically once the channel is
+            // drained -- close() below joins this thread before returning,
+            // so the handle is guaranteed released by the time it does.
         });
         Ok(Self { sender: Some(sender), worker: Some(worker) })
     }

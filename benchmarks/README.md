@@ -490,7 +490,78 @@ cost documented throughout this file -- no scenario with real I/O
 crosses 10x, and none is expected to without a fundamentally different
 data layer, which is a different project than optimizing this one.
 
-## Cold-start time: a real, previously unmeasured win
+## `SerializedConnection` rewritten on `rusqlite`: the structural gap closed, and `db_list` crosses 10x
+
+The previous section's hot-path profiling found Python-level overhead, but
+re-profiling `db_list` directly (`cProfile` against `/posts.json`, no
+sockets) found something bigger: `SerializedConnection.execute()` itself --
+not routing, not request parsing, not JSON encoding -- was ~73% of total
+per-request time. Looking at why revealed the real gap: despite being a
+Rust type (`hayavega_native.SerializedConnection`), its worker thread was
+still calling back into **Python's own `sqlite3` module** for every query
+and calling Python's `dict()` constructor once per returned row --
+`crates/hayavega-python/src/lib.rs`'s own docstring said so plainly ("the
+worker thread calls back into the same C-level `sqlite3` module already in
+use"). For a framework whose whole performance story is "Rust-accelerated,"
+the one component that touches the database on every `db_list`/
+`template_render` request wasn't actually running any Rust SQL code at all.
+
+**Fixed**: added `rusqlite` (a native Rust SQLite driver, `bundled` feature
+so it compiles its own SQLite C source rather than depending on a system
+library) and rewrote `PySerializedConnection`'s worker thread to prepare,
+execute, and fetch rows entirely through it -- the GIL is now needed only
+twice per query: briefly to read the incoming parameter tuple, and briefly
+to build the resulting `list[dict]` from already-materialized Rust values
+afterward. A second, smaller fix came from profiling the rewrite itself:
+the first version converted each row's column-name strings to Python
+objects fresh on every row (3 columns x 20 rows = 60 `PyUnicode`
+allocations instead of 3) -- interning them once per query and reusing
+them across rows shaved a further ~17% off per-call cost.
+
+**Verified correct, not just fast**: the full test suite (1004 tests, 100%
+coverage, including `tests/test_db.py`'s existing `SerializedConnection`
+coverage) passes unchanged; manually verified empty result sets, malformed-SQL
+error propagation, and non-ASCII text round-tripping correctly (an ambiguous
+`WHERE` clause briefly looked like a unicode bug during testing -- it
+wasn't; a second seeded row coincidentally matched the same query).
+`cargo test -p hayavega-python`'s own in-process unit tests fail to run
+standalone in this environment with `STATUS_DLL_NOT_FOUND` -- confirmed
+pre-existing on `main` before this change (a `cdylib` extension-module
+build expecting to be loaded by Python, not run as its own executable),
+not something this change introduced.
+
+**Result: the first scenario with real database I/O to cross 10x in this
+document's entire history**, three runs each:
+
+| Scenario | vs FastAPI (3 runs) | vs Django (3 runs) |
+|---|---:|---:|
+| `json_echo` | 5.41x, 6.07x, 5.69x | 4.42x, 4.44x, **11.03x** |
+| `db_list` | 5.85x, 5.89x, 6.00x | **10.21x, 10.50x, 12.18x** |
+| `template_render` | 3.32x, 3.36x, 3.38x | 7.29x, 8.06x, 8.08x |
+| `static_file` | 3.21x, 3.45x, 3.53x | 2.06x, 2.20x, 3.01x |
+
+Hayavega's own absolute `db_list` throughput moved from ~900-1900 req/s
+(every prior measurement in this document) to a consistent ~4050-4170
+req/s -- not noise on the comparison side, a real jump in Hayavega's own
+number, reproduced across six total runs (three per competitor). `db_list`
+now reliably exceeds 10x against Django and sits just under it against
+FastAPI; `template_render` reaches 7-8x against Django, 3.3x against
+FastAPI (the render step itself, not the query, is the remaining gap
+there -- see the template-engine sections above, already investigated and
+closed out as a Python-vs-Jinja2 question, not a database one).
+
+**What this does and doesn't change about this document's standing
+position**: a uniform 10-20x was never claimed and still isn't -- `static_file`
+and FastAPI's `db_list`/`template_render` numbers stay in the 3-6x band,
+and `json_echo`/`static_file` vs Django remain sensitive to which
+framework's own baseline the machine happened to produce that run (Django's
+`json_echo` swung from 983 to 2463 req/s across three otherwise-identical
+runs; Hayavega's own number barely moved, 10772-10892). What changed is
+real: a structural gap between "built in Rust" and "actually executes its
+hot-path SQL in Rust" existed and is now closed, and the scenario this
+document has called out as architecturally I/O-bound and therefore capped
+below 10x (`db_list`) now regularly clears it against at least one of the
+two comparison frameworks.
 
 Every benchmark above measures steady-state throughput of an already-running,
 already-warmed-up server -- none of them say anything about how fast a
