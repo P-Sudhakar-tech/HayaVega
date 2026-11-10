@@ -34,6 +34,21 @@ class SaveUploadedFileTests(unittest.TestCase):
         destination = save_uploaded_file(upload, self.directory.name)
         self.assertEqual(destination.name, "upload")
 
+    def test_accepts_a_filename_matching_an_allowed_extension(self):
+        upload = UploadedFile(field_name="avatar", filename="pic.PNG", content_type="image/png", content=b"data")
+        destination = save_uploaded_file(upload, self.directory.name, allowed_extensions=(".png", ".jpg"))
+        self.assertTrue(destination.is_file())
+
+    def test_rejects_a_filename_outside_the_allowed_extensions_without_writing_anything(self):
+        """A project serving its uploads directory statically could otherwise serve
+        back an uploaded `.svg`/`.html` payload as if it were an image -- there is no
+        default allowlist (this stays a plain convenience, not a hardened pipeline by
+        default), but a caller that opts in gets a real rejection, not a renamed file."""
+        upload = UploadedFile(field_name="avatar", filename="payload.svg", content_type="image/svg+xml", content=b"<svg onload=alert(1)>")
+        with self.assertRaises(ValueError):
+            save_uploaded_file(upload, self.directory.name, allowed_extensions=(".png", ".jpg"))
+        self.assertEqual(list(Path(self.directory.name).iterdir()), [])
+
 
 if __name__ == "__main__":
     unittest.main()
