@@ -39,6 +39,16 @@ class HardeningTests(unittest.TestCase):
         self.assertIn("Content-Security-Policy", captured["headers"])
         self.assertEqual(captured["headers"]["Cross-Origin-Opener-Policy"], "same-origin")
 
+    def test_default_csp_does_not_permit_inline_scripts_or_third_party_hosts(self):
+        """'unsafe-inline' defeats CSP's own purpose (an injected <script> tag still
+        runs); the default policy for an ordinary application response should not
+        carry it or an arbitrary third-party script host, even though one specific
+        built-in page (Swagger UI) legitimately needs both for itself."""
+        captured, _ = call(self.application, headers={"Host": "example.test"})
+        csp = captured["headers"]["Content-Security-Policy"]
+        self.assertNotIn("unsafe-inline", csp)
+        self.assertNotIn("unpkg.com", csp)
+
     def test_handles_trusted_cors_preflight(self):
         captured, body = call(self.application, method="OPTIONS", headers={"Host": "example.test", "Origin": "https://app.example.test"})
         self.assertEqual(captured["status"], "204 No Content")

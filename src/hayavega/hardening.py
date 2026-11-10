@@ -263,7 +263,7 @@ class Hardening:
                 "X-Content-Type-Options": "nosniff",
                 "X-Frame-Options": "DENY",
                 "Referrer-Policy": "strict-origin-when-cross-origin",
-                "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline' https://unpkg.com; script-src 'self' 'unsafe-inline' https://unpkg.com",
+                "Content-Security-Policy": "default-src 'self'; style-src 'self'; script-src 'self'",
                 "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
                 "Cross-Origin-Opener-Policy": "same-origin",
                 "Cross-Origin-Resource-Policy": "same-origin",

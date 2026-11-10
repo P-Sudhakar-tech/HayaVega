@@ -3,8 +3,20 @@ import unittest
 from hayavega.auth_api import auth_routes
 from hayavega.rest import api_route
 from hayavega.runtime import create_application
-from hayavega.swagger import ERROR_SCHEMA, openapi_document
+from hayavega.swagger import ERROR_SCHEMA, openapi_document, swagger_ui
 from hayavega.testing import TestClient
+
+
+class SwaggerUiResponseTests(unittest.TestCase):
+    def test_response_carries_its_own_scoped_csp_instead_of_relying_on_a_global_relaxed_default(self):
+        """Swagger UI needs unpkg.com and one inline bootstrap script, but nothing
+        else in the application should have to inherit that relaxation globally --
+        the page sets its own Content-Security-Policy header so hayavega.hardening's
+        default (which must stay strict) is never overridden for this reason alone."""
+        response = swagger_ui(None)
+        headers = dict(response.headers)
+        self.assertIn("Content-Security-Policy", headers)
+        self.assertIn("unpkg.com", headers["Content-Security-Policy"])
 
 
 class OpenApiDocumentTests(unittest.TestCase):

@@ -71,10 +71,22 @@ def openapi_document(routes: list[Route], *, title: str = "Hayavega API", versio
     }
 
 
+_SWAGGER_UI_CSP = "default-src 'self'; style-src 'self' 'unsafe-inline' https://unpkg.com; script-src 'self' 'unsafe-inline' https://unpkg.com"
+
+
 def swagger_ui(request) -> Response:
-    """Return a small Swagger UI shell backed by the local OpenAPI endpoint."""
+    """Return a small Swagger UI shell backed by the local OpenAPI endpoint.
+
+    Loading swagger-ui-dist from unpkg.com and bootstrapping it with one inline
+    ``<script>`` needs a more permissive Content-Security-Policy than the rest
+    of the application should ever carry. Setting that policy directly on this
+    response -- rather than relaxing ``hayavega.hardening``'s global default --
+    keeps the relaxation scoped to this one page; ``Hardening.finalize()`` only
+    fills in its stricter default when a response hasn't already set the header.
+    """
     return Response(
-        """<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Hayavega API documentation</title><link rel=\"stylesheet\" href=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui.css\"></head><body><div id=\"swagger-ui\"></div><script src=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js\"></script><script>SwaggerUIBundle({url:'/openapi.json',dom_id:'#swagger-ui'});</script><noscript>Open <a href=\"/openapi.json\">the OpenAPI document</a> to view the API schema.</noscript></body></html>"""
+        """<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Hayavega API documentation</title><link rel=\"stylesheet\" href=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui.css\"></head><body><div id=\"swagger-ui\"></div><script src=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js\"></script><script>SwaggerUIBundle({url:'/openapi.json',dom_id:'#swagger-ui'});</script><noscript>Open <a href=\"/openapi.json\">the OpenAPI document</a> to view the API schema.</noscript></body></html>""",
+        headers=(("Content-Security-Policy", _SWAGGER_UI_CSP),),
     )
 
 
