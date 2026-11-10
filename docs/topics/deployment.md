@@ -2,7 +2,7 @@
 
 ## WSGI: gunicorn or waitress
 
-`mango launch`'s `wsgiref` dev server is explicitly single-threaded and
+`hayavega launch`'s `wsgiref` dev server is explicitly single-threaded and
 dev-only &mdash; never put it behind real traffic. Every scaffolded project
 ships `config/wsgi.py`, a standard WSGI `application` object:
 
@@ -47,7 +47,7 @@ result against `waitress`.
 A real deployment terminates TLS and HTTP/2 at a reverse proxy (nginx,
 a cloud load balancer) in front of whichever application server you
 chose above &mdash; `trust_proxy_headers`/`trusted_proxy_ips` in the
-[`security`](security.md) section tell Mangoo to trust that proxy's
+[`security`](security.md) section tell Hayavega to trust that proxy's
 `X-Forwarded-*` headers for `request.is_secure` and `REMOTE_ADDR`.
 
 ## Before deployment
@@ -57,8 +57,8 @@ chose above &mdash; `trust_proxy_headers`/`trusted_proxy_ips` in the
 - [ ] `Settings.debug = False`
 - [ ] `Settings.allowed_hosts` is your real domain list, not empty or `["*"]`
 - [ ] `Settings.security.force_https = True`
-- [ ] `python mango.py diagnose` reports nothing at `error` severity
-- [ ] `python mango.py migrationstatus` shows nothing pending
+- [ ] `python hayavega.py diagnose` reports nothing at `error` severity
+- [ ] `python hayavega.py migrationstatus` shows nothing pending
 
 ## Migration deployment and rollback
 
@@ -71,7 +71,7 @@ migration, not an automatic reversal.
 
 Standard database-level backup/restore for your chosen engine
 (`pg_dump`/`pg_restore` for PostgreSQL, `mysqldump` for MySQL/MariaDB, a
-file copy for SQLite) &mdash; Mangoo doesn't reinvent this layer. Test a
+file copy for SQLite) &mdash; Hayavega doesn't reinvent this layer. Test a
 real restore drill before you need one for real.
 
 ## Health and readiness

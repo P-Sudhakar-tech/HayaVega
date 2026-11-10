@@ -3,16 +3,16 @@ import unittest
 from pathlib import Path
 from threading import Event
 
-from mangoo.addons.signals import SignalBus
-from mangoo.admin import admin_routes
-from mangoo.auth import create_session, create_superuser
-from mangoo.auth_api import auth_routes
-from mangoo.db import connect
-from mangoo.migrations import apply
-from mangoo.response import Response
-from mangoo.routing import path
-from mangoo.runtime import create_application
-from mangoo.testing import TestClient
+from hayavega.addons.signals import SignalBus
+from hayavega.admin import admin_routes
+from hayavega.auth import create_session, create_superuser
+from hayavega.auth_api import auth_routes
+from hayavega.db import connect
+from hayavega.migrations import apply
+from hayavega.response import Response
+from hayavega.routing import path
+from hayavega.runtime import create_application
+from hayavega.testing import TestClient
 
 PASSWORD = "Correct-Horse-7!"
 
@@ -114,7 +114,7 @@ class MigrationSignalsTests(unittest.TestCase):
             def on_applied(event):
                 connection = connect(database)
                 try:
-                    row = connection.execute("SELECT COUNT(*) AS total FROM mangoo_migrations WHERE name = ?", (event.data["name"],)).fetchone()
+                    row = connection.execute("SELECT COUNT(*) AS total FROM hayavega_migrations WHERE name = ?", (event.data["name"],)).fetchone()
                     seen_history_rows.append(row["total"])
                 finally:
                     connection.close()

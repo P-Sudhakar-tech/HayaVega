@@ -1,9 +1,9 @@
-"""Opt-in integration coverage; set MANGOO_TEST_REDIS_URL to run it.
+"""Opt-in integration coverage; set HAYAVEGA_TEST_REDIS_URL to run it.
 
 Mirrors test_redis_ratelimiter_integration.py's pattern: the missing-
 dependency check runs everywhere (it only needs `import redis` to fail),
 while everything else requires a real Redis instance and is skipped unless
-MANGOO_TEST_REDIS_URL is set.
+HAYAVEGA_TEST_REDIS_URL is set.
 """
 
 import os
@@ -13,7 +13,7 @@ import unittest
 import uuid
 from unittest.mock import patch
 
-from mangoo.cache import CacheBackendError, RedisCache, cache_from_settings
+from hayavega.cache import CacheBackendError, RedisCache, cache_from_settings
 
 
 class RedisCacheMissingDependencyTests(unittest.TestCase):
@@ -23,11 +23,11 @@ class RedisCacheMissingDependencyTests(unittest.TestCase):
                 RedisCache()
 
 
-@unittest.skipUnless(os.getenv("MANGOO_TEST_REDIS_URL"), "Redis integration environment is not configured")
+@unittest.skipUnless(os.getenv("HAYAVEGA_TEST_REDIS_URL"), "Redis integration environment is not configured")
 class RedisCacheIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.redis_url = os.environ["MANGOO_TEST_REDIS_URL"]
-        self.prefix = f"mangoo:cache:test:{uuid.uuid4()}:"
+        self.redis_url = os.environ["HAYAVEGA_TEST_REDIS_URL"]
+        self.prefix = f"hayavega:cache:test:{uuid.uuid4()}:"
         try:
             self.cache = RedisCache(redis_url=self.redis_url, key_prefix=self.prefix)
             self.cache._client.ping()
@@ -56,7 +56,7 @@ class RedisCacheIntegrationTests(unittest.TestCase):
         self.assertIsNone(self.cache.get("key"))
 
     def test_clear_removes_only_this_cache_instances_keys(self):
-        other = RedisCache(redis_url=self.redis_url, key_prefix=f"mangoo:cache:test:{uuid.uuid4()}:")
+        other = RedisCache(redis_url=self.redis_url, key_prefix=f"hayavega:cache:test:{uuid.uuid4()}:")
         self.addCleanup(other.clear)
         self.cache.set("key", "mine")
         other.set("key", "theirs")
@@ -67,7 +67,7 @@ class RedisCacheIntegrationTests(unittest.TestCase):
         self.assertEqual(other.get("key"), "theirs")
 
     def test_two_instances_with_the_same_prefix_share_state(self):
-        """The scenario this backend exists for: two Mangoo processes behind
+        """The scenario this backend exists for: two Hayavega processes behind
         a load balancer, both pointed at the same Redis, see each other's
         writes."""
         other = RedisCache(redis_url=self.redis_url, key_prefix=self.prefix)

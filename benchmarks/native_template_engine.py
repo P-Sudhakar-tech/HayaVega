@@ -3,16 +3,16 @@
 finding that a hand-compiled, one-template-only Rust function beat Python by
 16-20x, which was a scoping signal, not proof a general engine would.
 
-This compiles the same already-parsed node tree `mangoo.templates` produces
+This compiles the same already-parsed node tree `hayavega.templates` produces
 (via its private `_compile_cached`) into a plain nested-tuple "wire format"
-mangoo_native.render_compiled_template can decode, then renders it in Rust
+hayavega_native.render_compiled_template can decode, then renders it in Rust
 and compares against calling `render_template()` normally. The wire
 converter refuses (raises `_Unsupported`) for `{% extends %}`/`{% block %}`,
 which the native engine does not implement -- see
-`crates/mangoo-core/src/lib.rs`'s template module docstring. Both benchmark
+`crates/hayavega-core/src/lib.rs`'s template module docstring. Both benchmark
 templates here (page.html and a synthetic if/for-heavier one) avoid them.
 
-Requires mangoo_native to be built (see hatch_build.py / README.md).
+Requires hayavega_native to be built (see hatch_build.py / README.md).
 
 Usage:
     python benchmarks/native_template_engine.py
@@ -27,11 +27,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 try:
-    from mangoo_native import CompiledNativeTemplate, render_compiled_template
+    from hayavega_native import CompiledNativeTemplate, render_compiled_template
 except ImportError as error:
-    raise SystemExit(f"mangoo_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
+    raise SystemExit(f"hayavega_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
 
-from mangoo.templates import (
+from hayavega.templates import (
     _BlockNode,
     _BoolOp,
     _Compare,
@@ -94,7 +94,7 @@ def compile_to_wire(template_name: str, directories: tuple[Path, ...]) -> tuple:
 
 # --- Benchmark 1: the real benchmark suite's page.html (variables + for) ---
 
-_TEMPLATE_DIR = Path(__file__).resolve().parent / "mangoo_app" / "templates"
+_TEMPLATE_DIR = Path(__file__).resolve().parent / "hayavega_app" / "templates"
 _POSTS_CONTEXT = {"posts": [{"title": f"Post {i}", "views": i * 3} for i in range(20)]}
 _PAGE_WIRE = compile_to_wire("page.html", (_TEMPLATE_DIR,))
 

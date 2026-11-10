@@ -7,8 +7,8 @@ always-async delivery (no sync/async choice for callers to get wrong).
 ## Wiring a bus in
 
 ```python
-from mangoo.addons.signals import SignalBus
-from mangoo.runtime import create_application
+from hayavega.addons.signals import SignalBus
+from hayavega.runtime import create_application
 
 bus = SignalBus()
 bus.connect("request.finished", lambda event: print(event.data))
@@ -39,7 +39,7 @@ alongside the subsystem that emits it (see
 `"product.created"`:
 
 ```python
-from mangoo.addons.signals import SignalBus
+from hayavega.addons.signals import SignalBus
 
 bus = SignalBus()
 bus.connect("product.created", lambda event: print(event.data))  # {"id": 7}
@@ -66,7 +66,7 @@ record loaded for the edit form.
 ## Delivery
 
 Always async &mdash; delivery never blocks the publisher. A Rust-native
-worker-pool dispatcher (`mangoo_native.SignalDispatcher`) is used when
+worker-pool dispatcher (`hayavega_native.SignalDispatcher`) is used when
 the native extension is built; a behavior-compatible Python
 `ThreadPoolExecutor` fallback is used otherwise. A subscriber that raises
 is logged and isolated &mdash; it never stops delivery to later
@@ -82,7 +82,7 @@ careful.
 
 ## A note on the name
 
-This was originally shipped as **Pulse**. `mangoo.addons.pulse`/`pulse=`
+This was originally shipped as **Pulse**. `hayavega.addons.pulse`/`pulse=`
 still work as deprecated aliases (`PulseBus is SignalBus`, identity-equal,
 not a copy) with a single `DeprecationWarning` on first use &mdash; no hard
 break for existing code.

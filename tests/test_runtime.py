@@ -5,8 +5,8 @@ import unittest
 import urllib.request
 from unittest.mock import patch
 
-from mangoo import Response, api_route, path
-from mangoo.runtime import create_application, serve
+from hayavega import Response, api_route, path
+from hayavega.runtime import create_application, serve
 
 
 def call(application, request_path: str):
@@ -75,12 +75,12 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn(b"SwaggerUIBundle", body)
 
     def test_pool_connections_enables_connection_pooling(self):
-        with patch("mangoo.runtime.db.enable_connection_pooling") as enable:
+        with patch("hayavega.runtime.db.enable_connection_pooling") as enable:
             create_application([], pool_connections=True)
         enable.assert_called_once_with()
 
     def test_pool_connections_defaults_to_disabled(self):
-        with patch("mangoo.runtime.db.enable_connection_pooling") as enable:
+        with patch("hayavega.runtime.db.enable_connection_pooling") as enable:
             create_application([])
         enable.assert_not_called()
 
@@ -109,7 +109,7 @@ class ServeTests(unittest.TestCase):
     answer -- not just that it calls create_application() correctly."""
 
     def test_serve_actually_starts_a_real_server_and_answers_a_real_request(self):
-        import mangoo.runtime as runtime_module
+        import hayavega.runtime as runtime_module
 
         captured: dict = {}
         real_make_server = runtime_module.make_server
@@ -119,7 +119,7 @@ class ServeTests(unittest.TestCase):
             captured["server"] = httpd
             return httpd
 
-        with patch("mangoo.runtime.make_server", side_effect=capturing_make_server):
+        with patch("hayavega.runtime.make_server", side_effect=capturing_make_server):
             thread = threading.Thread(
                 target=serve,
                 args=([path("", lambda request: Response("hello from serve()"))],),

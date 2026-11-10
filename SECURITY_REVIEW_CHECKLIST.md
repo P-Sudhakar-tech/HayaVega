@@ -1,4 +1,4 @@
-# Mangoo security review checklist
+# Hayavega security review checklist
 
 | Control | Operational requirement | Verification |
 |---|---|---|

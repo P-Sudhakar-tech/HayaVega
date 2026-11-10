@@ -2,13 +2,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.auth import create_superuser
-from mangoo.auth_api import auth_routes
-from mangoo.response import json_response
-from mangoo.routing import path
-from mangoo.runtime import create_application
-from mangoo.security import email_verified_required
-from mangoo.testing import TestClient
+from hayavega.auth import create_superuser
+from hayavega.auth_api import auth_routes
+from hayavega.response import json_response
+from hayavega.routing import path
+from hayavega.runtime import create_application
+from hayavega.security import email_verified_required
+from hayavega.testing import TestClient
 
 PASSWORD = "Correct-Horse-7!"
 NEW_PASSWORD = "Even-Better-9?"

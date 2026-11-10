@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from mangoo.templates import (
+from hayavega.templates import (
     TemplateNotFound,
     TemplateRenderError,
     TemplateSyntaxError,
@@ -391,7 +391,7 @@ class ParserDefensiveConsistencyChecksTests(unittest.TestCase):
 
     @staticmethod
     def _parser_with_stubbed_body(segments):
-        from mangoo.templates import _TemplateParser
+        from hayavega.templates import _TemplateParser
 
         parser = _TemplateParser(segments, "t")
         parser._parse_nodes = lambda stop_tags: []
@@ -501,7 +501,7 @@ class CompiledRenderDoubleCheckedLockTests(unittest.TestCase):
                 let_first_thread_finish.wait(timeout=5)
                 return real_build(nodes, name)
 
-            with patch("mangoo.templates._build_compiled_render", side_effect=slow_build):
+            with patch("hayavega.templates._build_compiled_render", side_effect=slow_build):
                 first = threading.Thread(target=_compiled_render_for, args=(root, "race.html"))
                 first.start()
                 self.assertTrue(first_thread_is_compiling.wait(timeout=5), "first thread never started compiling")

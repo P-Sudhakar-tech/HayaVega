@@ -1,5 +1,5 @@
 """Minimal raw-socket async HTTP/1.1 GET client with connection reuse,
-shared by benchmarks/mangoo_asgi_app/app.py and benchmarks/fastapi_app/app.py's
+shared by benchmarks/hayavega_asgi_app/app.py and benchmarks/fastapi_app/app.py's
 `remote_io` views.
 
 Not `httpx.AsyncClient`, deliberately: httpx 0.28.1 / httpcore 1.0.9 was
@@ -19,7 +19,7 @@ Two real bugs were found and fixed while building this, not shipped blind:
    `127.0.0.1:9010` connections sitting in `FIN_WAIT_2`. Fixed by keeping a
    small per-`(host, port)` pool of already-connected sockets and reusing
    them, the same "one connection per client, kept alive" mechanism
-   `mangoo.db.enable_connection_pooling()` uses for the database side.
+   `hayavega.db.enable_connection_pooling()` uses for the database side.
 2. **A keep-alive response still failed to parse**, even after that fix:
    uvicorn's `h11` implementation sends `benchmarks/upstream_app`'s
    response with `Transfer-Encoding: chunked` on a persistent connection

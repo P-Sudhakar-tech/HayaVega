@@ -13,7 +13,7 @@ class ExampleSiteTests(unittest.TestCase):
             home_route = next(route for route in routes.urlpatterns if route.pattern == "")
             response = home_route.view(None)
             self.assertIn("Its own shape, automatic docs", response.body)
-            self.assertIn("<title>Mangoo", response.body)
+            self.assertIn("<title>Hayavega", response.body)
         finally:
             sys.path.remove(str(example_root))
             sys.modules.pop("config.routes", None)
@@ -26,7 +26,7 @@ class ExampleSiteTests(unittest.TestCase):
         try:
             routes = importlib.import_module("config.routes")
             logo_route = next(route for route in routes.urlpatterns if route.pattern == "assets/<path>")
-            response = logo_route.view(type("Request", (), {"path": "/assets/mangoo-mark.svg"})())
+            response = logo_route.view(type("Request", (), {"path": "/assets/hayavega-mark.svg"})())
             self.assertEqual("image/svg+xml", response.content_type)
             self.assertIn("<svg", response.body)
         finally:

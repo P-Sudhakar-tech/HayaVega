@@ -1,4 +1,4 @@
-"""Tests for the DB-backed background job queue (`mangoo.jobs`), against real SQLite."""
+"""Tests for the DB-backed background job queue (`hayavega.jobs`), against real SQLite."""
 
 import tempfile
 import threading
@@ -7,8 +7,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-import mangoo.jobs as jobs_module
-from mangoo.jobs import _mark_failed, _mark_succeeded, claim_next_job, enqueue, initialize_jobs_db, retry_job, run_worker
+import hayavega.jobs as jobs_module
+from hayavega.jobs import _mark_failed, _mark_succeeded, claim_next_job, enqueue, initialize_jobs_db, retry_job, run_worker
 
 
 def _iso(delta_seconds: float) -> str:
@@ -40,11 +40,11 @@ class JobsTests(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def _row(self, job_id):
-        from mangoo.db import connect
+        from hayavega.db import connect
 
         connection = connect(self.database)
         try:
-            return connection.execute("SELECT * FROM mangoo_jobs WHERE id = ?", (job_id,)).fetchone()
+            return connection.execute("SELECT * FROM hayavega_jobs WHERE id = ?", (job_id,)).fetchone()
         finally:
             connection.close()
 
@@ -163,7 +163,7 @@ class JobsTests(unittest.TestCase):
             real_execute = connection.execute
 
             def execute(sql, params=()):
-                if sql.startswith("SELECT id FROM mangoo_jobs WHERE status = 'pending'") and not triggered:
+                if sql.startswith("SELECT id FROM hayavega_jobs WHERE status = 'pending'") and not triggered:
                     triggered.append(True)
                     cursor = real_execute(sql, params)
                     row = cursor.fetchone()
@@ -178,7 +178,7 @@ class JobsTests(unittest.TestCase):
             connection.execute = execute
             return connection
 
-        with patch("mangoo.jobs.connect", side_effect=stealing_connect):
+        with patch("hayavega.jobs.connect", side_effect=stealing_connect):
             result = claim_next_job(self.database)
         self.assertIsNone(result)
 
@@ -188,11 +188,11 @@ class JobsTests(unittest.TestCase):
         enqueue(self.database, "greet", {"who": "b"})
         run_worker(self.database, {"greet": lambda payload: processed.append(payload["who"])}, poll_interval=0, max_iterations=3)
         self.assertEqual(sorted(processed), ["a", "b"])
-        from mangoo.db import connect
+        from hayavega.db import connect
 
         connection = connect(self.database)
         try:
-            rows = connection.execute("SELECT status FROM mangoo_jobs").fetchall()
+            rows = connection.execute("SELECT status FROM hayavega_jobs").fetchall()
         finally:
             connection.close()
         self.assertTrue(all(row["status"] == "succeeded" for row in rows))
@@ -241,7 +241,7 @@ class JobSignalsTests(unittest.TestCase):
     def _bus_and_waiter(self, event_name):
         from threading import Event
 
-        from mangoo.addons.signals import SignalBus
+        from hayavega.addons.signals import SignalBus
 
         bus = SignalBus()
         self.addCleanup(bus.close)

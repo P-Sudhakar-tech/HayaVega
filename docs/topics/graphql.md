@@ -7,7 +7,7 @@ mutations, and configurable depth/field limits.
 ## Defining a schema
 
 ```python
-from mangoo.graphql import Schema, graphql_view
+from hayavega.graphql import Schema, graphql_view
 
 
 def get_post(request, id):
@@ -82,7 +82,7 @@ see [Security](security.md) for the full standard.
 
 Tokenizing and parsing a query (not field resolution, which always
 calls your own Python resolvers) runs through a Rust port of the same
-grammar when `mangoo_native` is built &mdash; a faithful port, not a
+grammar when `hayavega_native` is built &mdash; a faithful port, not a
 reinterpretation, with an identical pure-Python fallback otherwise.
 Measured (`benchmarks/native_graphql_parser.py`) at a real **2.7-3.9x**
 speedup over the pure-Python lexer/parser, including the cost of

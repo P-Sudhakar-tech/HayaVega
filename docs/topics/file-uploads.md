@@ -15,8 +15,8 @@ with the install hint; `request.form()` still works for plain
 ## Reading an upload
 
 ```python
-from mangoo import api_route
-from mangoo.uploads import save_uploaded_file
+from hayavega import api_route
+from hayavega.uploads import save_uploaded_file
 
 
 def upload_avatar(request):

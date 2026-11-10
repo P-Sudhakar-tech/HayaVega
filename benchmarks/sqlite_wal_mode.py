@@ -1,11 +1,11 @@
-"""Benchmark `mangoo.db.enable_wal_mode()` against SQLite's untouched
+"""Benchmark `hayavega.db.enable_wal_mode()` against SQLite's untouched
 defaults (journal_mode=DELETE, synchronous=FULL) for a representative
 write transaction -- two inserts, one update, one commit, the same
 shape a checkout/order-placement endpoint does.
 
 Found via a real cross-framework e-commerce benchmark comparison: a
-write-heavy authenticated endpoint built on Mangoo was only a near-tie
-with a comparable FastAPI backend, unlike every other scenario Mangoo
+write-heavy authenticated endpoint built on Hayavega was only a near-tie
+with a comparable FastAPI backend, unlike every other scenario Hayavega
 won decisively. Profiling isolated the cost to SQLite's own commit
 overhead (`fsync`, notoriously slow on Windows), not framework code.
 

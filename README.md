@@ -1,13 +1,13 @@
-# Mangoo
+# Hayavega
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Mangoo is an early, runnable experiment in a conventional, batteries-included project structure and automatic, interactive API documentation, backed by a Rust core.
+Hayavega is an early, runnable experiment in a conventional, batteries-included project structure and automatic, interactive API documentation, backed by a Rust core.
 
 **A browsable documentation site** (tutorials, topic guides, a generated
 API reference, and the published benchmark numbers) lives in
 [`docs/`](docs/index.md) and is published at
-[mangoo-framework.vercel.app](https://mangoo-framework.vercel.app/)
+[hayavega-framework.vercel.app](https://hayavega-framework.vercel.app/)
 (built via `vercel.json`, which runs `mkdocs build` and serves its
 `site/` output directly -- the standalone `index.html` landing page is
 not part of this deploy). This README stays the first thing a
@@ -37,7 +37,7 @@ See [UPCOMING_IMPROVEMENT_ROADMAP.md](UPCOMING_IMPROVEMENT_ROADMAP.md) for
 the near-term plan and [INDUSTRY_LEADERSHIP_ROADMAP.md](INDUSTRY_LEADERSHIP_ROADMAP.md)
 for the longer-range one: performance benchmarks against FastAPI/Django/
 Next.js and a higher developer-experience bar (the Signals rebrand there is
-delivered -- see [Mangoo Signals](#mangoo-signals) below). Published
+delivered -- see [Hayavega Signals](#hayavega-signals) below). Published
 benchmark results against FastAPI and Django live in
 [`benchmarks/results/RESULTS.md`](benchmarks/results/RESULTS.md), with the
 full methodology, scope, and honest caveats in
@@ -46,31 +46,31 @@ full methodology, scope, and honest caveats in
 ## What works now
 
 - `newproject` and `newapp` scaffolding (`startproject`/`startapp` still work as deprecated aliases)
-- A conventional `mango.py`, `settings.py`, and `routes.py` project layout
+- A conventional `hayavega.py`, `settings.py`, and `routes.py` project layout
 - A development server and Python views
 - Both WSGI (default) and ASGI deployment, the latter for projects that need `async def` views
-- A small PyO3 native module (`mangoo_native`) for the Rust/Python boundary
-- Server-rendered HTML via `mangoo.templates`, plus `mangoo.ui`: server-rendered components and a first-party htmx-style hypermedia runtime (`mangoo-ui.js`), no JS build step
+- A small PyO3 native module (`hayavega_native`) for the Rust/Python boundary
+- Server-rendered HTML via `hayavega.templates`, plus `hayavega.ui`: server-rendered components and a first-party htmx-style hypermedia runtime (`hayavega-ui.js`), no JS build step
 
 ## Quick start
 
-Published on PyPI as `mangoo`:
+Published on PyPI as `hayavega`:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install mangoo
-mangoo-admin newproject mysite
+pip install hayavega
+hayavega-admin newproject mysite
 cd mysite
-python mango.py newapp blog
-python mango.py launch
+python hayavega.py newapp blog
+python hayavega.py launch
 ```
 
 Working from this repository checkout instead (e.g. to build the optional
 Rust-native extension)? Install editable from source:
 
 ```powershell
-cd D:\separate_code\mangoo
+cd D:\separate_code\hayavega
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e .
@@ -83,10 +83,10 @@ Open `http://127.0.0.1:8000/`.
 WSGI (above) is the default for every scaffolded project and needs nothing
 extra. Reach for ASGI only when a view needs `async def` for concurrent I/O
 (calling another service, an async database driver) that WSGI's
-one-thread-per-request model can't overlap as cheaply. `mango newproject`
+one-thread-per-request model can't overlap as cheaply. `hayavega newproject`
 also scaffolds `config/asgi.py`, built with
-`mangoo.asgi.create_asgi_application()` instead of
-`mangoo.runtime.create_application()` but otherwise exposing the same kind
+`hayavega.asgi.create_asgi_application()` instead of
+`hayavega.runtime.create_application()` but otherwise exposing the same kind
 of standard `application` object:
 
 ```bash
@@ -98,7 +98,7 @@ functions (run via a dedicated worker-thread pool, `max_sync_workers=` on
 `create_asgi_application`, default 16), so every existing sync view --
 including ones wrapped in `api_route`, `csrf_protect`, or
 `login_required`/`permission_required` -- keeps working unmodified under
-either transport with no migration required. `mangoo.testing.AsyncTestClient`
+either transport with no migration required. `hayavega.testing.AsyncTestClient`
 tests ASGI apps in-process the same way `TestClient` tests WSGI apps. See
 [DEPLOYMENT.md](DEPLOYMENT.md#asgi-only-if-a-view-needs-async-def) for
 worker guidance and
@@ -112,7 +112,7 @@ type. Register a handler with `websocket_path()` and pass it to
 `create_asgi_application(websocket_patterns=[...])`:
 
 ```python
-from mangoo.websocket import WebSocketDisconnect, websocket_path
+from hayavega.websocket import WebSocketDisconnect, websocket_path
 
 
 async def echo(ws):
@@ -138,13 +138,13 @@ connection with a mismatched `Host`/`Origin` header is rejected before
 `accept()` is ever called -- the same protection those settings already give
 HTTP requests, applied here because WebSocket connections bypass the
 browser's ordinary same-origin/CORS enforcement ("cross-site WebSocket
-hijacking"). `mangoo.testing.connect_websocket()` drives a connection against
+hijacking"). `hayavega.testing.connect_websocket()` drives a connection against
 an ASGI application in-process, the WebSocket equivalent of `AsyncTestClient`.
 
 ## Rust development runtime
 
-`Settings.server.engine = 'rust'` in settings switches `mango launch` from the
-default `wsgiref` dev server to `mangoo_native`'s own WSGI-compatible
+`Settings.server.engine = 'rust'` in settings switches `hayavega launch` from the
+default `wsgiref` dev server to `hayavega_native`'s own WSGI-compatible
 HTTP/1.1 server -- a synchronous, fixed-thread-pool design (the same
 concurrency model `waitress` uses; CPython's GIL means async I/O would not
 let more Python view code run concurrently), benchmarked at 1.41x-2.68x
@@ -159,20 +159,20 @@ benchmarking it.
 
 ## Settings
 
-Each project has a conventional `config/settings.py`, but instead of Django's flat `ALL_CAPS` module globals, Mangoo settings live on a single `class Settings:` with explicit, typed sections -- instantiated once as `settings = Settings()` and read everywhere through `mangoo.conf.load_settings()`:
+Each project has a conventional `config/settings.py`, but instead of Django's flat `ALL_CAPS` module globals, Hayavega settings live on a single `class Settings:` with explicit, typed sections -- instantiated once as `settings = Settings()` and read everywhere through `hayavega.conf.load_settings()`:
 
 - `base_dir`, `secret_key`, `debug`, and `allowed_hosts` for project identity and environment behavior.
 - `installed_apps`, `middleware`, and `root_urlconf` for application composition.
 - `database` (a nested `class database:` section) for the database location and credentials.
 - `server` (a nested `class server:` section) for the development host and port.
 
-For example, change the default development port in `Settings.server.port`, or override it temporarily with `python mango.py launch 8001`.
+For example, change the default development port in `Settings.server.port`, or override it temporarily with `python hayavega.py launch 8001`.
 
 `middleware` is a list of dotted paths to request/response middleware factories, resolved and wired into `config/wsgi.py`/`config/asgi.py` automatically -- see [Middleware](docs/topics/middleware.md) for the factory contract and ordering rules.
 
 ## Databases
 
-Mangoo's database layer accepts SQLite, PostgreSQL, MySQL, and MariaDB through the `database` section of `Settings`. SQLite works with Python alone. For other engines, add the driver with UV before starting the project:
+Hayavega's database layer accepts SQLite, PostgreSQL, MySQL, and MariaDB through the `database` section of `Settings`. SQLite works with Python alone. For other engines, add the driver with UV before starting the project:
 
 ```powershell
 uv add "psycopg[binary]"   # PostgreSQL
@@ -187,26 +187,26 @@ Example PostgreSQL configuration:
 ```python
 class database:
     engine = "postgresql"
-    name = "mangoo"
+    name = "hayavega"
     host = "localhost"
     port = 5432
-    user = "mangoo"
-    password = os.getenv("MANGOO_DATABASE_PASSWORD")
+    user = "hayavega"
+    password = os.getenv("HAYAVEGA_DATABASE_PASSWORD")
 ```
 
-There is exactly one `database` section -- `Collection`/`admin_routes`/`auth_routes`/migrations each take one `database` dict, with no Django-style named-connection registry. A project talking to a second database defines its own extra section and converts it with `mangoo.conf.load_database()`; see [Multiple databases](docs/topics/models.md#multiple-databases).
+There is exactly one `database` section -- `Collection`/`admin_routes`/`auth_routes`/migrations each take one `database` dict, with no Django-style named-connection registry. A project talking to a second database defines its own extra section and converts it with `hayavega.conf.load_database()`; see [Multiple databases](docs/topics/models.md#multiple-databases).
 
 ### Connection pooling
 
-By default, every database call opens a new connection and closes it when done. `create_application(pool_connections=True)` (or `mangoo.db.enable_connection_pooling()` directly) reuses one connection per worker thread instead -- no other code changes needed, since it only changes what `connect()`/`Connection.close()` do internally.
+By default, every database call opens a new connection and closes it when done. `create_application(pool_connections=True)` (or `hayavega.db.enable_connection_pooling()` directly) reuses one connection per worker thread instead -- no other code changes needed, since it only changes what `connect()`/`Connection.close()` do internally.
 
-**Benchmark this for your own deployment before enabling it -- it is not a universal win.** It's a real, measured improvement under ASGI/uvicorn, but a real, measured ~10-15% *regression* under WSGI/waitress with SQLite specifically (many threads holding a persistent SQLite connection open under contention is itself slower than each opening and closing one quickly -- confirmed with a framework-free reproduction, not a guess). `benchmarks/mangoo_asgi_app/app.py` enables it; `benchmarks/mangoo_app/app.py` (WSGI) deliberately does not. See `INDUSTRY_LEADERSHIP_ROADMAP.md`'s "Connection pooling, attempted" section for the full numbers.
+**Benchmark this for your own deployment before enabling it -- it is not a universal win.** It's a real, measured improvement under ASGI/uvicorn, but a real, measured ~10-15% *regression* under WSGI/waitress with SQLite specifically (many threads holding a persistent SQLite connection open under contention is itself slower than each opening and closing one quickly -- confirmed with a framework-free reproduction, not a guess). `benchmarks/hayavega_asgi_app/app.py` enables it; `benchmarks/hayavega_app/app.py` (WSGI) deliberately does not. See `INDUSTRY_LEADERSHIP_ROADMAP.md`'s "Connection pooling, attempted" section for the full numbers.
 
 A pooled MySQL/PostgreSQL connection that the server drops after sitting idle (MySQL's `wait_timeout`, a network blip) is detected and transparently reconnected on its next use, retrying the statement that hit the dropped connection once. SQLite has no server-side idle timeout, so it's never affected.
 
 ## Migrations and transactions
 
-Mangoo uses small, ordered SQL migrations. Add a numbered file such as
+Hayavega uses small, ordered SQL migrations. Add a numbered file such as
 `blog/migrations/0001_products.py` to an installed app:
 
 ```python
@@ -215,14 +215,14 @@ operations = [
 ]
 ```
 
-Run `python mango.py applymigrations` to apply pending migrations, or
-`python mango.py migrationstatus` to inspect their state. Each migration runs
+Run `python hayavega.py applymigrations` to apply pending migrations, or
+`python hayavega.py migrationstatus` to inspect their state. Each migration runs
 in its own transaction; if any operation fails, neither its schema changes nor
 its history row are committed. Applied files are checksummed, so changed or
 missing migration files are rejected instead of silently proceeding.
 
 For an app with declared `Entity` classes, create the reviewed initial table
-migration with `python mango.py newmigration blog` (after adding `"blog"`
+migration with `python hayavega.py newmigration blog` (after adding `"blog"`
 to `Settings.installed_apps`). Later invocations generate only nullable `ADD COLUMN`
 operations and record a dependency on the preceding migration. New tables,
 non-nullable fields, field alterations, and removals must remain explicit,
@@ -233,13 +233,13 @@ declared entity.
 
 ## Production validation and probes
 
-Before starting with `Settings.debug = False`, Mangoo requires a non-default
+Before starting with `Settings.debug = False`, Hayavega requires a non-default
 `secret_key`, explicit `allowed_hosts`, and `security` section settings for
 `force_https` and `secure_cookies`. Add `*health_routes(_settings.database)`
 to your URL patterns to expose `GET /healthz` (liveness) and `GET /readyz`
 (database readiness) for your deployment platform.
 
-Run `python mango.py diagnose` (or `mango diagnose`) to catch the same
+Run `python hayavega.py diagnose` (or `hayavega diagnose`) to catch the same
 class of issue *before* a deploy attempt fails on it: unsafe settings
 (`debug` left on, a placeholder `secret_key`, a wildcard `allowed_hosts`),
 deprecated Pulse-era API usage anywhere in your own project files, and
@@ -256,11 +256,11 @@ rate limiter for coordinated limits across multiple application instances.
 
 ## Caching
 
-`mangoo.cache` gives you a small, pluggable cache behind one interface --
+`hayavega.cache` gives you a small, pluggable cache behind one interface --
 `get`/`set`/`delete`/`clear`/`get_or_set` -- with three backends:
 
 ```python
-from mangoo.cache import InMemoryCache, RedisCache, SqliteCache
+from hayavega.cache import InMemoryCache, RedisCache, SqliteCache
 
 cache = InMemoryCache(max_entries=10_000)  # one process, no dependency
 cache = SqliteCache("cache.sqlite3")  # every process on one machine, no dependency, no server
@@ -273,7 +273,7 @@ request counts; it stores Python objects directly, no serialization.
 `SqliteCache` is Redis's actual value (one cache shared across every
 worker process instead of one per worker) for a single-machine deployment,
 with no separate server and no new dependency -- it reuses `db.connect()`,
-the same connection layer `mangoo.jobs`/`mangoo.migrations` already use,
+the same connection layer `hayavega.jobs`/`hayavega.migrations` already use,
 with WAL mode enabled so a writer never blocks a reader. Like
 `RedisCache`, a `key_prefix` scopes every key an instance owns -- including
 `clear()`, which only clears its own prefix -- so more than one logical
@@ -288,7 +288,7 @@ way `hardening.RedisRateLimiter` does, and requires `uv add redis`.
 Cache a whole view's response with `cached_view`:
 
 ```python
-from mangoo.cache import cached_view
+from hayavega.cache import cached_view
 
 
 @cached_view(cache, ttl=60)
@@ -313,12 +313,12 @@ class Settings:
 ```
 
 ```python
-from mangoo.cache import cache_from_settings
+from hayavega.cache import cache_from_settings
 
 cache = cache_from_settings(settings.cache)
 ```
 
-Don't want to install Redis at all? `mango cacheserver` is a built-in,
+Don't want to install Redis at all? `hayavega cacheserver` is a built-in,
 networked, in-memory cache server speaking enough of the real Redis
 wire protocol (verified against the real `redis` package, not just its
 own code) that `RedisCache()`'s own zero-argument default points
@@ -334,7 +334,7 @@ See [Caching](docs/topics/caching.md) for the full option list.
 ## Observability
 
 Every response carries an `X-Request-ID`; a valid incoming ID is preserved,
-otherwise Mangoo generates one. Audit logs contain the ID, method, path,
+otherwise Hayavega generates one. Audit logs contain the ID, method, path,
 status, and duration without request headers. Enable JSON output in an
 application entrypoint with `configure_logging(json_output=True)`.
 
@@ -347,7 +347,7 @@ URL patterns to expose the counters at `/metrics` in Prometheus text
 exposition format, ready for a standard Prometheus scrape config:
 
 ```python
-from mangoo import MetricsRegistry, metrics_routes
+from hayavega import MetricsRegistry, metrics_routes
 
 metrics = MetricsRegistry()
 urlpatterns = [..., *metrics_routes(metrics)]
@@ -360,27 +360,27 @@ returned a 5xx status, or `metrics.snapshot()` for the raw counters.
 ## Reverse proxies
 
 Set `Settings.security.trust_proxy_headers = True` only with an explicit
-`Settings.security.trusted_proxy_ips` list (IP addresses or CIDR networks). Mangoo
+`Settings.security.trusted_proxy_ips` list (IP addresses or CIDR networks). Hayavega
 then honors forwarded client and HTTPS headers only from those proxies. HTTPS
 redirects retain the original query string.
 
 ## Audit events
 
-Mangoo persists privacy-safe authentication and administration events in
-`mangoo_audit_events`. Use `audit_events(_settings.database)` for operational
+Hayavega persists privacy-safe authentication and administration events in
+`hayavega_audit_events`. Use `audit_events(_settings.database)` for operational
 review. Events contain an actor ID, event type, timestamp, and small metadata;
 passwords, session tokens, and request headers are never stored.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for reverse-proxy, HTTPS, backup, restore,
 and rollback procedures, and [SECURITY_REVIEW_CHECKLIST.md](SECURITY_REVIEW_CHECKLIST.md)
 for release-review controls. PostgreSQL and MySQL/MariaDB integration tests
-are opt-in: set `MANGOO_TEST_POSTGRES_NAME` or `MANGOO_TEST_MYSQL_NAME` plus
+are opt-in: set `HAYAVEGA_TEST_POSTGRES_NAME` or `HAYAVEGA_TEST_MYSQL_NAME` plus
 optional host, port, user, and password variables before running the test
 suite.
 
 ## Background jobs
 
-Mangoo persists durable background work in `mangoo_jobs`, reusing the same
+Hayavega persists durable background work in `hayavega_jobs`, reusing the same
 SQLite/PostgreSQL/MySQL connection layer as sessions, audit events, and
 migrations -- no new broker (no Redis, no RabbitMQ) required. A project
 defines plain handler functions and enqueues work:
@@ -395,12 +395,12 @@ job_handlers = {"send_email": "myapp.jobs.send_email"}
 ```
 
 ```python
-from mangoo.jobs import enqueue
+from hayavega.jobs import enqueue
 
 enqueue(_settings.database, "send_email", {"to": "a@example.com"})
 ```
 
-Run `mango runworker` to start a worker process that polls for eligible jobs
+Run `hayavega runworker` to start a worker process that polls for eligible jobs
 and dispatches them to the registered handlers, retrying failed jobs with
 capped exponential backoff (up to `max_attempts`, default 3) before marking
 them `dead`. This is poll-based, not push-based: a job becomes eligible the
@@ -413,7 +413,7 @@ view: a paginated, status-filterable list of jobs (`pending`/`running`/
 
 ## Custom management commands
 
-`mango.py`'s command set (`launch`, `newapp`, `createadmin`, ...) is a
+`hayavega.py`'s command set (`launch`, `newapp`, `createadmin`, ...) is a
 fixed, closed list -- but a project can register its own, resolved the
 same dotted-path-from-settings way `job_handlers` already is:
 
@@ -428,7 +428,7 @@ commands = {"hello": "myapp.commands.hello_command"}
 ```
 
 ```powershell
-python mango.py hello world
+python hayavega.py hello world
 ```
 
 A custom command receives the remaining CLI arguments as a plain
@@ -443,7 +443,7 @@ then `pytest`. This enforces a 100% coverage gate by default (see
 `pyproject.toml`); pass `--no-cov` to skip it locally. GitHub Actions
 (`.github/workflows/ci.yml`) runs the suite on Python 3.10, 3.11, 3.12, and
 3.15 for every push and pull request, plus a separate job that builds the
-`mangoo_native` Rust extension and runs the tests it backs, and separate
+`hayavega_native` Rust extension and runs the tests it backs, and separate
 opt-in jobs that run the PostgreSQL, MySQL/MariaDB, and Redis integration
 tests against real `postgres:16`/`mysql:8`/`redis:7` service containers.
 
@@ -457,13 +457,13 @@ lines -- an `__all__` list, embedded HTML/JS template strings -- that are
 already one deliberate unit and would only get harder to read if wrapped.
 
 Type-check with [mypy](https://mypy-lang.org/): `mypy` (config lives in
-`pyproject.toml` under `[tool.mypy]`, scoped to `src/mangoo`). This runs as
+`pyproject.toml` under `[tool.mypy]`, scoped to `src/hayavega`). This runs as
 its own required `typecheck` CI job, separate from `lint` and `test`, on the
-pure-Python fallback build. `src/mangoo/py.typed` (PEP 561) ships in the
-built wheel, so downstream projects that import Mangoo get real type
+pure-Python fallback build. `src/hayavega/py.typed` (PEP 561) ships in the
+built wheel, so downstream projects that import Hayavega get real type
 checking against its actual annotations rather than an implicit `Any`.
 Two narrow `[[tool.mypy.overrides]]` blocks turn off missing-import errors
-for `mangoo_native` (the optional, self-built Rust extension) and for
+for `hayavega_native` (the optional, self-built Rust extension) and for
 `psycopg`/`pymysql` (optional database drivers not installed in the default
 dev environment) -- everything else is checked at mypy's default strictness.
 
@@ -478,37 +478,37 @@ separate `dependency-scan` CI job on every push and pull request, and
 `pip`, `cargo`, and GitHub Actions dependencies -- so a fix is proposed
 automatically, not just flagged.
 
-## Mangoo Signals
+## Hayavega Signals
 
-The opt-in in-process event bus is available under `mangoo.addons.signals`.
+The opt-in in-process event bus is available under `hayavega.addons.signals`.
 Applications explicitly create a `SignalBus`, subscribe to named events, and
 publish events. Delivery is always concurrent and off the caller's thread --
 there is no sync/async choice to make -- through a Rust-native worker pool
-(`mangoo_native.SignalDispatcher`) when the optional extension is built, or a
+(`hayavega_native.SignalDispatcher`) when the optional extension is built, or a
 behavior-compatible Python `ThreadPoolExecutor` otherwise, and isolates
 subscriber failures either way. Pass the same `SignalBus` as `signals=` to
 `create_application`, `auth_routes`, `admin_routes`, or `migrations.apply` to
 receive `request.*`, `auth.*`, `admin.action`, and `migration.applied` events
 from those components; nothing changes for applications that do not pass one.
-See `src/mangoo/addons/signals/README.md` for its full API, delivery
+See `src/hayavega/addons/signals/README.md` for its full API, delivery
 semantics, and how to build the Rust-backed dispatcher.
 
-This add-on originally shipped as "Pulse." `mangoo.addons.pulse` and every
+This add-on originally shipped as "Pulse." `hayavega.addons.pulse` and every
 `pulse=` keyword argument still work exactly as before (`PulseBus` is
 `SignalBus`, `PulseEvent` is `SignalEvent`) but raise a `DeprecationWarning`
-and will be removed in a future release -- update to `mangoo.addons.signals`
+and will be removed in a future release -- update to `hayavega.addons.signals`
 and `signals=` when convenient. Event names themselves never changed.
 
 ## REST and GraphQL
 
-Mangoo includes a small dependency-free API layer. The bundled example exposes:
+Hayavega includes a small dependency-free API layer. The bundled example exposes:
 
 - `GET /api/health` - JSON REST health response.
 - `POST /graphql` - GraphQL JSON endpoint. Send `{"query":"{ greeting }"}`.
 
 Use `api_route('api/items', view, methods=('GET', 'POST'))` for REST endpoints. Define GraphQL fields with `Schema(query={'field': resolver}, mutation={'field': resolver})` and mount them with `path('graphql', graphql_view(schema), methods=('POST',))`.
 
-Mangoo's GraphQL layer is a small, dependency-free executor, not a full
+Hayavega's GraphQL layer is a small, dependency-free executor, not a full
 spec-compliant engine -- it supports what most resolvers actually need:
 
 - **Arguments**: `field(name: "Ada", limit: 5, active: true)` are parsed and
@@ -539,8 +539,8 @@ error rather than a confusing parse failure.
 
 Every JSON error response uses the same envelope: `{"detail": "<message>"}`.
 Return it with `json_response({"detail": "..."}, status)` so clients only ever
-parse one error shape; `mangoo.swagger.ERROR_SCHEMA` is that shape as a JSON
-Schema, reused automatically for the errors Mangoo documents for you (see
+parse one error shape; `hayavega.swagger.ERROR_SCHEMA` is that shape as a JSON
+Schema, reused automatically for the errors Hayavega documents for you (see
 below) and importable for your own routes' `responses`.
 
 There's no framework-enforced versioning scheme; the common convention is a
@@ -550,12 +550,12 @@ reports the version actually being served.
 
 ## Built-in Swagger documentation
 
-Every Mangoo application automatically exposes an OpenAPI 3 document at `/openapi.json` and an interactive Swagger UI at `/docs`. REST endpoints declared with `api_route` are added to the document automatically, along with a `bearerAuth` security scheme and a shared `Error` schema (`{"detail": string}`) that any endpoint's error responses can reference. The documentation routes are reserved only when an application has not defined routes with those paths itself.
+Every Hayavega application automatically exposes an OpenAPI 3 document at `/openapi.json` and an interactive Swagger UI at `/docs`. REST endpoints declared with `api_route` are added to the document automatically, along with a `bearerAuth` security scheme and a shared `Error` schema (`{"detail": string}`) that any endpoint's error responses can reference. The documentation routes are reserved only when an application has not defined routes with those paths itself.
 
 Describe an endpoint precisely instead of relying on the generic fallback:
 
 ```python
-from mangoo import ERROR_SCHEMA, api_route
+from hayavega import ERROR_SCHEMA, api_route
 
 api_route(
     "api/items",
@@ -574,19 +574,19 @@ api_route(
 
 ## Development autoreload
 
-Mangoo can launch directly from this source checkout without pip. From the repository root, run `./mango.cmd launch 8001`. It watches Python files in the project and automatically restarts the development server after code changes. Use `./mango.cmd launch 8001 --noreload` to disable this behavior.
+Hayavega can launch directly from this source checkout without pip. From the repository root, run `./hayavega.cmd launch 8001`. It watches Python files in the project and automatically restarts the development server after code changes. Use `./hayavega.cmd launch 8001 --noreload` to disable this behavior.
 
-If you later install Mangoo as a package, `mango launch 8001` is also available as a terminal command.
+If you later install Hayavega as a package, `hayavega launch 8001` is also available as a terminal command.
 
 Press `Ctrl+C` in the same terminal to stop the server cleanly, including when autoreload is enabled.
 
 ## MVP polish
 
-Render templates with `render_template("page.html", context, directories=(_settings.base_dir / "templates",))`, and expose development assets with `*static_routes(_settings.base_dir / "static")`. The included `TestClient` exercises a WSGI application without a network socket. Unhandled view errors are logged to `mangoo.runtime` and return a safe `500` response without a traceback when debug mode is disabled.
+Render templates with `render_template("page.html", context, directories=(_settings.base_dir / "templates",))`, and expose development assets with `*static_routes(_settings.base_dir / "static")`. The included `TestClient` exercises a WSGI application without a network socket. Unhandled view errors are logged to `hayavega.runtime` and return a safe `500` response without a traceback when debug mode is disabled.
 
 ### Templates
 
-`mangoo.templates` is a small, dependency-free engine -- every interpolated
+`hayavega.templates` is a small, dependency-free engine -- every interpolated
 value is HTML-escaped and no template ever executes arbitrary Python:
 
 - `{{ user.name }}` -- dotted-path lookups into dicts or objects.
@@ -609,7 +609,7 @@ never declares, instead of silently rendering nothing.
 
 ## i18n
 
-`mangoo.i18n` does translations with plain JSON catalogs, not gettext --
+`hayavega.i18n` does translations with plain JSON catalogs, not gettext --
 no `.po`/`.mo` files, no `msgfmt` compiler, no `makemessages`/
 `compilemessages`-equivalent command. A project hand-edits
 `locale/en.json`/`locale/es.json` directly:
@@ -619,7 +619,7 @@ no `.po`/`.mo` files, no `msgfmt` compiler, no `makemessages`/
 ```
 
 ```python
-from mangoo.i18n import catalog_from_settings, translator_for
+from hayavega.i18n import catalog_from_settings, translator_for
 
 catalog = catalog_from_settings(settings.i18n)  # Settings.i18n.languages/default_language/locale_dir
 
@@ -645,15 +645,15 @@ negotiation details, pluralization, and an explicit `?lang=`-style override.
 
 ## UI framework
 
-`mangoo.ui` is a server-rendered component system plus a first-party
+`hayavega.ui` is a server-rendered component system plus a first-party
 htmx-style hypermedia runtime, both living inside this package -- no npm,
 no Node.js, no bundler, no separate frontend project. A component is a
 plain Python function returning `Markup`:
 
 ```python
-from mangoo import path
-from mangoo.response import Response
-from mangoo.ui import Alert, Button, Page, ui_routes
+from hayavega import path
+from hayavega.response import Response
+from hayavega.ui import Alert, Button, Page, ui_routes
 
 
 def home(request):
@@ -661,8 +661,8 @@ def home(request):
         "Home",
         Alert("Welcome back!", variant="success"),
         Button("Refresh", hx_get="/fragment", hx_target="#content"),
-        stylesheets=["/mangoo-ui/mangoo-ui.css"],
-        scripts=["/mangoo-ui/mangoo-ui.js"],
+        stylesheets=["/hayavega-ui/hayavega-ui.css"],
+        scripts=["/hayavega-ui/hayavega-ui.js"],
     )
     return Response(body)
 
@@ -674,7 +674,7 @@ def fragment(request):
 urlpatterns = [
     path("", home),
     path("fragment", fragment),
-    *ui_routes(),  # mounts /mangoo-ui/mangoo-ui.js and /mangoo-ui/mangoo-ui.css
+    *ui_routes(),  # mounts /hayavega-ui/hayavega-ui.js and /hayavega-ui/hayavega-ui.css
 ]
 ```
 
@@ -683,9 +683,9 @@ buttons/links, on submit for forms) and swap the returned HTML fragment
 into `hx-target` using `hx-swap` -- the HTMX pattern, implemented in one
 small dependency-free JS file with a single delegated click listener for
 both hx-* triggers and `mgo-boost` client-side link routing. It reads the
-`mangoo_csrf` cookie and sends it as `X-Csrf-Token` automatically, so an
+`hayavega_csrf` cookie and sends it as `X-Csrf-Token` automatically, so an
 `hx-post` to a `@csrf_protect`-guarded view is protected without extra
-client-side wiring. Run the example site (`./mango.cmd launch 8001` from
+client-side wiring. Run the example site (`./hayavega.cmd launch 8001` from
 `example_site/`) and visit `/ui-demo` for a runnable version of this
 pattern, or see `tests/test_ui_hypermedia.py` for the full round trip
 proven against the real WSGI stack.
@@ -704,32 +704,32 @@ Rust acceleration for fragment rendering was benchmarked and found to be a
 genuine win for the small, fixed-shape markup a fragment swap renders
 (4x-8x faster in isolation) -- unlike full-page template rendering, where
 every general-purpose Rust candidate lost to Python. It is not wired into
-`mangoo.ui`'s shipped API (a hardcoded native renderer only ever handles
+`hayavega.ui`'s shipped API (a hardcoded native renderer only ever handles
 one exact fragment shape, so generalizing it would reintroduce the same
 problem full-page Rust templating already failed at); see
 `benchmarks/native_htmx_fragment.py` for the measurement and
-`benchmarks/mangoo_app/app.py`'s `posts_fragment_native` for a worked
+`benchmarks/hayavega_app/app.py`'s `posts_fragment_native` for a worked
 example of writing your own for a hot fragment in your own project.
 
-## Rust-native Mangoo types
+## Rust-native Hayavega types
 
-Use Mangoo-specific types where performance-sensitive code benefits from a Rust implementation:
+Use Hayavega-specific types where performance-sensitive code benefits from a Rust implementation:
 
 ```python
-from mangoo import mango_list
+from hayavega import mango_list
 
 items = mango_list(["first", "second"])
 items.append("third")
 ```
 
-`mango_list` remains usable without a Rust toolchain through a compatible fallback. When the `mangoo_native` PyO3 extension is built, it automatically becomes a Rust-owned collection. Mangoo Signals' event dispatcher follows the same pattern: see [Mangoo Signals](#mangoo-signals) above. The next Rust migration targets are request routing, JSON serialization, authentication operations, and database execution.
+`mango_list` remains usable without a Rust toolchain through a compatible fallback. When the `hayavega_native` PyO3 extension is built, it automatically becomes a Rust-owned collection. Hayavega Signals' event dispatcher follows the same pattern: see [Hayavega Signals](#hayavega-signals) above. The next Rust migration targets are request routing, JSON serialization, authentication operations, and database execution.
 
 ## Declarative data entities
 
-Mangoo uses modern entity definitions and its own distinct query API, designed independently rather than copying an existing ORM's names:
+Hayavega uses modern entity definitions and its own distinct query API, designed independently rather than copying an existing ORM's names:
 
 ```python
-from mangoo import Decimal, Entity, Text
+from hayavega import Decimal, Entity, Text
 
 
 class Product(Entity):
@@ -768,7 +768,7 @@ everywhere the ORM is used, including the admin's generated forms. See
 Use a schema-driven `Serializer` for external payload validation or an `EntitySerializer` for model output:
 
 ```python
-from mangoo import EntitySerializer
+from hayavega import EntitySerializer
 
 product_view = EntitySerializer(Product)
 payload = product_view.json(product)
@@ -781,20 +781,20 @@ The serializer normalizes entities, mappings, lists, and dates, then encodes the
 Create the first administrator for a project with:
 
 ```powershell
-python mango.py createadmin
+python hayavega.py createadmin
 ```
 
-Mangoo prompts for a username, email address, and password confirmation. It stores users in the project's local SQLite database (`mangoo.sqlite3` by default), with salted scrypt password hashes. Application code can validate credentials with `mangoo.authenticate(database_path, username, password)`.
+Hayavega prompts for a username, email address, and password confirmation. It stores users in the project's local SQLite database (`hayavega.sqlite3` by default), with salted scrypt password hashes. Application code can validate credentials with `hayavega.authenticate(database_path, username, password)`.
 
 ## Authentication security
 
-Mangoo's built-in authentication uses salted, memory-hard scrypt password hashes; by default requires passwords of at least 12 characters with lowercase, uppercase, numeric, and symbol characters (replaceable with your own `validators=[...]` list, or project-wide via `Settings.password_validators` -- see [Password policy](docs/topics/auth.md#password-policy)); locks an account for 15 minutes after five failed attempts; and stores only hashes of session tokens. Enable authenticator-app two-factor authentication with:
+Hayavega's built-in authentication uses salted, memory-hard scrypt password hashes; by default requires passwords of at least 12 characters with lowercase, uppercase, numeric, and symbol characters (replaceable with your own `validators=[...]` list, or project-wide via `Settings.password_validators` -- see [Password policy](docs/topics/auth.md#password-policy)); locks an account for 15 minutes after five failed attempts; and stores only hashes of session tokens. Enable authenticator-app two-factor authentication with:
 
 ```powershell
-python mango.py enable2fa admin
+python hayavega.py enable2fa admin
 ```
 
-The command prints a secret to add to a TOTP-compatible authenticator app. Keep it private: it is shown only when two-factor authentication is enabled. `mango.py enable2fa` automatically encrypts the stored secret with a key derived from `Settings.secret_key` when `cryptography` is installed (`uv add cryptography`); without it, `mango diagnose` reports that the secret is stored in plaintext instead. Calling `enable_totp`/`authenticate`/`auth_routes` directly from your own code needs `secret_key=` passed explicitly -- see [Authentication](docs/topics/auth.md#two-factor-authentication-totp).
+The command prints a secret to add to a TOTP-compatible authenticator app. Keep it private: it is shown only when two-factor authentication is enabled. `hayavega.py enable2fa` automatically encrypts the stored secret with a key derived from `Settings.secret_key` when `cryptography` is installed (`uv add cryptography`); without it, `hayavega diagnose` reports that the secret is stored in plaintext instead. Calling `enable_totp`/`authenticate`/`auth_routes` directly from your own code needs `secret_key=` passed explicitly -- see [Authentication](docs/topics/auth.md#two-factor-authentication-totp).
 
 The generated project also exposes JSON authentication endpoints: `POST /api/auth/login`, `GET /api/auth/me`, and `POST /api/auth/logout`. Login accepts `username`, `password`, and optional `totp_code`; it returns a Bearer session token. Use HTTPS before exposing these endpoints outside local development.
 
@@ -802,13 +802,13 @@ The generated project also exposes JSON authentication endpoints: `POST /api/aut
 
 `admin_routes(_settings.database)` always provides administrator-only
 `/admin` and `/admin/users` pages. Pass `models=[ModelAdmin(YourEntity)]` to
-add paginated list/add/edit/delete pages for your own `mangoo.models.Entity`
+add paginated list/add/edit/delete pages for your own `hayavega.models.Entity`
 subclasses:
 
 ```python
-from mangoo import admin_routes
-from mangoo.admin import ModelAdmin
-from mangoo.models import Entity, Integer, Text
+from hayavega import admin_routes
+from hayavega.admin import ModelAdmin
+from hayavega.models import Entity, Integer, Text
 
 
 class Product(Entity):
@@ -829,7 +829,7 @@ Each registered model gets:
 
 Every add/edit/delete submission is CSRF-protected the same way as
 `auth_routes`: the rendered form carries a hidden `csrf_token` field (plain
-HTML forms can't set a custom header), checked against the `mangoo_csrf`
+HTML forms can't set a custom header), checked against the `hayavega_csrf`
 cookie set when the form was shown. Bearer-token requests skip the check,
 since they aren't vulnerable to cross-site forgery the way cookies are.
 
@@ -860,12 +860,12 @@ real email. Every step -- request, completion, rotation, and bulk revocation
 ### Login and session telemetry
 
 Every login attempt and every session records the client's IP address and
-`User-Agent`, both in the `mangoo_sessions` table and in the audit log
+`User-Agent`, both in the `hayavega_sessions` table and in the audit log
 (`auth.login_succeeded`, `auth.login_failed`, and `auth.session_created`),
 so you can review where and from what an account signed in -- without
 storing anything sensitive: no credential, token, or cookie is ever
 recorded, matching the audit log's existing rule. This is IP-address-level
-context, not resolved geolocation -- Mangoo stays dependency-free and does
+context, not resolved geolocation -- Hayavega stays dependency-free and does
 not ship or call a GeoIP service; add one yourself and log its result as
 audit metadata if you need city/country-level location.
 

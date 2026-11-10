@@ -1,7 +1,7 @@
-"""Verifies mangoo.rust_runtime's optional TLS termination actually serves
+"""Verifies hayavega.rust_runtime's optional TLS termination actually serves
 HTTPS, not just that the code compiles: a real client TLS handshake
 against a real self-signed certificate, over a real socket. Requires
-mangoo_native and the `openssl` CLI (used only to generate a throwaway
+hayavega_native and the `openssl` CLI (used only to generate a throwaway
 self-signed test certificate/key pair -- not a project dependency, and
 the generated files are never committed)."""
 
@@ -17,14 +17,14 @@ from pathlib import Path
 from types import ModuleType
 
 try:
-    import mangoo_native  # noqa: F401
+    import hayavega_native  # noqa: F401
 
     NATIVE_AVAILABLE = True
 except ImportError:
     NATIVE_AVAILABLE = False
 
-from mangoo.conf import load_settings_from_module
-from mangoo.rust_runtime import serve as serve_rust
+from hayavega.conf import load_settings_from_module
+from hayavega.rust_runtime import serve as serve_rust
 
 OPENSSL_AVAILABLE = shutil.which("openssl") is not None
 
@@ -49,7 +49,7 @@ def _wait_until_https_ready(host: str, port: int, ssl_context: ssl.SSLContext, t
     raise RuntimeError(f"HTTPS server on {host}:{port} never became ready: {last_error}")
 
 
-@unittest.skipUnless(NATIVE_AVAILABLE, "mangoo_native is not built; see the native-extension CI job")
+@unittest.skipUnless(NATIVE_AVAILABLE, "hayavega_native is not built; see the native-extension CI job")
 @unittest.skipUnless(OPENSSL_AVAILABLE, "openssl CLI is not on PATH; used only to generate a throwaway test certificate")
 class RustRuntimeTlsTests(unittest.TestCase):
     @classmethod
@@ -81,7 +81,7 @@ class RustRuntimeTlsTests(unittest.TestCase):
         def echo(request):
             return {"scheme": request.is_secure}
 
-        from mangoo import api_route
+        from hayavega import api_route
 
         urlpatterns = [api_route("echo", echo, methods=("GET",))]
         cls.host = "127.0.0.1"
@@ -140,7 +140,7 @@ class TlsSettingsValidationTests(unittest.TestCase):
         from types import SimpleNamespace
 
         module = ModuleType("config.settings")
-        module.settings = SimpleNamespace(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server=server)
+        module.settings = SimpleNamespace(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server=server)
         return module
 
     def test_tls_cert_without_tls_key_is_rejected(self):

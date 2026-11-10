@@ -3,9 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo import admin_routes, audit_events, create_session, create_superuser, create_user, csrf_protect, login_required
-from mangoo.request import Request
-from mangoo.security import CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, cookie, csrf_token_response
+from hayavega import admin_routes, audit_events, create_session, create_superuser, create_user, csrf_protect, login_required
+from hayavega.request import Request
+from hayavega.security import CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, cookie, csrf_token_response
 
 
 def request(method="GET", *, headers=None):

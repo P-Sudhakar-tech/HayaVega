@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.audit import audit_events
-from mangoo.auth import (
+from hayavega.audit import audit_events
+from hayavega.auth import (
     authenticate,
     authenticate_session,
     create_email_verification_token,
@@ -52,7 +52,7 @@ class PasswordResetTests(unittest.TestCase):
         token = create_password_reset_token(self.database, self.user)
         connection = sqlite3.connect(self.database)
         try:
-            connection.execute("UPDATE mangoo_auth_tokens SET expires_at = 0")
+            connection.execute("UPDATE hayavega_auth_tokens SET expires_at = 0")
             connection.commit()
         finally:
             connection.close()
@@ -103,7 +103,7 @@ class EmailVerificationTests(unittest.TestCase):
         token = create_email_verification_token(self.database, self.user)
         connection = sqlite3.connect(self.database)
         try:
-            connection.execute("UPDATE mangoo_auth_tokens SET expires_at = 0")
+            connection.execute("UPDATE hayavega_auth_tokens SET expires_at = 0")
             connection.commit()
         finally:
             connection.close()

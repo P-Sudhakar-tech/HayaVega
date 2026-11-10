@@ -4,9 +4,9 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
-from mangoo.db import connect
-from mangoo.migrations import MigrationError, MigrationFormatError, MigrationGenerationError, MigrationIntegrityError, _identifier, apply, discover, generate, migration_directories, status
-from mangoo.models import Decimal, Entity, Integer, Text
+from hayavega.db import connect
+from hayavega.migrations import MigrationError, MigrationFormatError, MigrationGenerationError, MigrationIntegrityError, _identifier, apply, discover, generate, migration_directories, status
+from hayavega.models import Decimal, Entity, Integer, Text
 
 
 class MigrationTests(unittest.TestCase):
@@ -33,7 +33,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 tables = connection.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", ("transient_data",)).fetchall()
                 self.assertEqual(tables, [])
-                self.assertEqual(connection.execute("SELECT COUNT(*) AS total FROM mangoo_migrations").fetchone()["total"], 0)
+                self.assertEqual(connection.execute("SELECT COUNT(*) AS total FROM hayavega_migrations").fetchone()["total"], 0)
             finally:
                 connection.close()
 
@@ -191,7 +191,7 @@ class MigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             self._migration(root, "0001_base", ["CREATE TABLE base (id INTEGER)"])
-            with patch("mangoo.migrations.importlib.util.spec_from_file_location", return_value=None):
+            with patch("hayavega.migrations.importlib.util.spec_from_file_location", return_value=None):
                 with self.assertRaisesRegex(MigrationFormatError, "Cannot load migration"):
                     discover([root])
 

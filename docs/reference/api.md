@@ -1,57 +1,57 @@
 # API reference
 
-Generated directly from Mangoo's own docstrings and type hints (the same
+Generated directly from Hayavega's own docstrings and type hints (the same
 ones `mypy` checks in CI) &mdash; this page can't drift from the actual
 public API the way a hand-maintained second copy would.
 
 ## Routing
 
-::: mangoo.routing
+::: hayavega.routing
     options:
       show_root_heading: false
       members:
         - path
 
-::: mangoo.rest.api_route
+::: hayavega.rest.api_route
 
 ## Request & Response
 
-::: mangoo.request.Request
+::: hayavega.request.Request
 
-::: mangoo.response.Response
+::: hayavega.response.Response
 
-::: mangoo.response.json_response
+::: hayavega.response.json_response
 
 ## Models
 
-::: mangoo.models.Entity
+::: hayavega.models.Entity
 
-::: mangoo.models.Collection
+::: hayavega.models.Collection
 
-::: mangoo.models.Selection
+::: hayavega.models.Selection
 
 ## Database
 
-::: mangoo.db.connect
+::: hayavega.db.connect
 
-::: mangoo.db.connect_readonly
+::: hayavega.db.connect_readonly
 
-::: mangoo.db.enable_connection_pooling
+::: hayavega.db.enable_connection_pooling
 
-::: mangoo.db.enable_readonly_connection_pooling
+::: hayavega.db.enable_readonly_connection_pooling
 
 ## Authentication
 
-::: mangoo.auth.create_user
+::: hayavega.auth.create_user
 
-::: mangoo.auth.authenticate
+::: hayavega.auth.authenticate
 
-::: mangoo.auth.create_session
+::: hayavega.auth.create_session
 
 ## Runtime
 
-::: mangoo.runtime.create_application
+::: hayavega.runtime.create_application
 
-::: mangoo.asgi.create_asgi_application
+::: hayavega.asgi.create_asgi_application
 
-::: mangoo.rust_runtime.serve
+::: hayavega.rust_runtime.serve

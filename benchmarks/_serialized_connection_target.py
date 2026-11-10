@@ -1,6 +1,6 @@
 """Driver used by serialized_connection_vs_python.py to serve
-benchmarks/mangoo_app's /posts.json route through
-mangoo_native.SerializedConnection instead of Selection.values() --
+benchmarks/hayavega_app's /posts.json route through
+hayavega_native.SerializedConnection instead of Selection.values() --
 everything else (routing, create_application(), Response/JSON encoding
 via api_route's own wrapping) is the real, unmodified framework code;
 only the DB-access path inside this one view differs, isolating exactly
@@ -14,11 +14,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from mangoo_native import SerializedConnection  # noqa: E402
+from hayavega_native import SerializedConnection  # noqa: E402
 
-from benchmarks.mangoo_app.app import DATABASE, SEED_COUNT, seed, urlpatterns  # noqa: E402
-from mangoo.rest import api_route  # noqa: E402
-from mangoo.runtime import create_application  # noqa: E402
+from benchmarks.hayavega_app.app import DATABASE, SEED_COUNT, seed, urlpatterns  # noqa: E402
+from hayavega.rest import api_route  # noqa: E402
+from hayavega.runtime import create_application  # noqa: E402
 
 _connection: SerializedConnection | None = None
 

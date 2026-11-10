@@ -1,11 +1,11 @@
 import unittest
 
-from mangoo import path
-from mangoo.asgi import create_asgi_application
-from mangoo.middleware import build_chain, load_middleware
-from mangoo.response import Response
-from mangoo.runtime import create_application
-from mangoo.testing import AsyncTestClient, TestClient
+from hayavega import path
+from hayavega.asgi import create_asgi_application
+from hayavega.middleware import build_chain, load_middleware
+from hayavega.response import Response
+from hayavega.runtime import create_application
+from hayavega.testing import AsyncTestClient, TestClient
 
 
 def _recording_middleware(log: list, label: str):

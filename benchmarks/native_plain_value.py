@@ -1,4 +1,4 @@
-"""Benchmarks mangoo_native's `plain_value` -- a Rust replacement for
+"""Benchmarks hayavega_native's `plain_value` -- a Rust replacement for
 serializers.py's `_plain()`, the recursive object-graph walk every API
 response passes through before `msgspec.json.encode()` -- against
 realistic payload shapes. Per this project's own stated principle:
@@ -14,11 +14,11 @@ of "walk an arbitrary Entity/dict/list graph" to lose to -- but it hit
 the same structural wall `native_htmx_fragment.py`'s rejected general
 template engine did (1.4-2.1x loss there): a recursive walk calling
 back into Python at every node pays one FFI crossing per node, and that
-cost dominates for a graph this shallow. `mangoo_native.plain_value`
+cost dominates for a graph this shallow. `hayavega_native.plain_value`
 stays in the codebase, unwired, as a documented, benchmarked rejection
 -- see `UPCOMING_IMPROVEMENT_ROADMAP.md`.
 
-Requires mangoo_native to be built (see hatch_build.py / README.md).
+Requires hayavega_native to be built (see hatch_build.py / README.md).
 
 Usage:
     python benchmarks/native_plain_value.py
@@ -30,12 +30,12 @@ import timeit
 from datetime import datetime, timezone
 
 try:
-    from mangoo_native import plain_value as _native_plain
+    from hayavega_native import plain_value as _native_plain
 except ImportError as error:
-    raise SystemExit(f"mangoo_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
+    raise SystemExit(f"hayavega_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
 
-from mangoo.models import Entity, Integer, Key, Text, Timestamp
-from mangoo.serializers import _plain as _python_plain
+from hayavega.models import Entity, Integer, Key, Text, Timestamp
+from hayavega.serializers import _plain as _python_plain
 
 # --- realistic payload shapes ------------------------------------------
 

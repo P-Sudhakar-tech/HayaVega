@@ -3,12 +3,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from mangoo.mail import ConsoleEmailBackend, EmailMessage, FileEmailBackend, SMTPEmailBackend, backend_from_settings, mail_notifier, send_mail
+from hayavega.mail import ConsoleEmailBackend, EmailMessage, FileEmailBackend, SMTPEmailBackend, backend_from_settings, mail_notifier, send_mail
 
 
 class ConsoleEmailBackendTests(unittest.TestCase):
     def test_logs_the_message(self):
-        with self.assertLogs("mangoo.mail", level="INFO") as captured:
+        with self.assertLogs("hayavega.mail", level="INFO") as captured:
             send_mail(EmailMessage(to=("alice@example.com",), subject="Hi", body="Hello there"), ConsoleEmailBackend())
         self.assertIn("Hi", captured.output[0])
         self.assertIn("alice@example.com", captured.output[0])
@@ -41,7 +41,7 @@ class FileEmailBackendTests(unittest.TestCase):
 
 
 class SmtpEmailBackendTests(unittest.TestCase):
-    @patch("mangoo.mail.smtplib.SMTP")
+    @patch("hayavega.mail.smtplib.SMTP")
     def test_sends_over_smtp_with_starttls_and_login(self, smtp_class):
         connection = MagicMock()
         smtp_class.return_value.__enter__.return_value = connection
@@ -52,7 +52,7 @@ class SmtpEmailBackendTests(unittest.TestCase):
         connection.login.assert_called_once_with("user", "pw")
         connection.send_message.assert_called_once()
 
-    @patch("mangoo.mail.smtplib.SMTP")
+    @patch("hayavega.mail.smtplib.SMTP")
     def test_skips_starttls_and_login_when_not_configured(self, smtp_class):
         connection = MagicMock()
         smtp_class.return_value.__enter__.return_value = connection

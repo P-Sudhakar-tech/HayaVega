@@ -1,5 +1,5 @@
-"""Driver used to benchmark mangoo.rust_runtime's TLS overhead: serves
-benchmarks/mangoo_app/app.py over HTTPS using a throwaway self-signed
+"""Driver used to benchmark hayavega.rust_runtime's TLS overhead: serves
+benchmarks/hayavega_app/app.py over HTTPS using a throwaway self-signed
 certificate generated on the fly via the openssl CLI. Not a benchmark
 itself -- see benchmarks/README.md for the numbers this produced."""
 
@@ -10,8 +10,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from benchmarks.mangoo_app.app import seed, urlpatterns  # noqa: E402
-from mangoo.rust_runtime import serve  # noqa: E402
+from benchmarks.hayavega_app.app import seed, urlpatterns  # noqa: E402
+from hayavega.rust_runtime import serve  # noqa: E402
 
 if __name__ == "__main__":
     directory = tempfile.mkdtemp()

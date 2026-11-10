@@ -68,9 +68,9 @@ def _with_content_length(response):
     servers based on wsgiref compute it for you; waitress does not, and
     without it falls back to chunked encoding + Connection: close, silently
     disabling keep-alive). Set it explicitly so Django gets the same
-    keep-alive treatment from waitress that Mangoo's Response already does
+    keep-alive treatment from waitress that Hayavega's Response already does
     by declaring its own Content-Length -- otherwise this benchmark would
-    measure "chunked, non-keep-alive Django" against "keep-alive Mangoo",
+    measure "chunked, non-keep-alive Django" against "keep-alive Hayavega",
     which is a WSGI response-framing artifact, not a framework difference.
     """
     response["Content-Length"] = str(len(response.content))

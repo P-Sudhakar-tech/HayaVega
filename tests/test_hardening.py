@@ -3,10 +3,10 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-from mangoo import HardeningOptions, Response, path
-from mangoo.hardening import Hardening, RateLimiter, RateLimiterBackendError, RedisRateLimiter
-from mangoo.logging import JsonFormatter
-from mangoo.runtime import create_application
+from hayavega import HardeningOptions, Response, path
+from hayavega.hardening import Hardening, RateLimiter, RateLimiterBackendError, RedisRateLimiter
+from hayavega.logging import JsonFormatter
+from hayavega.runtime import create_application
 
 
 def call(application, request_path="/", *, method="GET", headers=None, remote_addr="127.0.0.1", scheme="http", content_length=None, query_string=""):
@@ -75,8 +75,8 @@ class HardeningTests(unittest.TestCase):
     def test_https_redirect_preserves_query_string(self):
         options = HardeningOptions(allowed_hosts=("example.test",), rate_limit=10, force_https=True)
         application = create_application([path("search", lambda request: Response("ok"))], hardening=options)
-        redirected, _ = call(application, "/search", headers={"Host": "example.test"}, query_string="q=mangoo&page=2")
-        self.assertEqual(redirected["headers"]["Location"], "https://example.test/search?q=mangoo&page=2")
+        redirected, _ = call(application, "/search", headers={"Host": "example.test"}, query_string="q=hayavega&page=2")
+        self.assertEqual(redirected["headers"]["Location"], "https://example.test/search?q=hayavega&page=2")
 
     def test_forwarded_headers_require_an_explicit_trusted_proxy(self):
         options = HardeningOptions(allowed_hosts=("example.test",), rate_limit=10, force_https=True, trust_proxy_headers=True, trusted_proxy_ips=("10.0.0.0/8",))
@@ -87,7 +87,7 @@ class HardeningTests(unittest.TestCase):
         self.assertEqual(trusted["status"], "200 OK")
 
     def test_audit_log_excludes_request_headers(self):
-        with self.assertLogs("mangoo.audit", "INFO") as logs:
+        with self.assertLogs("hayavega.audit", "INFO") as logs:
             call(self.application, headers={"Host": "example.test", "Authorization": "Bearer secret"})
         self.assertIn("method=GET path=/ status=200", logs.output[0])
         self.assertNotIn("secret", logs.output[0])
@@ -131,7 +131,7 @@ class HardeningTests(unittest.TestCase):
             Hardening(options)
 
     def test_json_formatter_includes_request_metadata_without_headers(self):
-        record = logging.LogRecord("mangoo.audit", logging.INFO, __file__, 0, "request complete", (), None)
+        record = logging.LogRecord("hayavega.audit", logging.INFO, __file__, 0, "request complete", (), None)
         record.request_id, record.method, record.path, record.status, record.duration_ms = "request-1", "GET", "/healthz", 200, 2.5
         output = JsonFormatter().format(record)
         self.assertIn('"request_id":"request-1"', output)
@@ -196,7 +196,7 @@ class RedisRateLimiterTests(unittest.TestCase):
             limiter = RedisRateLimiter(limit=5, window_seconds=60)
 
         self.assertTrue(limiter.allow("client-a"))
-        fake_script.assert_called_once_with(keys=["mangoo:ratelimit:client-a"], args=[60])
+        fake_script.assert_called_once_with(keys=["hayavega:ratelimit:client-a"], args=[60])
 
         fake_script.return_value = 6
         self.assertFalse(limiter.allow("client-a"))

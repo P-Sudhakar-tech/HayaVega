@@ -1,6 +1,6 @@
 import unittest
 
-from mangoo.ui.components import Alert, Button, Card, Form, FormField, NavBar, Page
+from hayavega.ui.components import Alert, Button, Card, Form, FormField, NavBar, Page
 
 
 class ComponentTests(unittest.TestCase):
@@ -32,15 +32,15 @@ class ComponentTests(unittest.TestCase):
         self.assertIn('hx-post="/submit"', result)
 
     def test_navbar_renders_brand_and_links(self):
-        result = NavBar("Mangoo", [("Home", "/"), ("Admin", "/admin")])
-        self.assertIn("Mangoo", result)
+        result = NavBar("Hayavega", [("Home", "/"), ("Admin", "/admin")])
+        self.assertIn("Hayavega", result)
         self.assertIn('href="/admin"', result)
 
     def test_page_wraps_title_stylesheets_and_scripts(self):
-        result = Page("Home", Card("x"), stylesheets=["/mangoo-ui/mangoo-ui.css"], scripts=["/mangoo-ui/mangoo-ui.js"])
+        result = Page("Home", Card("x"), stylesheets=["/hayavega-ui/hayavega-ui.css"], scripts=["/hayavega-ui/hayavega-ui.js"])
         self.assertIn("<title>Home</title>", result)
-        self.assertIn('href="/mangoo-ui/mangoo-ui.css"', result)
-        self.assertIn('src="/mangoo-ui/mangoo-ui.js"', result)
+        self.assertIn('href="/hayavega-ui/hayavega-ui.css"', result)
+        self.assertIn('src="/hayavega-ui/hayavega-ui.js"', result)
 
 
 if __name__ == "__main__":

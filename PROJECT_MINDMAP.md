@@ -1,8 +1,8 @@
-# Mangoo project mind map
+# Hayavega project mind map
 
 ```mermaid
 mindmap
-  root((Mangoo))
+  root((Hayavega))
     Purpose
       Python web framework with its own conventional structure
       Rust core and optional native extensions

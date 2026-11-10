@@ -1,10 +1,10 @@
 import unittest
 
-from mangoo import path
-from mangoo.response import Response
-from mangoo.runtime import create_application
-from mangoo.testing import TestClient
-from mangoo.ui import NavBar, Page, div
+from hayavega import path
+from hayavega.response import Response
+from hayavega.runtime import create_application
+from hayavega.testing import TestClient
+from hayavega.ui import NavBar, Page, div
 
 
 def page_one(request):
@@ -12,7 +12,7 @@ def page_one(request):
         "Page one",
         div(NavBar("Demo", [("Home", "/"), ("Two", "/two")]), mgo_boost=True),
         div("First page content", mgo_boost_target=True),
-        scripts=["/mangoo-ui/mangoo-ui.js"],
+        scripts=["/hayavega-ui/hayavega-ui.js"],
     )
     return Response(body)
 
@@ -22,7 +22,7 @@ def page_two(request):
         "Page two",
         div(NavBar("Demo", [("Home", "/"), ("Two", "/two")]), mgo_boost=True),
         div("Second page content", mgo_boost_target=True),
-        scripts=["/mangoo-ui/mangoo-ui.js"],
+        scripts=["/hayavega-ui/hayavega-ui.js"],
     )
     return Response(body)
 

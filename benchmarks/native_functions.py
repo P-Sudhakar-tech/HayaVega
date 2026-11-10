@@ -1,10 +1,10 @@
-"""Benchmark the three native Rust functions that exist in mangoo_native but
-are called from nowhere in src/mangoo/*.py (serialize_json, compile_selection,
+"""Benchmark the three native Rust functions that exist in hayavega_native but
+are called from nowhere in src/hayavega/*.py (serialize_json, compile_selection,
 normalize_path), against their pure-Python equivalents, before wiring any of
 them in -- per this project's own stated principle: "Benchmark each candidate
 first; schedule only once a measured win justifies it."
 
-Requires mangoo_native to be built (see hatch_build.py / README.md).
+Requires hayavega_native to be built (see hatch_build.py / README.md).
 
 Usage:
     python benchmarks/native_functions.py
@@ -17,12 +17,12 @@ import timeit
 import msgspec
 
 try:
-    from mangoo_native import compile_selection, normalize_path, serialize_json
+    from hayavega_native import compile_selection, normalize_path, serialize_json
 except ImportError as error:
-    raise SystemExit(f"mangoo_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
+    raise SystemExit(f"hayavega_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
 
 
-# --- serialize_json vs msgspec.json.encode (Mangoo's current default) ------
+# --- serialize_json vs msgspec.json.encode (Hayavega's current default) ------
 
 _JSON_PAYLOAD = {"id": 42, "title": "Post 42", "views": 126, "tags": ["a", "b", "c"], "active": True, "score": 3.14159}
 
@@ -52,7 +52,7 @@ def _python_sql() -> str:
 def _native_sql() -> str:
     return compile_selection(
         "posts",
-        [],  # empty fields list means "SELECT *" in mangoo-core's QueryPlan
+        [],  # empty fields list means "SELECT *" in hayavega-core's QueryPlan
         [(name, operator) for name, operator, _ in _CLAUSES],
         _ORDERING,
         20,

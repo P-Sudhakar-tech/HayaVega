@@ -8,7 +8,7 @@ your own routes or used as the pre-wired `auth_routes()` endpoints.
 ## Pre-wired routes
 
 ```python
-from mangoo.auth_api import auth_routes
+from hayavega.auth_api import auth_routes
 
 urlpatterns = [
     *auth_routes(DATABASE, secret_key=SECRET_KEY),
@@ -25,7 +25,7 @@ including the shared `{"detail": string}` error envelope. See
 ## Users and sessions, directly
 
 ```python
-from mangoo.auth import create_user, authenticate, create_session, authenticate_session
+from hayavega.auth import create_user, authenticate, create_session, authenticate_session
 
 user = create_user(DATABASE, "alice", "alice@example.com", "Correct-Horse-7!")
 authenticated = authenticate(DATABASE, "alice", "Correct-Horse-7!")
@@ -46,7 +46,7 @@ symbol) isn't hardcoded into `create_user` -- it's just the default
 entirely:
 
 ```python
-from mangoo.auth import common_password_validator, create_user, min_length_validator
+from hayavega.auth import common_password_validator, create_user, min_length_validator
 
 create_user(
     DATABASE,
@@ -65,7 +65,7 @@ after it never run). Two ready-made ones ship alongside the default:
 match -- pair it with a length/complexity validator, since alone it
 enforces neither).
 
-`mango.py createadmin` reads `Settings.password_validators` (dotted
+`hayavega.py createadmin` reads `Settings.password_validators` (dotted
 paths to already-built validators, resolved the same way
 `job_handlers` is) when set, falling back to the default otherwise:
 
@@ -75,7 +75,7 @@ class Settings:
 ```
 
 ```python title="myapp/validators.py"
-from mangoo.auth import min_length_validator
+from hayavega.auth import min_length_validator
 
 relaxed_policy = min_length_validator(8)
 ```
@@ -92,7 +92,7 @@ valid attempt.
 ## Gating a view
 
 ```python
-from mangoo.security import login_required, permission_required, superuser_required, email_verified_required
+from hayavega.security import login_required, permission_required, superuser_required, email_verified_required
 
 
 @login_required(DATABASE)
@@ -121,13 +121,13 @@ correctly with `async def` views under [ASGI](asgi.md).
 
 A lighter analog of Django's `Group`/`Permission` models: permissions
 are free-form string codenames (e.g. `"blog.add_post"`), not tied to a
-`contenttypes` framework Mangoo doesn't have. Group a set of codenames
+`contenttypes` framework Hayavega doesn't have. Group a set of codenames
 once, assign users to as many groups as needed, and check membership at
 authorization time.
 
 ```python
-from mangoo.auth import add_user_to_group, create_group, user_permissions
-from mangoo.security import has_permission_required
+from hayavega.auth import add_user_to_group, create_group, user_permissions
+from hayavega.security import has_permission_required
 
 editors = create_group(DATABASE, "editors", ["blog.add_post", "blog.change_post"])
 add_user_to_group(DATABASE, alice, editors)
@@ -148,7 +148,7 @@ consistent rather than making groups a special case.
 ## Password reset and email verification
 
 ```python
-from mangoo.auth import create_password_reset_token, reset_password, create_email_verification_token, verify_email
+from hayavega.auth import create_password_reset_token, reset_password, create_email_verification_token, verify_email
 
 token = create_password_reset_token(DATABASE, user)  # 1 hour, single-use
 reset_password(DATABASE, token, "New-Password-9!")  # revokes every existing session
@@ -168,7 +168,7 @@ without a mail provider configured during development. See
 ## Two-factor authentication (TOTP)
 
 ```python
-from mangoo.auth import enable_totp, verify_totp
+from hayavega.auth import enable_totp, verify_totp
 
 secret = enable_totp(DATABASE, "alice", secret_key=SECRET_KEY)  # returns the secret to show as a QR code
 authenticate(DATABASE, "alice", password, totp_code="123456", secret_key=SECRET_KEY)
@@ -179,7 +179,7 @@ given, and `cryptography` is installed (`uv add cryptography` -- kept
 optional, like the PostgreSQL/MySQL drivers, rather than a mandatory
 dependency for every project), the stored TOTP secret is encrypted with a
 key derived from `secret_key`, not stored in plaintext. Without it, the
-secret is stored as-is -- `mango diagnose` reports that fallback. If a
+secret is stored as-is -- `hayavega diagnose` reports that fallback. If a
 user's secret was stored encrypted, every later `authenticate()` call for
 them needs the *same* `secret_key` or the TOTP check fails closed (treated
 as wrong, never silently skipped) rather than accepting any code.
@@ -187,7 +187,7 @@ as wrong, never silently skipped) rather than accepting any code.
 ## Sessions: listing, rotation, revoke-all
 
 ```python
-from mangoo.auth import list_sessions, rotate_session, revoke_all_sessions
+from hayavega.auth import list_sessions, rotate_session, revoke_all_sessions
 
 sessions = list_sessions(DATABASE, user)  # id/timestamps only, never a token
 new_token = rotate_session(DATABASE, old_token)  # fresh identifier, same session
@@ -197,7 +197,7 @@ revoke_all_sessions(DATABASE, user, except_token=current_token)
 Expired sessions are swept lazily (at most once a minute per database,
 not on every `authenticate_session` check) -- a still-physically-present
 expired row is never treated as valid either way, so this only affects
-how promptly `mangoo_sessions` itself shrinks back down, not whether an
+how promptly `hayavega_sessions` itself shrinks back down, not whether an
 expired token is rejected.
 
 ## Audit events
@@ -213,7 +213,7 @@ changed data).
 ## CSRF
 
 ```python
-from mangoo.security import csrf_protect
+from hayavega.security import csrf_protect
 
 
 @csrf_protect

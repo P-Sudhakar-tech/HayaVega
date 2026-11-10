@@ -1,6 +1,6 @@
 import unittest
 
-from mangoo.ui.elements import Markup, div, fragment, input_, tag
+from hayavega.ui.elements import Markup, div, fragment, input_, tag
 
 
 class ElementTests(unittest.TestCase):

@@ -1,6 +1,6 @@
-site_name: Mangoo
+site_name: Hayavega
 site_description: A structured Python web framework with automatic, interactive API documentation and a Rust-accelerated core
-site_url: https://mangoo-framework.vercel.app/
+site_url: https://hayavega-framework.vercel.app/
 copyright: Released under the MIT License.
 
 docs_dir: docs
@@ -102,7 +102,7 @@ plugins:
             separate_signature: true
   - llmstxt:
       markdown_description: |
-        Mangoo is a structured Python web framework: a conventional,
+        Hayavega is a structured Python web framework: a conventional,
         batteries-included project layout, automatic interactive API
         documentation generated from your code, and a Rust core used
         only where it measurably wins a real benchmark.

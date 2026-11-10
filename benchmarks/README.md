@@ -1,22 +1,22 @@
-# Mangoo benchmark suite
+# Hayavega benchmark suite
 
-Reproducible benchmarks comparing Mangoo against FastAPI and Django on four
+Reproducible benchmarks comparing Hayavega against FastAPI and Django on four
 scenarios: a minimal JSON response, a DB-backed list read, a server-rendered
 HTML page, and static file serving. This is Phase 1 of
 [`INDUSTRY_LEADERSHIP_ROADMAP.md`](../INDUSTRY_LEADERSHIP_ROADMAP.md)'s
 Performance pillar: nothing about "faster than X" is credible without a
 suite like this to back it, so it exists before any optimization work does.
 
-A fourth target, **Mangoo (ASGI)**, was added when Phase 3 added ASGI
-support (`mangoo.asgi`): the same routes and seeded data as the original
-Mangoo target, served over `uvicorn` instead of `waitress`, so Mangoo's
+A fourth target, **Hayavega (ASGI)**, was added when Phase 3 added ASGI
+support (`hayavega.asgi`): the same routes and seeded data as the original
+Hayavega target, served over `uvicorn` instead of `waitress`, so Hayavega's
 ASGI transport can be measured against FastAPI on the same server rather
-than only against Mangoo's own WSGI path. See "ASGI vs FastAPI" below.
+than only against Hayavega's own WSGI path. See "ASGI vs FastAPI" below.
 
 **Next.js is not included in this pass.** It requires npm-installing and
 running a full separate Node.js project just to serve as a comparison
 target -- a materially bigger lift than FastAPI/Django, which are both
-pip-installable and share Mangoo's execution model (a synchronous Python
+pip-installable and share Hayavega's execution model (a synchronous Python
 process handling one request at a time per worker). Explicitly deferred,
 not forgotten -- add it as a fourth `*_app/` following the same pattern
 once someone is ready to take on that setup.
@@ -30,10 +30,10 @@ python benchmarks/run.py --duration 10s --connections 30
 ```
 
 `uvicorn` (already in the command above) serves both the FastAPI target and
-the Mangoo (ASGI) target added when Phase 3 introduced `mangoo.asgi`; no
+the Hayavega (ASGI) target added when Phase 3 introduced `hayavega.asgi`; no
 extra dependency is needed for it.
 
-`benchmarks/tortoise_vs_mangoo.py` (see "Tortoise ORM: the async-driver
+`benchmarks/tortoise_vs_hayavega.py` (see "Tortoise ORM: the async-driver
 comparison" below) additionally needs `tortoise-orm` and `aiosqlite`:
 `pip install tortoise-orm aiosqlite`.
 
@@ -55,12 +55,12 @@ SQLite database on first request and read a **fixed** 20-row window for
 every request after that -- no scenario grows the database during the
 run, and no scenario's numbers are diluted by write contention.
 
-**GraphQL is not a cross-framework scenario.** Mangoo ships GraphQL
+**GraphQL is not a cross-framework scenario.** Hayavega ships GraphQL
 support; FastAPI and Django do not, out of the box. Benchmarking it would
 mean adding a third-party GraphQL library to each comparison app and
 measuring that library's overhead as much as the framework's -- not an
-honest apples-to-apples comparison. If you want a Mangoo-only reference
-number for `POST /graphql`, `benchmarks/mangoo_app/app.py` already exposes
+honest apples-to-apples comparison. If you want a Hayavega-only reference
+number for `POST /graphql`, `benchmarks/hayavega_app/app.py` already exposes
 it; it's just not in the published cross-framework table.
 
 ## Servers: why waitress instead of gunicorn
@@ -72,14 +72,14 @@ a container, neither of which this task set up.
 
 The substitute: [`waitress`](https://docs.pylonsproject.org/projects/waitress/),
 a pure-Python, cross-platform, production-grade WSGI server, used
-identically for **both** Mangoo and Django so the comparison between them
+identically for **both** Hayavega and Django so the comparison between them
 stays apples-to-apples (same server, same thread count, same everything
 except the framework). FastAPI is benchmarked behind `uvicorn`, its own
 standard/idiomatic server, run single-process (no `--workers`) to match the
 single-process nature of the waitress runs.
 
 If you run this suite on Linux/macOS with real `gunicorn` available, that
-would be a **more representative** production comparison for Mangoo and
+would be a **more representative** production comparison for Hayavega and
 Django specifically -- consider it the natural next iteration of this
 suite, not a correction of something wrong with this one.
 
@@ -87,7 +87,7 @@ suite, not a correction of something wrong with this one.
 
 Early runs showed Django "failing" 60-95% of requests under load on the
 `db_list`/`template_render`/`static_file` scenarios, while `json_echo`
-(and Mangoo/FastAPI on every scenario) succeeded 100% of the time. That
+(and Hayavega/FastAPI on every scenario) succeeded 100% of the time. That
 looked like a Django performance problem. It wasn't.
 
 Django's `JsonResponse`/`HttpResponse` do not set a `Content-Length`
@@ -97,7 +97,7 @@ computes it for you transparently. `waitress` does not do this inference:
 without an explicit `Content-Length` (or `Transfer-Encoding: chunked`
 declared some other way), it serves the response as chunked and adds
 `Connection: close`, silently disabling HTTP keep-alive for that response.
-Mangoo's `Response` sets `Content-Length` itself, so it never hit this.
+Hayavega's `Response` sets `Content-Length` itself, so it never hit this.
 Under sustained concurrent load without keep-alive, every request opens a
 brand-new TCP connection, and Windows' small default ephemeral-port range
 combined with its slow (default 4-minute) `TIME_WAIT` recycling exhausts
@@ -122,9 +122,9 @@ server that has genuinely fallen over.
 
 ## ASGI vs FastAPI
 
-Both FastAPI and Mangoo's ASGI transport now run behind the identical
+Both FastAPI and Hayavega's ASGI transport now run behind the identical
 server (`uvicorn`, single process, no `--workers`), so this is the more
-apples-to-apples of the two Mangoo-vs-FastAPI comparisons in this suite --
+apples-to-apples of the two Hayavega-vs-FastAPI comparisons in this suite --
 the WSGI-vs-uvicorn comparison above still differs by server, not just
 framework.
 
@@ -143,14 +143,14 @@ rather than cited as supporting evidence (see that script's docstring for
 the full disclosure). **The real evidence is the HTTP-level table below**:
 a dedicated `ThreadPoolExecutor` sized to 16 workers (matching this guide's
 own documented `waitress --threads=16` guidance), shipped as
-`create_asgi_application(..., max_sync_workers=16)` in `src/mangoo/asgi.py`,
+`create_asgi_application(..., max_sync_workers=16)` in `src/hayavega/asgi.py`,
 measured against a real `uvicorn` server under real `oha` load, twice
 before and twice after.
 
 Four runs at `--duration 10s --connections 30`, two before the fix and two
 after:
 
-| Scenario | Mangoo (ASGI), before fix | Mangoo (ASGI), after fix | FastAPI req/s | After-fix result |
+| Scenario | Hayavega (ASGI), before fix | Hayavega (ASGI), after fix | FastAPI req/s | After-fix result |
 |---|---:|---:|---:|---:|
 | `json_echo` | 955, 884 | 1831, 2450 | 1981, 1895 | ties/wins (0.92x, 1.29x) |
 | `db_list` | 605, 534 | 815, 949 | 600, 643 | wins both (1.36x, 1.48x) |
@@ -181,7 +181,7 @@ benchmark.
 **Scope decision, made explicit before writing any code and disclosed
 here rather than silently substituted:** the roadmap item said "async" --
 this implementation is a synchronous, fixed-thread-pool server instead
-(`mangoo_native.serve_wsgi`, `crates/mangoo-python/src/server.rs`), the
+(`hayavega_native.serve_wsgi`, `crates/hayavega-python/src/server.rs`), the
 same concurrency model `waitress` already uses. Reasoning: CPython's GIL
 means only one thread ever executes Python view code at a time regardless
 of how the socket-accept/HTTP-parsing layer is built, so a `tokio`/`hyper`
@@ -194,7 +194,7 @@ async/GIL interaction bugs, for no proven concurrency benefit given the
 GIL constraint. Rust's role is the same narrow one every other native
 component in this codebase plays: own socket accept, HTTP/1.1 parsing,
 and response writing around unchanged Python request-handling code via
-the standard WSGI contract -- `mangoo.runtime.create_application()` is
+the standard WSGI contract -- `hayavega.runtime.create_application()` is
 called exactly as it always is; only what serves it differs.
 
 **Two real bugs were found and fixed while benchmarking, not shipped
@@ -255,12 +255,12 @@ DB-backed route, a plain route, a 404, and query-string parsing -- proving
 WSGI-contract correctness (environ construction, `start_response`, header
 handling), not just that requests complete. Wired into the CI
 `native-extension` job (the same job Signals' Rust dispatcher tests run
-in), since it requires `mangoo_native` to be built.
+in), since it requires `hayavega_native` to be built.
 
 **What this version does not do, disclosed plainly:** HTTP/2, TLS
 termination, and request pipelining beyond simple sequential keep-alive
 are all out of scope. This remains development/load-testing tooling
-(`mango launch`'s `SERVER['ENGINE'] = 'rust'`), not a claim that it
+(`hayavega launch`'s `SERVER['ENGINE'] = 'rust'`), not a claim that it
 replaces `gunicorn`/`waitress` for a real production deployment -- the
 same production-server guidance in `DEPLOYMENT.md` is unchanged.
 
@@ -344,7 +344,7 @@ strings) are cheap enough to be within this benchmark's run-to-run noise.
 
 A follow-up request ("Rust runtime: no TLS/HTTP2 -- go with this") asked
 for TLS specifically. HTTP/2 was scoped out with reasoning disclosed in
-`src/mangoo/rust_runtime.py` and `crates/mangoo-python/src/server.rs`'s
+`src/hayavega/rust_runtime.py` and `crates/hayavega-python/src/server.rs`'s
 module docstrings: it is built around multiplexing many streams over one
 connection, which does not fit this server's synchronous
 thread-per-connection model without effectively becoming its own
@@ -435,7 +435,7 @@ concurrency model at all.
 
 [`oha`](https://github.com/hatoo/oha) is a Rust-based HTTP load generator,
 chosen because Rust is already part of this repository's toolchain
-(`mangoo_native`) -- no new ecosystem introduced for a benchmarking tool,
+(`hayavega_native`) -- no new ecosystem introduced for a benchmarking tool,
 and no GIL-bottleneck risk on the *measuring* side the way a Python-based
 load generator would have against a JSON-echo endpoint fast enough to make
 the client the bottleneck instead of the server.
@@ -468,8 +468,8 @@ running it yourself a few more times.
 
 ## Native-function benchmarks: why the three inert Rust functions stay unused
 
-`crates/mangoo-python/src/lib.rs` defines `serialize_json`, `compile_selection`,
-and `normalize_path` as native PyO3 functions, but nothing in `src/mangoo/*.py`
+`crates/hayavega-python/src/lib.rs` defines `serialize_json`, `compile_selection`,
+and `normalize_path` as native PyO3 functions, but nothing in `src/hayavega/*.py`
 calls any of them -- only `MangoList` and `SignalDispatcher` are wired in.
 Before wiring any of the three in, `benchmarks/native_functions.py` measures
 each against its pure-Python equivalent, per this project's own stated
@@ -510,7 +510,7 @@ regression on all three functions.
 ## A second native-function benchmark, targeting the two weak spots above -- one real win, one more loss
 
 The FastAPI/Django comparison and the ASGI-vs-FastAPI comparison above
-each surfaced one specific weak spot: Mangoo loses `template_render` to
+each surfaced one specific weak spot: Hayavega loses `template_render` to
 Jinja2 on both transports, and choosing ASGI costs 21-40% throughput on
 cheap endpoints relative to WSGI. `benchmarks/native_template_and_asgi.py`
 benchmarks a Rust candidate for each, using the same discipline as the
@@ -538,7 +538,7 @@ saves. Consistent with the earlier finding -- **not wired in.**
 **The template-rendering candidate is a genuine, large win -- but it
 proves less than it looks like it does.** `render_post_list_page` is a
 hand-compiled Rust function that knows the exact shape of one template
-(`benchmarks/mangoo_app/templates/page.html`): a fixed prefix, one loop
+(`benchmarks/hayavega_app/templates/page.html`): a fixed prefix, one loop
 emitting `<li>` elements, a fixed suffix. It beats Python's general
 tree-walking template *interpreter* by 16-20x because there is real,
 amortizable work per call (escaping and formatting 20 rows) instead of a
@@ -549,10 +549,10 @@ times over.
 That is a strong enough signal to justify *scoping* a real native Rust
 template compiler as a follow-up project. It is **not** evidence that such
 a compiler is already built, or that this specific function should be
-wired into `mangoo.templates` -- `render_post_list_page` only handles the
+wired into `hayavega.templates` -- `render_post_list_page` only handles the
 one template it was hand-written for; it has no `{% if %}`, no
 `{% extends %}`/`{% block %}`, no arbitrary variable paths, none of
-`mangoo.templates`'s actual template language. Wiring in a function that
+`hayavega.templates`'s actual template language. Wiring in a function that
 silently only works for one exact template shape while claiming to
 replace a general renderer would be a correctness regression dressed up
 as a performance win. **Decision: no code wired in from this benchmark
@@ -571,7 +571,7 @@ the three functions above, this one wasn't competing against an
 already-optimized C library: there's no C equivalent of "walk an
 arbitrary Entity/dict/list graph" to lose to, so it looked like the
 first genuinely promising native candidate outside the hardcoded
-template-rendering case. `mangoo_native.plain_value` mirrors `_plain()`
+template-rendering case. `hayavega_native.plain_value` mirrors `_plain()`
 exactly; `benchmarks/native_plain_value.py` benchmarks it against
 realistic payload shapes (not a trivial single-field case):
 
@@ -596,7 +596,7 @@ node* of the graph, so it pays one FFI crossing per node rather than
 one crossing for the whole call. A 30-row Entity list means dozens of
 crossings, and that per-node cost dominates regardless of how many rows
 there are -- more rows don't amortize it away, they multiply it.
-`mangoo_native.plain_value` stays in the codebase, unwired, alongside
+`hayavega_native.plain_value` stays in the codebase, unwired, alongside
 `serialize_json`/`compile_selection`/`normalize_path`, as a published,
 reproducible rejection rather than quietly discarded code.
 
@@ -608,11 +608,11 @@ crossing wrapped around it. `RUST_CORE_REWRITE_ROADMAP.md`'s Phase 1
 tests a different question: does an FFI crossing's cost, which
 dominated every microbenchmark above, still dominate when it only
 happens *once per real HTTP request* instead of once per loop
-iteration? `mangoo_native.Router` mirrors `runtime.py`/`asgi.py`'s
+iteration? `hayavega_native.Router` mirrors `runtime.py`/`asgi.py`'s
 `_match()` exactly (exact-pattern lookup, falling back to a wildcard
 scan) -- structurally the same tiny operation `normalize_path` already
 lost on as a microbenchmark. This time the comparison is two real WSGI
-applications, same app (`benchmarks/mangoo_app`), same server
+applications, same app (`benchmarks/hayavega_app`), same server
 (`waitress`, both sides -- only the matching logic differs), via
 `benchmarks/native_router_vs_python.py`:
 
@@ -654,7 +654,7 @@ question for later phases isn't "can we afford to cross into Rust
 once," it's "does the Rust side do enough *actual* computational work,
 once there, to come out ahead" -- which is exactly the question Phase
 3 (DB execution, real I/O and row materialization, not a dict lookup)
-is positioned to answer. `mangoo_native.Router` stays in the codebase,
+is positioned to answer. `hayavega_native.Router` stays in the codebase,
 unwired, as the concrete starting point that phase needs.
 
 ## `SerializedConnection`: a real win, and the first one wired in since the native server/Signals dispatcher
@@ -704,7 +704,7 @@ real win nor a real loss" against the unpooled default) using this
 benchmark's own methodology -- confirming the methodology itself is
 trustworthy before trusting the headline numbers above it.
 
-**Decision: wired in**, as `mangoo.db.SerializedConnection` -- the
+**Decision: wired in**, as `hayavega.db.SerializedConnection` -- the
 first Rust-acceleration candidate to clear the decisive-win bar since
 the native WSGI server and Signals dispatcher. Shipped as a
 documented, opt-in primitive (not folded into `Selection`/`Entity`):
@@ -723,7 +723,7 @@ See `docs/topics/models.md` for the full API and trade-off.
 this session looked for it -- a complete wire-format bridge from
 `templates.py`'s real parsed node tree (via its private
 `_compile_cached`) into Rust `TemplateNode`/`TemplateExpr`
-(`crates/mangoo-core/src/lib.rs`), correctness-verified byte-for-byte
+(`crates/hayavega-core/src/lib.rs`), correctness-verified byte-for-byte
 against `render_template()`'s real output, including a variant that
 decodes the wire format once and caches the result (isolating that
 cost from the actual render). It had never been run. Running it now:
@@ -752,7 +752,7 @@ object-graph walk and the ASGI header candidates. More nodes (a bigger
 template, more loop iterations) doesn't amortize that cost away -- it
 multiplies it, the same lesson `_plain()`'s 30-row list already taught.
 
-**Decision: not pursued further.** `mangoo_native.render_compiled_template`/
+**Decision: not pursued further.** `hayavega_native.render_compiled_template`/
 `CompiledNativeTemplate` stay in the codebase, unwired, next to
 `render_post_list_page` itself -- the hardcoded win remains real and
 documented for what it actually is (one exact template, not a general
@@ -797,7 +797,7 @@ the old cost was `O(items x len(context))`; the new cost is `O(items)`.
 
 This is a small, real improvement, not a dramatic one -- re-running the
 full cross-framework suite after the fix moved `template_render` from
-~494-498 to ~512 req/s on Mangoo's WSGI path, narrowing the gap to
+~494-498 to ~512 req/s on Hayavega's WSGI path, narrowing the gap to
 FastAPI's Jinja2 from ~10.5% to ~7.6%. It does not close the gap; Jinja2
 compiles templates to Python bytecode ahead of time, which is a
 structurally different (and faster) approach than `templates.py`'s
@@ -867,9 +867,9 @@ added specifically to exercise it again).
 
 **Neither improvement moved the `template_render` HTTP benchmark
 scenario's throughput in any visible way** (still ~578-590 req/s on
-Mangoo's WSGI path, same as before both fixes). Investigating why revealed
+Hayavega's WSGI path, same as before both fixes). Investigating why revealed
 the actual bottleneck: `posts_page`'s view calls `Post.collection(DATABASE)`,
-and `mangoo.db.connect()` opens a **brand-new `sqlite3.connect()` on every
+and `hayavega.db.connect()` opens a **brand-new `sqlite3.connect()` on every
 single request** -- no connection pooling or reuse. Checking
 `benchmarks/fastapi_app/app.py` confirms **FastAPI's `fetch_posts()` does
 exactly the same thing**, so this cost is paid equally by both frameworks.
@@ -886,7 +886,7 @@ FastAPI likely comes from:** not primarily template-engine speed (both
 sides now compile), but either (a) Jinja2's render being faster in
 absolute terms even after these fixes, since it compiles expressions to
 raw operators too and this candidate deliberately doesn't, or (b) something
-in the shared per-request SQLite path that happens to cost Mangoo's stack
+in the shared per-request SQLite path that happens to cost Hayavega's stack
 slightly more than FastAPI's for reasons unrelated to templates at all.
 Neither is benchmarked yet -- worth a dedicated look before assuming
 templates.py is the remaining lever.
@@ -896,11 +896,11 @@ templates.py is the remaining lever.
 The previous section's win was for a *hand-compiled, one-template-only*
 Rust function. The roadmap explicitly flagged that as a scoping signal,
 not proof a *general* engine (handling arbitrary `{{ }}`/`{% if %}`/
-`{% for %}` the way `mangoo.templates` actually does) would keep that
+`{% for %}` the way `hayavega.templates` actually does) would keep that
 margin. `benchmarks/native_template_engine.py` builds that general engine
 and tests the prediction directly.
 
-**Design:** `crates/mangoo-core/src/lib.rs` gained a real interpreter --
+**Design:** `crates/hayavega-core/src/lib.rs` gained a real interpreter --
 `TemplateExpr`/`TemplateNode` enums plus an `evaluate`/`render_template_nodes`
 pair that mirror `templates.py`'s `_evaluate`/`_render_nodes` semantics
 node-for-node (undefined-vs-null distinction, `loop.index`/`first`/`last`
@@ -941,7 +941,7 @@ zero-branching string builder beats a *general interpreter*, which was
 never in question and was true before any Rust was involved. Generalizing
 removed exactly the property (no branching, no cloning, no dispatch) that
 made the specialized version fast. **Decision: do not build a general
-Rust template compiler for `mangoo.templates`.** If `template_render`'s
+Rust template compiler for `hayavega.templates`.** If `template_render`'s
 gap to FastAPI's Jinja2 is worth closing in the future, the more promising
 angle based on this data is optimizing the *Python* interpreter itself
 (e.g., avoiding `dict(context)` copies per loop iteration, which
@@ -950,17 +950,17 @@ Rust.
 
 ## Hypermedia fragment vs full page: what htmx actually saves here
 
-`mangoo.ui` was removed entirely on Aug 27, 2026 (a product-direction
+`hayavega.ui` was removed entirely on Aug 27, 2026 (a product-direction
 decision, not a performance finding), then rebuilt the next day narrower
-in scope -- Stage 1 hypermedia only, a leaner `mangoo-ui.js`, and (new)
+in scope -- Stage 1 hypermedia only, a leaner `hayavega-ui.js`, and (new)
 a benchmarked Rust option for fragment rendering. This section reflects
 the current, rebuilt implementation.
 
 `benchmarks/hypermedia_fragment.py` compares `GET /posts` (the full
-`template_render` page, rendered via `mangoo.templates`) against
+`template_render` page, rendered via `hayavega.templates`) against
 `GET /posts/fragment` (just the `<ul>` a real `hx-get`/`hx-target` update
-would swap in, rendered via `mangoo.ui`'s Python component builders) for
-the same 20 rows, served by the same Mangoo app. This is Mangoo-only, not
+would swap in, rendered via `hayavega.ui`'s Python component builders) for
+the same 20 rows, served by the same Hayavega app. This is Hayavega-only, not
 a cross-framework comparison -- FastAPI and Django don't ship a hypermedia
 runtime.
 
@@ -975,7 +975,7 @@ which found no measurable difference (0.99x-1.02x) -- because the
 rendering mechanism differs now: the full page still goes through
 `render_template()`'s file lookup, mtime check, and (per the
 `template_render` section above) the compiled-function render path, while
-the fragment is built directly by `mangoo.ui`'s plain Python component
+the fragment is built directly by `hayavega.ui`'s plain Python component
 functions with none of that machinery. The lesson from the original
 version still holds for what a fragment saves that this benchmark can't
 see (network payload, avoided client-side re-render) -- this version
@@ -990,9 +990,9 @@ problem, though: a fragment renders one specific, small, fixed piece of
 markup by design, so a hardcoded native renderer's lack of generality --
 the exact thing that made a hardcoded full-page renderer unshippable -- is
 much less of a real limitation here. `benchmarks/native_htmx_fragment.py`
-tests this directly: `crates/mangoo-core`'s new `render_fragment_items`
+tests this directly: `crates/hayavega-core`'s new `render_fragment_items`
 (a hardcoded Rust renderer for the compact `<ul><li>...</li>...</ul>`
-markup `mangoo.ui`'s `ul(*(li(...) for ...))` builders produce) against
+markup `hayavega.ui`'s `ul(*(li(...) for ...))` builders produce) against
 those same Python builders, for two sizes -- the benchmark app's 20-item
 list, and a single-item fragment (closer to a realistic "add one item"
 interaction).
@@ -1010,7 +1010,7 @@ general enough to matter beyond one exact template.
 either way (the compiled Python template engine's isolated 1.3x-2.2x win
 turned out to have zero visible HTTP-level effect, so isolated wins don't
 automatically translate).** `posts_fragment_native` in
-`benchmarks/mangoo_app/app.py` runs the identical DB query as
+`benchmarks/hayavega_app/app.py` runs the identical DB query as
 `posts_fragment` and differs only in using `render_fragment_items` instead
 of the Python builders; `hypermedia_fragment.py` was extended to a
 three-way comparison:
@@ -1029,10 +1029,10 @@ non-zero this time -- a fragment endpoint's lower baseline latency than a
 full page's leaves proportionally more room for the rendering slice to
 matter.
 
-**Not wired into `mangoo.ui`'s shipped API.** `render_fragment_items` only
+**Not wired into `hayavega.ui`'s shipped API.** `render_fragment_items` only
 ever handles this one exact fragment shape (title/views tuples rendered as
 `<li>{title} ({views} views)</li>`); generalizing it to handle arbitrary
-`mangoo.ui` component trees would reintroduce precisely the generality
+`hayavega.ui` component trees would reintroduce precisely the generality
 problem that sank the general Rust template engine. Kept instead as a
 documented, worked example (`posts_fragment_native`) for a project author
 who has identified their own hot, narrow, high-traffic fragment and wants
@@ -1040,12 +1040,12 @@ to accelerate that one specific shape themselves.
 
 ### Proving the htmx wiring is real, not just documented
 
-Everything above establishes *what htmx saves*; it doesn't prove Mangoo's
+Everything above establishes *what htmx saves*; it doesn't prove Hayavega's
 htmx support actually works end-to-end on a real page rather than existing
-only as isolated unit tests and prose. `benchmarks/mangoo_app` has a
+only as isolated unit tests and prose. `benchmarks/hayavega_app` has a
 `/posts/live` page built for exactly that: a real `Refresh` button with
 `hx-get="/posts/fragment" hx-target="#posts-list" hx-swap="innerHTML"`,
-loading the genuine `mangoo-ui.js` runtime -- kept as a separate route from
+loading the genuine `hayavega-ui.js` runtime -- kept as a separate route from
 `posts_page`/`page.html` specifically so it can never affect the
 cross-framework `template_render` numbers published above.
 
@@ -1060,7 +1060,7 @@ every piece of the server-side contract the JS runtime depends on instead:
 loads the real runtime file; `/posts/fragment` (what the button points at)
 returns output byte-identical to what's already inside `#posts-list`,
 proving a real swap would render correctly rather than mismatching
-structure; and the served `mangoo-ui.js` is verified to contain the actual
+structure; and the served `hayavega-ui.js` is verified to contain the actual
 `hx-get`/`hx-target`/`hx-swap` handling code its own click listener reads,
 not a stub. All three checks pass.
 
@@ -1072,7 +1072,7 @@ short-lived allocations per template render), discovered by testing them,
 not assumed:
 
 - **Scalene** was the initial preference (combined CPU+memory, per-line,
-  and it can even attribute memory inside `mangoo_native`'s Rust code,
+  and it can even attribute memory inside `hayavega_native`'s Rust code,
   which no pure-Python tool can). **It fails to build on this repo's
   Windows dev environment** -- `pip install scalene` errors with "Microsoft
   C++ Build Tools... required" at its native extension's build step. A
@@ -1142,7 +1142,7 @@ merits despite showing no visible HTTP-level movement individually.
 Four full `oha -z 10s -c 30` runs of the published suite, back to back, no
 code changed between them:
 
-| Run | Mangoo (WSGI) req/s | FastAPI req/s |
+| Run | Hayavega (WSGI) req/s | FastAPI req/s |
 |---|---:|---:|
 | 1 | 721 | 722 |
 | 2 | 736 | 626 |
@@ -1163,16 +1163,16 @@ quote one.
 
 ## The Rust runtime vs. FastAPI, directly measured
 
-Every FastAPI comparison published above used `waitress` as Mangoo's WSGI
+Every FastAPI comparison published above used `waitress` as Hayavega's WSGI
 server, because every one of those runs predates the Rust runtime ("The
 Rust runtime vs the Python runtime (waitress)" above) existing. That
-section only ever compared the Rust runtime against Mangoo's own
+section only ever compared the Rust runtime against Hayavega's own
 `waitress` baseline, never against FastAPI directly -- so no number on
 file actually answered "does the Rust runtime beat FastAPI," only the
 weaker, inferred claim that it should, since waitress and FastAPI were
 themselves roughly tied. `benchmarks/rust_runtime_vs_fastapi.py` closes
 that gap: same two apps as every other FastAPI comparison in this
-document (`benchmarks/mangoo_app/app.py` behind `mangoo.rust_runtime`,
+document (`benchmarks/hayavega_app/app.py` behind `hayavega.rust_runtime`,
 `benchmarks/fastapi_app/app.py` behind `uvicorn`), same four scenarios,
 same seeded data -- only the missing pairing.
 
@@ -1205,7 +1205,7 @@ time than the HTTP-layer cost the Rust runtime actually improves --
 most consistent margin (~4.9x) for the same reason.
 
 This closes the last open item from the Rust-runtime work: it was
-previously benchmarked only against Mangoo's own `waitress`, with a
+previously benchmarked only against Hayavega's own `waitress`, with a
 FastAPI win inferred rather than measured. It is now measured directly,
 and the inference holds.
 
@@ -1213,7 +1213,7 @@ and the inference holds.
 
 Every scenario benchmarked anywhere above (`json_echo`, `db_list`,
 `template_render`, `static_file`) is a plain synchronous view under every
-transport tested, including Mangoo (ASGI) and FastAPI. None of them
+transport tested, including Hayavega (ASGI) and FastAPI. None of them
 exercise the one property ASGI actually has that WSGI doesn't: an
 `async def` view awaiting I/O yields the event loop instead of blocking a
 whole OS thread for the call's duration, so many more requests can be in
@@ -1226,11 +1226,11 @@ just `await asyncio.sleep()`s for a fixed delay before responding --
 standing in for a real downstream network call without real-network
 flakiness. Three routes, same upstream, same delay, compared:
 
-- `remote_io` (`GET /remote`, `async def`, awaits the call) on Mangoo
+- `remote_io` (`GET /remote`, `async def`, awaits the call) on Hayavega
   (ASGI) and on FastAPI -- both served by uvicorn.
 - `remote_io_blocking` (`GET /remote-blocking`, plain `def`, blocks a
-  thread for the call) on Mangoo (ASGI) (dispatched through its 16-worker
-  sync pool), on Mangoo (WSGI/`waitress`, 16 threads), and on FastAPI
+  thread for the call) on Hayavega (ASGI) (dispatched through its 16-worker
+  sync pool), on Hayavega (WSGI/`waitress`, 16 threads), and on FastAPI
   (dispatched through Starlette/anyio's thread pool).
 
 Concurrency defaults to 64 -- deliberately above every blocking path's
@@ -1240,7 +1240,7 @@ paths avoid it and the blocking ones don't.
 ### Three real bugs found and fixed while building this, not shipped blind
 
 Building a fair, working version of this benchmark surfaced three
-separate, genuine problems -- none in Mangoo's or FastAPI's own code, all
+separate, genuine problems -- none in Hayavega's or FastAPI's own code, all
 in the benchmark's own plumbing. Each is disclosed in full in
 `benchmarks/_upstream_client.py`'s docstring; summarized here:
 
@@ -1248,13 +1248,13 @@ in the benchmark's own plumbing. Each is disclosed in full in
    environment.** The first version of the async views used
    `httpx.AsyncClient`, the obvious real-world choice. A direct
    microbenchmark (`asyncio.gather` of N concurrent `client.get()` calls
-   against the upstream, no Mangoo/FastAPI involved at all) showed N=32
+   against the upstream, no Hayavega/FastAPI involved at all) showed N=32
    taking ~300-900ms across every configuration tried -- default pooled
    client, `trust_env=False`, a fresh client per call, both
    `WindowsProactorEventLoopPolicy` and `WindowsSelectorEventLoopPolicy`.
    The same load over raw `asyncio.open_connection` sockets, no httpx at
    all, took ~50ms. This is a genuine, reproducible httpx/httpcore
-   (1.0.9) bottleneck on this machine, not a Mangoo or FastAPI issue --
+   (1.0.9) bottleneck on this machine, not a Hayavega or FastAPI issue --
    both apps' `/remote` routes used the identical client, so it would
    have suppressed both sides equally, hiding rather than answering the
    question this benchmark exists to ask. Routed around with
@@ -1269,7 +1269,7 @@ in the benchmark's own plumbing. Each is disclosed in full in
    Rust runtime's own missing keep-alive (see "The Rust runtime vs the
    Python runtime (waitress)" above). Fixed by pooling and reusing
    keep-alive connections instead, the same "one connection per client,
-   kept alive" shape `mangoo.db.enable_connection_pooling()` already uses
+   kept alive" shape `hayavega.db.enable_connection_pooling()` already uses
    on the database side.
 3. **The keep-alive fix then failed to parse the response it got back.**
    uvicorn's `h11` implementation sends `benchmarks/upstream_app`'s
@@ -1297,22 +1297,22 @@ target its own freshly started upstream process.
 
 | Comparison | Run 1 | Run 2 | Run 3 | Average |
 |---|---:|---:|---:|---:|
-| 1. Mangoo (ASGI) `/remote` vs FastAPI `/remote` (both async) | 913.6 vs 902.9 (1.01x) | 911.9 vs 855.6 (1.07x) | 873.4 vs 870.2 (1.00x) | **899.6 vs 876.2 req/s, 1.03x** |
-| 2. Mangoo (ASGI) `/remote` vs its own `/remote-blocking` | 913.6 vs 283.2 (3.23x) | 911.9 vs 277.6 (3.29x) | 873.4 vs 257.9 (3.39x) | **899.6 vs 272.9 req/s, 3.30x** |
-| 3. Mangoo (WSGI) `/remote-blocking` vs FastAPI `/remote-blocking` | 281.1 vs 456.2 (0.62x) | 264.8 vs 461.1 (0.57x) | 270.0 vs 456.6 (0.59x) | **272.0 vs 457.9 req/s, 0.59x** |
+| 1. Hayavega (ASGI) `/remote` vs FastAPI `/remote` (both async) | 913.6 vs 902.9 (1.01x) | 911.9 vs 855.6 (1.07x) | 873.4 vs 870.2 (1.00x) | **899.6 vs 876.2 req/s, 1.03x** |
+| 2. Hayavega (ASGI) `/remote` vs its own `/remote-blocking` | 913.6 vs 283.2 (3.23x) | 911.9 vs 277.6 (3.29x) | 873.4 vs 257.9 (3.39x) | **899.6 vs 272.9 req/s, 3.30x** |
+| 3. Hayavega (WSGI) `/remote-blocking` vs FastAPI `/remote-blocking` | 281.1 vs 456.2 (0.62x) | 264.8 vs 461.1 (0.57x) | 270.0 vs 456.6 (0.59x) | **272.0 vs 457.9 req/s, 0.59x** |
 
-**Comparison 1 -- the question this file exists to answer: Mangoo (ASGI)
+**Comparison 1 -- the question this file exists to answer: Hayavega (ASGI)
 and FastAPI are a statistical tie on real concurrent I/O** (1.03x average,
-individual runs ranging 1.00x-1.07x, all in Mangoo's favor but by margins
+individual runs ranging 1.00x-1.07x, all in Hayavega's favor but by margins
 this document's own noise findings elsewhere say not to over-read).
 Neither framework has an advantage here -- both scale past their
 respective thread-pool sizes by roughly the same amount under the same
 load, which is exactly what "both are a real ASGI transport, not just a
 WSGI transport with an event loop bolted on" would predict.
 
-**Comparison 2 is the real headline: within the same Mangoo process, the
+**Comparison 2 is the real headline: within the same Hayavega process, the
 `async def` view beats its own blocking twin by 3.30x.** This is the
-concrete, measured version of the claim `mangoo.asgi`'s own module
+concrete, measured version of the claim `hayavega.asgi`'s own module
 docstring already makes in prose ("choose ASGI only when a project needs
 `async def` views for concurrent I/O ... that WSGI's one-thread-per-
 request model can't overlap as cheaply") -- previously asserted, now
@@ -1323,12 +1323,12 @@ held constant.
 reported with that caveat rather than left to imply one.** FastAPI's
 blocking route runs through Starlette/anyio's default thread pool, which
 defaults to **40** tokens (`anyio._backends._asyncio.AsyncIOBackend.
-current_default_thread_limiter`); Mangoo's two blocking paths here
+current_default_thread_limiter`); Hayavega's two blocking paths here
 (`waitress --threads=16` and `create_asgi_application`'s own
 `max_sync_workers=16` default) both use 16. At `-c 64` -- above every
 pool size here -- more headroom means more throughput regardless of
 either framework's own per-request cost, so this ratio is measuring pool
-size more than framework speed. Matching Mangoo's pool size to anyio's
+size more than framework speed. Matching Hayavega's pool size to anyio's
 (`max_sync_workers=40`, or `waitress --threads=40`) would be needed
 before this specific comparison meant anything about relative framework
 overhead; not attempted here since it wasn't this benchmark's question.
@@ -1336,9 +1336,9 @@ overhead; not attempted here since it wasn't this benchmark's question.
 ### Conclusion
 
 The gap `benchmarks/README.md`'s "ASGI vs FastAPI" section left open is
-closed: Mangoo's ASGI transport handles real concurrent I/O as well as
+closed: Hayavega's ASGI transport handles real concurrent I/O as well as
 FastAPI's (comparison 1), and ASGI's claimed advantage over WSGI-style
-blocking is real and substantial within Mangoo's own two transports
+blocking is real and substantial within Hayavega's own two transports
 (comparison 2), not just a theoretical property asserted in a docstring.
 
 ## Tortoise ORM: the async-driver comparison, built and measured
@@ -1346,7 +1346,7 @@ blocking is real and substantial within Mangoo's own two transports
 The `INDUSTRY_LEADERSHIP_ROADMAP.md` entry above ("Deferred, not needed
 now: a Tortoise ORM (or other async-driver) benchmark comparison -- new
 scope") is new scope, not forgotten scope: every target in this suite,
-Mangoo's own ORM included, opens a plain synchronous `sqlite3` connection
+Hayavega's own ORM included, opens a plain synchronous `sqlite3` connection
 per request. Tortoise ORM's default driver for SQLite, `aiosqlite`, is the
 first async database driver to appear anywhere in this suite, and that is
 a different shape of comparison from anything above -- it needed its own
@@ -1369,7 +1369,7 @@ opens a dedicated background `threading.Thread` that runs the real,
 blocking `sqlite3` calls; `await`ing a query just parks the coroutine on a
 `Future` that thread later resolves via `call_soon_threadsafe`. So this
 comparison is really "one dedicated worker thread per connection"
-(Tortoise ORM) vs. "N shared threads across every connection" (Mangoo's
+(Tortoise ORM) vs. "N shared threads across every connection" (Hayavega's
 own ORM, dispatched to ASGI's sync-dispatch pool or a WSGI worker thread)
 -- not "async I/O vs. blocking I/O" in the sense the concurrent-I/O
 comparison above tested for a real network call. Tortoise's default
@@ -1388,24 +1388,24 @@ Four targets, same seeded data, same scenario, same machine:
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Tortoise ORM (FastAPI + aiosqlite) | 698.2 req/s | 729.0 req/s | 729.6 req/s | 718.9 req/s | 1.00x |
 | FastAPI (sync `sqlite3`) | 719.1 req/s | 613.4 req/s | 632.9 req/s | 655.1 req/s | 0.91x |
-| Mangoo (ASGI, sync ORM) | 972.9 req/s | 949.1 req/s | 894.8 req/s | 938.9 req/s | 1.31x |
-| Mangoo (WSGI, sync ORM) | 740.3 req/s | 777.4 req/s | 763.6 req/s | 760.4 req/s | 1.06x |
+| Hayavega (ASGI, sync ORM) | 972.9 req/s | 949.1 req/s | 894.8 req/s | 938.9 req/s | 1.31x |
+| Hayavega (WSGI, sync ORM) | 740.3 req/s | 777.4 req/s | 763.6 req/s | 760.4 req/s | 1.06x |
 
 100% success rate, every target, every run. Reproduce with
-`python benchmarks/tortoise_vs_mangoo.py --duration 10s --connections 30 --runs 3`.
+`python benchmarks/tortoise_vs_hayavega.py --duration 10s --connections 30 --runs 3`.
 
 ### Conclusion
 
 Tortoise ORM's async driver does not give FastAPI a database-bound edge
-over Mangoo's synchronous ORM at this concurrency: Mangoo (ASGI) beats it
-outright (1.23x-1.39x across the three runs), Mangoo (WSGI) ties-to-wins
+over Hayavega's synchronous ORM at this concurrency: Hayavega (ASGI) beats it
+outright (1.23x-1.39x across the three runs), Hayavega (WSGI) ties-to-wins
 it (1.05x-1.07x), and even FastAPI's own plain-`sqlite3` baseline --
 Tortoise's own framework, without Tortoise -- lands within noise of
 Tortoise ORM itself (0.84x-1.03x) rather than clearly ahead of it. The
 single-worker-thread-per-connection design disclosed above is the direct
 explanation, not a surprise found after the numbers came in: at
 `-c 30`, thirty concurrent requests contend for the one worker thread
-Tortoise's default single-connection pool provides, while Mangoo's sync
+Tortoise's default single-connection pool provides, while Hayavega's sync
 ORM calls are spread across a full 16-worker pool (`waitress --threads=16`
 or ASGI's `max_sync_workers` default) on both of its own transports. A
 reader who wants Tortoise ORM to compete here would need to raise its
@@ -1418,7 +1418,7 @@ default was not this comparison's question.
 
 ## GraphQL lexer+parser: a real win, wired into `Schema.execute()`
 
-Phase 6 of `RUST_CORE_REWRITE_ROADMAP.md`. `mangoo.graphql`'s
+Phase 6 of `RUST_CORE_REWRITE_ROADMAP.md`. `hayavega.graphql`'s
 `Schema.execute()` has two halves with very different Rust
 candidacy: field *resolution* (`_resolve_root_field` calling
 arbitrary, user-defined Python resolvers) can never move to Rust --
@@ -1431,12 +1431,12 @@ per crossing" shape `render_post_list_page` and `SerializedConnection`
 both have, not the "wrap one small operation" shape that's lost five
 times over in this file.
 
-`mangoo_native.parse_graphql_document` is a faithful Rust port of
+`hayavega_native.parse_graphql_document` is a faithful Rust port of
 `_tokenize`/`_Parser.parse_document()` (same punctuation set, same
 name/number/string literal lexing, same rejection of `@` directives
 and `.` fragments, same 64-deep structural nesting guard), living in
-`mangoo-core` with its own `cargo test` coverage, with a thin PyO3
-wrapper in `mangoo-python` converting its result into a wire format
+`hayavega-core` with its own `cargo test` coverage, with a thin PyO3
+wrapper in `hayavega-python` converting its result into a wire format
 (nested tuples/lists/dicts; a 2-tuple `("$", name)` for variable
 references, since real GraphQL list/object values are always Python
 lists/dicts on this bridge and never tuples) that `graphql.py` decodes
@@ -1466,10 +1466,10 @@ call in isolation.
 ### Decision: wired in
 
 A decisive, reproducible win on both a trivial and a realistic query
-shape. `Schema.execute()` now calls `mangoo.graphql._parse_document()`,
-which tries `mangoo_native.parse_graphql_document` first and falls
+shape. `Schema.execute()` now calls `hayavega.graphql._parse_document()`,
+which tries `hayavega_native.parse_graphql_document` first and falls
 back to `_Parser(_tokenize(query)).parse_document()` when
-`mangoo_native` isn't built -- identical behavior, including error
+`hayavega_native` isn't built -- identical behavior, including error
 messages for malformed queries, on both paths (`tests/test_graphql.py`'s
 `NativeParserBridgeTests` exercises both explicitly). `execute()`'s own
 logic past parsing -- binding variables, depth/field-count limits,

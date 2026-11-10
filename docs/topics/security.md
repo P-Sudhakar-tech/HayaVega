@@ -1,7 +1,7 @@
 # Security
 
 Hardening, CSRF, rate limiting, trusted proxies, and the error-disclosure
-standard every request path in Mangoo is held to.
+standard every request path in Hayavega is held to.
 
 ## Secret key
 
@@ -10,12 +10,12 @@ import os
 
 
 class Settings:
-    secret_key = os.getenv("MANGOO_SECRET_KEY", "change-this-in-production")
+    secret_key = os.getenv("HAYAVEGA_SECRET_KEY", "change-this-in-production")
 ```
 
-**Generation.** Mangoo does not auto-generate one for you at `mango
+**Generation.** Hayavega does not auto-generate one for you at `hayavega
 newproject` time (unlike Django's `startproject`). The scaffolded
-`secret_key` reads `MANGOO_SECRET_KEY` from the environment, falling back
+`secret_key` reads `HAYAVEGA_SECRET_KEY` from the environment, falling back
 to the placeholder string `"change-this-in-production"` if it's unset.
 Generate a real one yourself and set it as an environment variable, never
 committed to source control:
@@ -26,22 +26,22 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 
 **Validation.** Two places reject the placeholder:
 
-- `mango diagnose` ([below](#mangopy-diagnose)) warns (or errors, once
+- `hayavega diagnose` ([below](#hayavegapy-diagnose)) warns (or errors, once
   `debug = False`) if `secret_key` is empty or a known placeholder
   (`"change-this-in-production"`, `"changeme"`, `"secret"`).
-- `mango launch`/[production validation](#production-validation) refuses
+- `hayavega launch`/[production validation](#production-validation) refuses
   to start a non-debug server with the same placeholder values.
 
 **What it's used for -- and what it isn't.** Unlike Django, where
 `SECRET_KEY` signs session cookies, CSRF tokens, and password-reset
-tokens, Mangoo generates independent randomness via `secrets` for each of
+tokens, Hayavega generates independent randomness via `secrets` for each of
 those (`auth.create_session`, `auth.create_password_reset_token`,
 `auth.create_email_verification_token`) -- `secret_key` plays no part in
 any of them. The one place it's actually load-bearing is **TOTP secret
 encryption at rest**:
 
 ```python
-from mangoo.auth import enable_totp, authenticate
+from hayavega.auth import enable_totp, authenticate
 
 secret = enable_totp(DATABASE, "alice", secret_key=SETTINGS.secret_key)
 authenticate(DATABASE, "alice", password, totp_code="123456", secret_key=SETTINGS.secret_key)
@@ -49,15 +49,15 @@ authenticate(DATABASE, "alice", password, totp_code="123456", secret_key=SETTING
 
 `enable_totp` derives a 256-bit AES key from `secret_key` via HKDF-SHA256
 and encrypts the generated TOTP secret with AES-256-GCM
-(`mangoo.crypto`) before storing it, using a fresh random nonce each
+(`hayavega.crypto`) before storing it, using a fresh random nonce each
 time. This needs `cryptography` installed (`uv add cryptography` --
 kept optional, the same policy as the PostgreSQL/MySQL drivers, rather
 than a mandatory dependency for every project that never enables TOTP).
 Without it, or without `secret_key`, the secret is stored in plaintext
-instead -- `mango diagnose` reports that fallback as an `info`-level
+instead -- `hayavega diagnose` reports that fallback as an `info`-level
 finding.
 
-`mango.py enable2fa` already passes `Settings.secret_key` for you; code
+`hayavega.py enable2fa` already passes `Settings.secret_key` for you; code
 that calls `enable_totp`/`authenticate`/`auth_routes` directly needs to
 pass it explicitly. If a user's secret was stored encrypted, every later
 `authenticate()` call for them needs the *same* `secret_key`, or the TOTP
@@ -86,14 +86,14 @@ class security:
 ```
 
 `HardeningOptions.from_settings(allowed_hosts=..., security=...)` builds
-the full set consumed by both `mangoo.runtime.create_application` and
-`mangoo.asgi.create_asgi_application` &mdash; identical enforcement on
+the full set consumed by both `hayavega.runtime.create_application` and
+`hayavega.asgi.create_asgi_application` &mdash; identical enforcement on
 either transport.
 
-## `mango.py diagnose`
+## `hayavega.py diagnose`
 
 ```bash
-python mango.py diagnose
+python hayavega.py diagnose
 ```
 
 Proactively reports unsafe settings (`Settings.debug` left on, a placeholder
@@ -105,18 +105,18 @@ Severity scales with whether `Settings.debug` is on.
 ## Production validation
 
 ```bash
-python mango.py launch  # validates production settings before starting
+python hayavega.py launch  # validates production settings before starting
 ```
 
 Fails with actionable errors for unsafe configuration &mdash; a missing
 `Settings.secret_key`, `Settings.debug = True` in what looks like a production run,
 `Settings.security.force_https` not set. See `validate_production()` in
-`mangoo.production`.
+`hayavega.production`.
 
 ## CSRF
 
 ```python
-from mangoo.security import csrf_protect
+from hayavega.security import csrf_protect
 
 
 @csrf_protect
@@ -154,7 +154,7 @@ Never exposes anything beyond your own app's route table.
 ## Audit log
 
 Authentication and admin actions are recorded to a persistent audit log
-(`mangoo_audit_events`) &mdash; field names that changed, never the values,
+(`hayavega_audit_events`) &mdash; field names that changed, never the values,
 for every recorded update. See [Authentication](auth.md#audit-events)
 and [Admin](admin.md).
 

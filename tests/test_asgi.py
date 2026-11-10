@@ -6,15 +6,15 @@ import warnings
 from pathlib import Path
 from unittest.mock import patch
 
-from mangoo import HardeningOptions, api_route, path
-from mangoo.addons.signals import SignalBus
-from mangoo.asgi import _declared_content_length, _handle_websocket, _read_body, create_asgi_application
-from mangoo.auth import create_session, create_superuser
-from mangoo.metrics import MetricsRegistry
-from mangoo.response import Response
-from mangoo.security import csrf_protect, login_required
-from mangoo.testing import AsyncTestClient
-from mangoo.websocket import websocket_path
+from hayavega import HardeningOptions, api_route, path
+from hayavega.addons.signals import SignalBus
+from hayavega.asgi import _declared_content_length, _handle_websocket, _read_body, create_asgi_application
+from hayavega.auth import create_session, create_superuser
+from hayavega.metrics import MetricsRegistry
+from hayavega.response import Response
+from hayavega.security import csrf_protect, login_required
+from hayavega.testing import AsyncTestClient
+from hayavega.websocket import websocket_path
 
 
 async def _raises_disconnect_without_catching_it(ws):
@@ -105,8 +105,8 @@ class AsgiApplicationTests(unittest.TestCase):
             return Response("ok")
 
         app = create_asgi_application([path("echo", view, methods=("POST",))])
-        AsyncTestClient(app).post("/echo", json_data={"name": "mangoo"})
-        self.assertEqual(captured["body"], {"name": "mangoo"})
+        AsyncTestClient(app).post("/echo", json_data={"name": "hayavega"})
+        self.assertEqual(captured["body"], {"name": "hayavega"})
 
     def test_hardening_rejects_disallowed_host(self):
         app = create_asgi_application([path("", lambda request: Response("ok"))], hardening=HardeningOptions(allowed_hosts=("example.com",)))
@@ -123,7 +123,7 @@ class AsgiApplicationTests(unittest.TestCase):
             raise RuntimeError("boom")
 
         app = create_asgi_application([path("", view)])
-        with self.assertLogs("mangoo.asgi", level="ERROR"):
+        with self.assertLogs("hayavega.asgi", level="ERROR"):
             response = AsyncTestClient(app).get("/")
         self.assertEqual(response.status_code, 500)
 
@@ -132,7 +132,7 @@ class AsgiApplicationTests(unittest.TestCase):
             raise ValueError("db password is hunter2 at host 10.0.0.5")
 
         app = create_asgi_application([path("", view)])
-        with self.assertLogs("mangoo.asgi", level="ERROR"):
+        with self.assertLogs("hayavega.asgi", level="ERROR"):
             response = AsyncTestClient(app).get("/")
         self.assertEqual(response.status_code, 500)
         self.assertIn("ValueError", response.text)
@@ -141,13 +141,13 @@ class AsgiApplicationTests(unittest.TestCase):
         self.assertNotIn("Traceback", response.text)
 
     def test_api_route_error_returns_a_json_envelope_not_html(self):
-        from mangoo import api_route
+        from hayavega import api_route
 
         async def broken(request):
             raise ValueError("db password is hunter2 at host 10.0.0.5")
 
         app = create_asgi_application([api_route("broken", broken)])
-        with self.assertLogs("mangoo.asgi", level="ERROR"):
+        with self.assertLogs("hayavega.asgi", level="ERROR"):
             response = AsyncTestClient(app).get("/broken")
         self.assertEqual(response.status_code, 500)
         body = response.json()
@@ -227,7 +227,7 @@ class AsgiApplicationTests(unittest.TestCase):
         app = create_asgi_application([path("form", protected, methods=("POST",))])
         # A session cookie without a matching CSRF token must be rejected;
         # this is what actually exercises the decorator's async path.
-        response = AsyncTestClient(app).post("/form", headers={"Cookie": "mangoo_session=some-session-token"})
+        response = AsyncTestClient(app).post("/form", headers={"Cookie": "hayavega_session=some-session-token"})
         self.assertEqual(response.status_code, 403)
 
     def test_form_data_is_url_encoded_and_sent_with_the_form_content_type(self):
@@ -239,13 +239,13 @@ class AsgiApplicationTests(unittest.TestCase):
             return Response("ok")
 
         app = create_asgi_application([path("echo", view, methods=("POST",))])
-        AsyncTestClient(app).post("/echo", form_data={"name": "mangoo", "lang": "python"})
+        AsyncTestClient(app).post("/echo", form_data={"name": "hayavega", "lang": "python"})
         self.assertEqual(captured["content_type"], "application/x-www-form-urlencoded")
-        self.assertEqual(captured["form"], {"name": "mangoo", "lang": "python"})
+        self.assertEqual(captured["form"], {"name": "hayavega", "lang": "python"})
 
     def test_receive_returns_http_disconnect_once_the_body_has_already_been_delivered(self):
         """Exercises AsyncTestClient's own `receive()` closure directly with a
-        raw ASGI callable, rather than through Mangoo's routing -- which
+        raw ASGI callable, rather than through Hayavega's routing -- which
         never calls `receive()` a second time for an ordinary request."""
 
         async def app(scope, receive, send):
@@ -314,12 +314,12 @@ class AsgiApplicationTests(unittest.TestCase):
         asyncio.run(app({"type": "websocket", "path": "/ws/boom", "headers": []}, receive, send))  # must not raise
 
     def test_pool_connections_enables_connection_pooling(self):
-        with patch("mangoo.asgi.db.enable_connection_pooling") as enable:
+        with patch("hayavega.asgi.db.enable_connection_pooling") as enable:
             create_asgi_application([], pool_connections=True)
         enable.assert_called_once_with()
 
     def test_pool_connections_defaults_to_disabled(self):
-        with patch("mangoo.asgi.db.enable_connection_pooling") as enable:
+        with patch("hayavega.asgi.db.enable_connection_pooling") as enable:
             create_asgi_application([])
         enable.assert_not_called()
 
@@ -330,7 +330,7 @@ class AsgiApplicationTests(unittest.TestCase):
 
 
 class AsgiHelperFunctionTests(unittest.TestCase):
-    """Direct unit tests of small ``mangoo.asgi`` helpers whose branches
+    """Direct unit tests of small ``hayavega.asgi`` helpers whose branches
     aren't reachable through ``AsyncTestClient`` (which always delivers a
     single, well-formed ``http.request`` message and never a malformed
     ``content-length``)."""

@@ -2,7 +2,7 @@
 this suite explicitly left open: real concurrent I/O. `run.py` and
 `rust_runtime_vs_fastapi.py`'s scenarios (`json_echo`, `db_list`,
 `template_render`, `static_file`) are all plain sync functions under every
-transport, including Mangoo (ASGI) -- so none of them exercise the one
+transport, including Hayavega (ASGI) -- so none of them exercise the one
 property ASGI actually has that WSGI doesn't: an `async def` view awaiting
 I/O yields the event loop instead of blocking a whole OS thread for the
 call's duration, so many more requests can be in flight at once than there
@@ -15,22 +15,22 @@ flakiness) instead of a live third party, so the result is reproducible.
 
 Three comparisons, same upstream, same delay, run back to back:
 
-1. **Mangoo (ASGI) `/remote` vs. FastAPI `/remote`** -- both real `async def`
+1. **Hayavega (ASGI) `/remote` vs. FastAPI `/remote`** -- both real `async def`
    views awaiting a network call, both served by uvicorn. The comparison
    this file exists to answer.
-2. **Mangoo (ASGI) `/remote` vs. Mangoo (ASGI) `/remote-blocking`** -- same
+2. **Hayavega (ASGI) `/remote` vs. Hayavega (ASGI) `/remote-blocking`** -- same
    process, same routing code, same server; only whether the view awaits
    the call or blocks a thread for it differs. Isolates ASGI's own claimed
    benefit from any cross-framework difference.
-3. **Mangoo (WSGI/waitress) `/remote-blocking` vs. FastAPI `/remote-blocking`**
+3. **Hayavega (WSGI/waitress) `/remote-blocking` vs. FastAPI `/remote-blocking`**
    -- both a blocking `def` view dispatched through a fixed-size thread
    pool (waitress's 16 threads; Starlette/anyio's default capacity
    limiter), the baseline neither framework's async path is compared
    against in isolation elsewhere in this suite.
 
 Concurrency defaults to 64 -- deliberately above every blocking path's
-thread-pool size in this comparison (Mangoo ASGI's dispatch pool and
-waitress both default to 16; see `mangoo.asgi`'s `max_sync_workers`
+thread-pool size in this comparison (Hayavega ASGI's dispatch pool and
+waitress both default to 16; see `hayavega.asgi`'s `max_sync_workers`
 docstring) so a real queuing ceiling has room to show up if the async paths
 avoid it and the blocking ones don't.
 
@@ -183,12 +183,12 @@ def main() -> None:
         raise SystemExit("oha is not on PATH. See benchmarks/README.md for install instructions.")
 
     python = sys.executable
-    upstream_env = {**os.environ, "MANGOO_BENCH_UPSTREAM_DELAY_MS": str(args.delay_ms)}
+    upstream_env = {**os.environ, "HAYAVEGA_BENCH_UPSTREAM_DELAY_MS": str(args.delay_ms)}
 
     targets = [
         Target(
-            "Mangoo (ASGI)",
-            [python, "-m", "uvicorn", "benchmarks.mangoo_asgi_app.app:application", "--host", "127.0.0.1", "--port", "9004"],
+            "Hayavega (ASGI)",
+            [python, "-m", "uvicorn", "benchmarks.hayavega_asgi_app.app:application", "--host", "127.0.0.1", "--port", "9004"],
             9004,
             {"remote (async)": "/remote", "remote-blocking (16-thread pool)": "/remote-blocking"},
         ),
@@ -199,8 +199,8 @@ def main() -> None:
             {"remote (async)": "/remote", "remote-blocking (anyio pool)": "/remote-blocking"},
         ),
         Target(
-            "Mangoo (WSGI/waitress)",
-            [python, "-m", "waitress", "--host=127.0.0.1", "--port=9001", "--threads=16", "--call", "benchmarks.mangoo_app.app:build_application"],
+            "Hayavega (WSGI/waitress)",
+            [python, "-m", "waitress", "--host=127.0.0.1", "--port=9001", "--threads=16", "--call", "benchmarks.hayavega_app.app:build_application"],
             9001,
             {"remote-blocking (16-thread pool)": "/remote-blocking"},
         ),
@@ -218,20 +218,20 @@ def main() -> None:
             print(f"  FAILED: {error}")
         print()
 
-    mangoo_asgi = all_results.get("Mangoo (ASGI)", {})
+    hayavega_asgi = all_results.get("Hayavega (ASGI)", {})
     fastapi_results = all_results.get("FastAPI (uvicorn)", {})
-    mangoo_wsgi = all_results.get("Mangoo (WSGI/waitress)", {})
+    hayavega_wsgi = all_results.get("Hayavega (WSGI/waitress)", {})
 
     print("--- Summary ---")
-    if "remote (async)" in mangoo_asgi and "remote (async)" in fastapi_results:
-        a, f = mangoo_asgi["remote (async)"], fastapi_results["remote (async)"]
-        print(f"  1. Mangoo (ASGI) vs FastAPI, both async:      {a.requests_per_sec:8.1f} vs {f.requests_per_sec:8.1f} req/s  ratio={a.requests_per_sec / f.requests_per_sec:.2f}x")
-    if "remote (async)" in mangoo_asgi and "remote-blocking (16-thread pool)" in mangoo_asgi:
-        a, b = mangoo_asgi["remote (async)"], mangoo_asgi["remote-blocking (16-thread pool)"]
-        print(f"  2. Mangoo (ASGI) async vs its own blocking:   {a.requests_per_sec:8.1f} vs {b.requests_per_sec:8.1f} req/s  ratio={a.requests_per_sec / b.requests_per_sec:.2f}x")
-    if "remote-blocking (16-thread pool)" in mangoo_wsgi and "remote-blocking (anyio pool)" in fastapi_results:
-        w, f = mangoo_wsgi["remote-blocking (16-thread pool)"], fastapi_results["remote-blocking (anyio pool)"]
-        print(f"  3. Mangoo (WSGI) vs FastAPI, both blocking:   {w.requests_per_sec:8.1f} vs {f.requests_per_sec:8.1f} req/s  ratio={w.requests_per_sec / f.requests_per_sec:.2f}x")
+    if "remote (async)" in hayavega_asgi and "remote (async)" in fastapi_results:
+        a, f = hayavega_asgi["remote (async)"], fastapi_results["remote (async)"]
+        print(f"  1. Hayavega (ASGI) vs FastAPI, both async:      {a.requests_per_sec:8.1f} vs {f.requests_per_sec:8.1f} req/s  ratio={a.requests_per_sec / f.requests_per_sec:.2f}x")
+    if "remote (async)" in hayavega_asgi and "remote-blocking (16-thread pool)" in hayavega_asgi:
+        a, b = hayavega_asgi["remote (async)"], hayavega_asgi["remote-blocking (16-thread pool)"]
+        print(f"  2. Hayavega (ASGI) async vs its own blocking:   {a.requests_per_sec:8.1f} vs {b.requests_per_sec:8.1f} req/s  ratio={a.requests_per_sec / b.requests_per_sec:.2f}x")
+    if "remote-blocking (16-thread pool)" in hayavega_wsgi and "remote-blocking (anyio pool)" in fastapi_results:
+        w, f = hayavega_wsgi["remote-blocking (16-thread pool)"], fastapi_results["remote-blocking (anyio pool)"]
+        print(f"  3. Hayavega (WSGI) vs FastAPI, both blocking:   {w.requests_per_sec:8.1f} vs {f.requests_per_sec:8.1f} req/s  ratio={w.requests_per_sec / f.requests_per_sec:.2f}x")
 
 
 if __name__ == "__main__":

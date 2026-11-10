@@ -1,6 +1,6 @@
 # Rust runtime
 
-An opt-in, in-built, native WSGI server &mdash; `mangoo_native.serve_wsgi`,
+An opt-in, in-built, native WSGI server &mdash; `hayavega_native.serve_wsgi`,
 written in Rust &mdash; selected entirely via settings, no separate tool to
 install or run.
 
@@ -14,10 +14,10 @@ class server:
 ```
 
 ```bash
-python mango.py launch
+python hayavega.py launch
 ```
 
-If `mangoo_native` wasn't built for this install, `mango launch` reports
+If `hayavega_native` wasn't built for this install, `hayavega launch` reports
 a clear, actionable error rather than silently falling back to the
 default `wsgiref` server under a different name.
 

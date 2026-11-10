@@ -1,14 +1,14 @@
 # WebSockets
 
 WebSocket connections only exist under [ASGI](asgi.md) -- WSGI (the
-default transport, `mangoo.runtime`) has no equivalent scope type, so
-a WSGI application never sees one and `mangoo.websocket` has nothing
+default transport, `hayavega.runtime`) has no equivalent scope type, so
+a WSGI application never sees one and `hayavega.websocket` has nothing
 to do with it there.
 
 ## Registering a handler
 
 ```python
-from mangoo.websocket import WebSocketDisconnect, websocket_path
+from hayavega.websocket import WebSocketDisconnect, websocket_path
 
 
 async def echo(ws):
@@ -42,24 +42,24 @@ dependency-free, hand-rolled-over-imported philosophy
 - **Accept or reject**: call `await ws.accept()` to accept the
   connection (optionally `accept(subprotocol="...")`), or simply
   return without calling it to reject -- closes the socket with the
-  default ASGI close code. `mangoo.asgi` always consumes the
+  default ASGI close code. `hayavega.asgi` always consumes the
   connection's leading `websocket.connect` message itself before
   calling the handler, so a handler can go straight to `accept()`.
 - **Receive**: `await ws.receive_text()` / `await ws.receive_json()`
   (JSON-decoded via `msgspec`). Binary frames are not exposed --
-  consistent with how the rest of Mangoo treats bodies (JSON or
+  consistent with how the rest of Hayavega treats bodies (JSON or
   plain text/HTML).
 - **Send**: `await ws.send_text(data)` / `await ws.send_json(data)`.
 - **Disconnect**: a `receive_*` call raises `WebSocketDisconnect`
   once the client has gone away -- a handler's normal shutdown path
   is to catch this around its receive loop and return. It is not
-  treated as an error and never logged as one by `mangoo.asgi`'s
+  treated as an error and never logged as one by `hayavega.asgi`'s
   dispatcher.
 - **Close**: `await ws.close(code=1000)` to close from the server
   side.
 
 ```python
-from mangoo.websocket import WebSocket, WebSocketDisconnect
+from hayavega.websocket import WebSocket, WebSocketDisconnect
 
 
 async def chat(ws: WebSocket) -> None:
@@ -87,20 +87,20 @@ those settings already give HTTP requests, applied here because
 WebSocket connections bypass the browser's ordinary same-origin/CORS
 enforcement ("cross-site WebSocket hijacking"). A rejected connection
 never reaches your handler at all; it closes immediately with a
-rejection code, and `mango diagnose`/the usual hardening
+rejection code, and `hayavega diagnose`/the usual hardening
 configuration in [Security](security.md) covers how to set
 `allowed_hosts`/`allowed_origins` in the first place.
 
 ## Testing
 
-`mangoo.testing.connect_websocket(application, path)` drives a
+`hayavega.testing.connect_websocket(application, path)` drives a
 connection against an ASGI application in-process -- the WebSocket
 equivalent of `AsyncTestClient`:
 
 ```python
 import unittest
 
-from mangoo.testing import connect_websocket
+from hayavega.testing import connect_websocket
 
 
 class EchoTests(unittest.IsolatedAsyncioTestCase):

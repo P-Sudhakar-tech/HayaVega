@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
-from mangoo.conf import load_database, load_settings_from_module
+from hayavega.conf import load_database, load_settings_from_module
 
 
 def _module(**settings_kwargs) -> ModuleType:
@@ -12,13 +12,13 @@ def _module(**settings_kwargs) -> ModuleType:
 
 
 class SettingsTests(unittest.TestCase):
-    def test_loads_mangoo_style_project_settings(self):
+    def test_loads_hayavega_style_project_settings(self):
         module = _module(
             base_dir=Path("C:/projects/demo"),
             debug=True,
             allowed_hosts=["localhost"],
             installed_apps=["blog"],
-            middleware=["mangoo.middleware.SecurityMiddleware"],
+            middleware=["hayavega.middleware.SecurityMiddleware"],
             root_urlconf="config.routes",
             database={"engine": "sqlite3", "name": "data.sqlite3"},
             server={"host": "127.0.0.1", "port": 9000},
@@ -41,13 +41,13 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.database["ENGINE"], "sqlite3")
 
     def test_accepts_postgresql_database_configuration(self):
-        module = _module(database={"engine": "postgresql", "name": "mangoo", "host": "db.example", "port": 5432}, server={})
+        module = _module(database={"engine": "postgresql", "name": "hayavega", "host": "db.example", "port": 5432}, server={})
         settings = load_settings_from_module(module)
         self.assertEqual(settings.database["ENGINE"], "postgresql")
         self.assertEqual(settings.database["HOST"], "db.example")
 
     def test_accepts_mysql_database_configuration(self):
-        module = _module(database={"engine": "mysql", "name": "mangoo", "host": "db.example", "port": 3306}, server={})
+        module = _module(database={"engine": "mysql", "name": "hayavega", "host": "db.example", "port": 3306}, server={})
         self.assertEqual(load_settings_from_module(module).database["ENGINE"], "mysql")
 
     def test_missing_settings_object_is_rejected(self):
@@ -61,47 +61,47 @@ class SettingsTests(unittest.TestCase):
             load_settings_from_module(module)
 
     def test_rejects_invalid_server_port(self):
-        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={"port": 70000})
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={"port": 70000})
         with self.assertRaisesRegex(ValueError, "Settings.server.port"):
             load_settings_from_module(module)
 
     def test_server_engine_defaults_to_python(self):
-        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={})
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={})
         self.assertEqual(load_settings_from_module(module).server_engine, "python")
 
     def test_server_engine_accepts_rust(self):
-        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={"engine": "rust"})
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={"engine": "rust"})
         self.assertEqual(load_settings_from_module(module).server_engine, "rust")
 
     def test_rejects_invalid_server_engine(self):
-        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={"engine": "nodejs"})
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={"engine": "nodejs"})
         with self.assertRaisesRegex(ValueError, "Settings.server.engine"):
             load_settings_from_module(module)
 
     def test_security_section_passes_through_to_the_uppercase_dict_other_modules_consume(self):
-        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={}, security={"force_https": True, "custom_flag": "x"})
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={}, security={"force_https": True, "custom_flag": "x"})
         settings = load_settings_from_module(module)
         self.assertEqual(settings.security["FORCE_HTTPS"], True)
         self.assertEqual(settings.security["CUSTOM_FLAG"], "x")
 
     def test_cache_section_passes_through_to_the_uppercase_dict_cache_from_settings_consumes(self):
-        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={}, cache={"backend": "redis", "redis_url": "redis://cache.internal:6379/1"})
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={}, cache={"backend": "redis", "redis_url": "redis://cache.internal:6379/1"})
         settings = load_settings_from_module(module)
         self.assertEqual(settings.cache["BACKEND"], "redis")
         self.assertEqual(settings.cache["REDIS_URL"], "redis://cache.internal:6379/1")
 
     def test_cache_section_defaults_to_empty_when_unset(self):
-        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={})
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={})
         self.assertEqual(load_settings_from_module(module).cache, {})
 
     def test_i18n_section_passes_through_to_the_uppercase_dict_catalog_from_settings_consumes(self):
-        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={}, i18n={"languages": ["en", "es"], "default_language": "en"})
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={}, i18n={"languages": ["en", "es"], "default_language": "en"})
         settings = load_settings_from_module(module)
         self.assertEqual(settings.i18n["LANGUAGES"], ["en", "es"])
         self.assertEqual(settings.i18n["DEFAULT_LANGUAGE"], "en")
 
     def test_i18n_section_defaults_to_empty_when_unset(self):
-        module = _module(database={"engine": "sqlite3", "name": "mangoo.sqlite3"}, server={})
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={})
         self.assertEqual(load_settings_from_module(module).i18n, {})
 
 

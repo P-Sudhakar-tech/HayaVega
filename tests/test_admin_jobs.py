@@ -3,17 +3,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.admin import admin_routes
-from mangoo.audit import audit_events
-from mangoo.auth import create_session, create_superuser, create_user
-from mangoo.jobs import _mark_failed, claim_next_job, enqueue
-from mangoo.runtime import create_application
-from mangoo.testing import TestClient
+from hayavega.admin import admin_routes
+from hayavega.audit import audit_events
+from hayavega.auth import create_session, create_superuser, create_user
+from hayavega.jobs import _mark_failed, claim_next_job, enqueue
+from hayavega.runtime import create_application
+from hayavega.testing import TestClient
 
 
 def _csrf_from(response) -> tuple[str, str]:
     token = re.search(r"name='csrf_token' value='([^']*)'", response.text).group(1)
-    cookie_value = re.search(r"mangoo_csrf=([^;]*)", response.headers.get("Set-Cookie", "")).group(1)
+    cookie_value = re.search(r"hayavega_csrf=([^;]*)", response.headers.get("Set-Cookie", "")).group(1)
     return token, cookie_value
 
 
@@ -99,7 +99,7 @@ class RetryTests(JobsAdminSetup):
         job_id = self._dead_letter_job()
         get_response = self.client.get("/admin/jobs", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         response = self.client.post(f"/admin/jobs/{job_id}/retry", form_data={"csrf_token": token}, headers=headers)
         self.assertEqual(response.status_code, 303)
 
@@ -110,14 +110,14 @@ class RetryTests(JobsAdminSetup):
         job_id = self._dead_letter_job()
         get_response = self.client.get("/admin/jobs", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         self.client.post(f"/admin/jobs/{job_id}/retry", form_data={"csrf_token": token}, headers=headers)
         events = [e for e in audit_events(self.database) if e["event_type"] == "admin.jobs.retried"]
         self.assertEqual(events[0]["metadata"]["id"], job_id)
 
     def test_retry_on_non_dead_job_is_a_no_op(self):
         job_id = enqueue(self.database, "send_email")
-        headers = {**self.bearer(self.admin_token), "Cookie": "mangoo_csrf=matching-token"}
+        headers = {**self.bearer(self.admin_token), "Cookie": "hayavega_csrf=matching-token"}
         self.client.post(f"/admin/jobs/{job_id}/retry", form_data={"csrf_token": "matching-token"}, headers=headers)
         events = [e for e in audit_events(self.database) if e["event_type"] == "admin.jobs.retried"]
         self.assertEqual(events, [])
@@ -130,7 +130,7 @@ class RetryTests(JobsAdminSetup):
     def test_retry_without_csrf_token_is_rejected_for_cookie_sessions(self):
         job_id = self._dead_letter_job()
         token = create_session(self.database, self.admin_user)
-        response = self.client.post(f"/admin/jobs/{job_id}/retry", form_data={}, headers={"Cookie": f"mangoo_session={token}"})
+        response = self.client.post(f"/admin/jobs/{job_id}/retry", form_data={}, headers={"Cookie": f"hayavega_session={token}"})
         self.assertEqual(response.status_code, 403)
 
     def test_retry_url_missing_the_retry_suffix_is_404(self):
@@ -147,7 +147,7 @@ class RetryTests(JobsAdminSetup):
         so ``jobs_retry``'s own method guard is unreachable through routing
         -- the view is pulled off the registered routes and called directly
         with a ``GET`` request to exercise it."""
-        from mangoo.request import Request
+        from hayavega.request import Request
 
         job_id = self._dead_letter_job()
         routes = admin_routes(self.database, jobs=True)
@@ -162,7 +162,7 @@ class SignalsIntegrationTests(JobsAdminSetup):
     def test_jobs_list_viewed_publishes_an_admin_action_event(self):
         from threading import Event
 
-        from mangoo.addons.signals import SignalBus
+        from hayavega.addons.signals import SignalBus
 
         bus = SignalBus()
         received = []
@@ -183,7 +183,7 @@ class SignalsIntegrationTests(JobsAdminSetup):
     def test_retrying_a_dead_job_publishes_an_admin_action_event(self):
         from threading import Event
 
-        from mangoo.addons.signals import SignalBus
+        from hayavega.addons.signals import SignalBus
 
         bus = SignalBus()
         received = []
@@ -200,7 +200,7 @@ class SignalsIntegrationTests(JobsAdminSetup):
         job_id = self._dead_letter_job()
         get_response = client.get("/admin/jobs", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         client.post(f"/admin/jobs/{job_id}/retry", form_data={"csrf_token": token}, headers=headers)
         seen.wait(2)
         bus.close()

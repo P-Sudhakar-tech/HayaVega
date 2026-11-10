@@ -1,6 +1,6 @@
-# Mangoo: build-from-scratch guide
+# Hayavega: build-from-scratch guide
 
-Mangoo is an early web framework experiment with its own conventional project structure. Its application-facing syntax is Python-like, while its intended high-throughput runtime is Rust through PyO3 native bindings.
+Hayavega is an early web framework experiment with its own conventional project structure. Its application-facing syntax is Python-like, while its intended high-throughput runtime is Rust through PyO3 native bindings.
 
 This guide describes the project as it exists today, how to run it from a clean machine, and how to extend it safely.
 
@@ -8,24 +8,24 @@ This guide describes the project as it exists today, how to run it from a clean 
 
 | Area | Current state |
 |---|---|
-| Project and app scaffolding | Implemented: `newproject`, `newapp`, `mango.py` layout (`startproject`/`startapp` still work as deprecated aliases) |
+| Project and app scaffolding | Implemented: `newproject`, `newapp`, `hayavega.py` layout (`startproject`/`startapp` still work as deprecated aliases) |
 | Development server | Implemented: WSGI server, route dispatch, autoreload, `Ctrl+C` shutdown |
 | Settings | Implemented: a conventional `settings.py`, typed loader, structured database/server settings |
 | REST | Implemented: JSON routes, method checks, example health endpoint |
 | GraphQL | Implemented: arguments, variables, nested selections, mutations, depth/field limits, off-by-default introspection |
-| UI framework | Implemented: `mangoo.ui` server-rendered components and a first-party `mangoo-ui.js` hypermedia runtime (`hx-*` swaps, `mgo-boost` routing), no build step; no client-side reactive/signals layer in this version; a Node.js/npm-based SPA framework (JSX, virtual DOM, bundler) is not yet scoped |
+| UI framework | Implemented: `hayavega.ui` server-rendered components and a first-party `hayavega-ui.js` hypermedia runtime (`hx-*` swaps, `mgo-boost` routing), no build step; no client-side reactive/signals layer in this version; a Node.js/npm-based SPA framework (JSX, virtual DOM, bundler) is not yet scoped |
 | Production features | Implemented baseline: scrypt passwords, lockouts, Bearer and cookie sessions, CSRF, permissions, TOTP, and admin base |
 | Databases | SQLite works now; PostgreSQL/MySQL/MariaDB adapters activate when drivers are installed |
-| Rust native layer | Implemented: `mangoo_native` builds and bundles automatically as part of a normal `pip install` when a Rust toolchain is present (see "Compile the Rust workspace" below); a pure-Python fallback is used otherwise |
+| Rust native layer | Implemented: `hayavega_native` builds and bundles automatically as part of a normal `pip install` when a Rust toolchain is present (see "Compile the Rust workspace" below); a pure-Python fallback is used otherwise |
 
 ## 2. Repository layout
 
 ```text
-mangoo/
+hayavega/
 |- Cargo.toml                     # Rust workspace
 |- pyproject.toml                 # Python package and CLI scripts
-|- mango.cmd                      # Windows no-pip source launcher
-|- src/mangoo/                    # Python framework API
+|- hayavega.cmd                      # Windows no-pip source launcher
+|- src/hayavega/                    # Python framework API
 |  |- auth.py                     # Passwords, sessions, lockouts, TOTP
 |  |- auth_api.py                 # Bearer-token REST endpoints
 |  |- autoreload.py               # Development code watcher
@@ -36,11 +36,11 @@ mangoo/
 |  |- rest.py                     # JSON REST routes
 |  |- runtime.py                  # WSGI dispatcher
 |  |- scaffold.py                 # Project/app generator
-|  |- ui/                         # Components + hypermedia runtime (mangoo-ui.js/.css)
+|  |- ui/                         # Components + hypermedia runtime (hayavega-ui.js/.css)
 |  `- management/commands.py      # launch and auth commands
 |- crates/
-|  |- mangoo-core/                # Framework-neutral Rust primitives
-|  `- mangoo-python/              # PyO3 module named mangoo_native
+|  |- hayavega-core/                # Framework-neutral Rust primitives
+|  `- hayavega-python/              # PyO3 module named hayavega_native
 |- example_site/                  # Runnable demonstration project
 `- tests/                         # Standard-library unittest suite
 ```
@@ -66,7 +66,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 From the repository root:
 
 ```powershell
-cd D:\separate_code\mangoo
+cd D:\separate_code\hayavega
 $env:UV_CACHE_DIR = "$PWD\.uv-cache"
 uv venv .venv
 uv pip install -e .
@@ -81,14 +81,14 @@ Activate it:
 If you do not want to activate the environment, use the executable directly:
 
 ```powershell
-& .\.venv\Scripts\mango.exe --help
+& .\.venv\Scripts\hayavega.exe --help
 ```
 
 ## 5. Start the example project
 
 ```powershell
-cd D:\separate_code\mangoo\example_site
-& D:\separate_code\mangoo\.venv\Scripts\mango.exe launch 8011
+cd D:\separate_code\hayavega\example_site
+& D:\separate_code\hayavega\.venv\Scripts\hayavega.exe launch 8011
 ```
 
 Open `http://127.0.0.1:8011/`.
@@ -96,7 +96,7 @@ Open `http://127.0.0.1:8011/`.
 The development server watches Python files and reloads when code changes. Press `Ctrl+C` in the same terminal to stop it. Disable reload only when needed:
 
 ```powershell
-& D:\separate_code\mangoo\.venv\Scripts\mango.exe launch 8011 --noreload
+& D:\separate_code\hayavega\.venv\Scripts\hayavega.exe launch 8011 --noreload
 ```
 
 ## 6. Create a new project and app
@@ -104,17 +104,17 @@ The development server watches Python files and reloads when code changes. Press
 With the environment active:
 
 ```powershell
-mango newproject mysite
+hayavega newproject mysite
 cd mysite
-python mango.py newapp blog
-mango launch 8000
+python hayavega.py newapp blog
+hayavega launch 8000
 ```
 
 Generated projects have this shape:
 
 ```text
 mysite/
-|- mango.py
+|- hayavega.py
 |- config/
 |  |- settings.py
 |  `- routes.py
@@ -138,8 +138,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 class Settings:
     base_dir = BASE_DIR
-    secret_key = os.getenv("MANGOO_SECRET_KEY", "change-this-in-production")
-    debug = os.getenv("MANGOO_DEBUG", "true").lower() == "true"
+    secret_key = os.getenv("HAYAVEGA_SECRET_KEY", "change-this-in-production")
+    debug = os.getenv("HAYAVEGA_DEBUG", "true").lower() == "true"
     allowed_hosts = ["127.0.0.1", "localhost"]
 
     installed_apps = []
@@ -148,7 +148,7 @@ class Settings:
 
     class database:
         engine = "sqlite3"
-        name = BASE_DIR / "mangoo.sqlite3"
+        name = BASE_DIR / "hayavega.sqlite3"
 
     class server:
         host = "127.0.0.1"
@@ -158,14 +158,14 @@ class Settings:
 settings = Settings()
 ```
 
-`mangoo.conf.load_settings()` imports `config.settings`, validates `settings`, and returns a `ProjectSettings` with everything resolved (`settings.database`, `settings.server_port`, etc.) -- the same object `config/wsgi.py`, `config/asgi.py`, and every `mango.py` command already load. Never commit a production `Settings.secret_key` or database password. Use environment variables.
+`hayavega.conf.load_settings()` imports `config.settings`, validates `settings`, and returns a `ProjectSettings` with everything resolved (`settings.database`, `settings.server_port`, etc.) -- the same object `config/wsgi.py`, `config/asgi.py`, and every `hayavega.py` command already load. Never commit a production `Settings.secret_key` or database password. Use environment variables.
 
 ## 8. REST APIs
 
 Use `api_route` for JSON endpoints.
 
 ```python
-from mangoo import api_route
+from hayavega import api_route
 
 
 def health(request):
@@ -188,8 +188,8 @@ against; nested values are projected dynamically from whatever a resolver
 returns.
 
 ```python
-from mangoo import path
-from mangoo.graphql import Schema, graphql_view
+from hayavega import path
+from hayavega.graphql import Schema, graphql_view
 
 
 def users(request, active=None):
@@ -222,15 +222,15 @@ isn't supported, including the introspection policy and query limits.
 
 ## 10. UI framework
 
-`mangoo.ui` is a server-rendered component system plus a first-party
+`hayavega.ui` is a server-rendered component system plus a first-party
 htmx-style hypermedia runtime, both living inside this package -- no npm,
 no Node.js, no bundler, no separate frontend project. A component is a
 plain Python function returning `Markup`:
 
 ```python
-from mangoo import path
-from mangoo.response import Response
-from mangoo.ui import Alert, Button, Page, ui_routes
+from hayavega import path
+from hayavega.response import Response
+from hayavega.ui import Alert, Button, Page, ui_routes
 
 
 def home(request):
@@ -238,8 +238,8 @@ def home(request):
         "Home",
         Alert("Welcome back!", variant="success"),
         Button("Refresh", hx_get="/fragment", hx_target="#content"),
-        stylesheets=["/mangoo-ui/mangoo-ui.css"],
-        scripts=["/mangoo-ui/mangoo-ui.js"],
+        stylesheets=["/hayavega-ui/hayavega-ui.css"],
+        scripts=["/hayavega-ui/hayavega-ui.js"],
     )
     return Response(body)
 
@@ -251,25 +251,25 @@ def fragment(request):
 urlpatterns = [
     path("", home),
     path("fragment", fragment),
-    *ui_routes(),  # mounts /mangoo-ui/mangoo-ui.js and /mangoo-ui/mangoo-ui.css
+    *ui_routes(),  # mounts /hayavega-ui/hayavega-ui.js and /hayavega-ui/hayavega-ui.css
 ]
 ```
 
 `hx-get`/`hx-post`/`hx-put`/`hx-delete` fetch a URL (on click for
 buttons/links, on submit for forms) and swap the returned HTML fragment
 into `hx-target` using `hx-swap` -- the HTMX pattern, implemented in one
-small dependency-free JS file. It reads the `mangoo_csrf` cookie and sends
+small dependency-free JS file. It reads the `hayavega_csrf` cookie and sends
 it as `X-Csrf-Token` automatically, so an `hx-post` to a
 `@csrf_protect`-guarded view is protected without extra client-side
-wiring. Run the example site (`./mango.cmd launch 8001` from
+wiring. Run the example site (`./hayavega.cmd launch 8001` from
 `example_site/`) and visit `/ui-demo` for a runnable version of this
 pattern, or see `tests/test_ui_hypermedia.py` for the full round trip
 proven against the real WSGI stack. `mgo-boost` adds client-side routing
 on top of the same runtime (`tests/test_ui_boost.py`).
 
 A prior version of this package also had a client-side signals/reactivity
-runtime (`mangoo-reactive.js`, `mgo-data`/`mgo-text`/`mgo-on-*`
-directives); it was removed along with the rest of `mangoo.ui` at one
+runtime (`hayavega-reactive.js`, `mgo-data`/`mgo-text`/`mgo-on-*`
+directives); it was removed along with the rest of `hayavega.ui` at one
 point and, on rebuilding, was deliberately not brought back, keeping this
 version to one simpler hypermedia model rather than two rendering
 approaches. A genuine Node.js/npm-based SPA framework (JSX, a virtual DOM,
@@ -280,10 +280,10 @@ Rust acceleration was benchmarked specifically for fragment rendering (the
 small, fixed-shape markup an `hx-get` swap renders) and found to be a real
 win there (4x-8x faster in isolation) -- unlike full-page template
 rendering, where every general-purpose Rust candidate this project tried
-lost to Python. It isn't wired into `mangoo.ui`'s shipped API, since a
+lost to Python. It isn't wired into `hayavega.ui`'s shipped API, since a
 hardcoded native renderer only ever covers one exact fragment shape;
 see `benchmarks/native_htmx_fragment.py` and
-`benchmarks/mangoo_app/app.py`'s `posts_fragment_native` for the
+`benchmarks/hayavega_app/app.py`'s `posts_fragment_native` for the
 measurement and a worked example.
 
 ## 11. Authentication and authorization
@@ -299,8 +299,8 @@ measurement and a worked example.
 ### Create a superuser
 
 ```powershell
-python mango.py createadmin
-python mango.py enable2fa admin
+python hayavega.py createadmin
+python hayavega.py enable2fa admin
 ```
 
 `enable2fa` prints a TOTP secret. Add it to an authenticator app and keep it private.
@@ -317,17 +317,17 @@ Always use HTTPS before exposing these endpoints outside local development.
 
 ### Cookie sessions and CSRF
 
-Successful login also sets a host-only, `HttpOnly`, `SameSite=Lax` `mangoo_session` cookie. Browser clients should fetch `GET /api/auth/csrf`, which returns a token and sets the `mangoo_csrf` cookie. Send that token in the `X-CSRF-Token` header for unsafe requests made with the session cookie (including logout). Bearer-token clients are not subject to CSRF checks because browsers do not attach Bearer headers automatically. Pass `secure_cookies=not DEBUG` to `auth_routes` (as the example site does) so production cookies also receive the `Secure` attribute.
+Successful login also sets a host-only, `HttpOnly`, `SameSite=Lax` `hayavega_session` cookie. Browser clients should fetch `GET /api/auth/csrf`, which returns a token and sets the `hayavega_csrf` cookie. Send that token in the `X-CSRF-Token` header for unsafe requests made with the session cookie (including logout). Bearer-token clients are not subject to CSRF checks because browsers do not attach Bearer headers automatically. Pass `secure_cookies=not DEBUG` to `auth_routes` (as the example site does) so production cookies also receive the `Secure` attribute.
 
 ### Permissions and admin base
 
 Use `login_required`, `superuser_required`, or `permission_required` to protect a view. The built-in admin base can be enabled with `*admin_routes(_settings.database)`; it always provides administrator-only `/admin` and `/admin/users` pages, and can additionally manage your own entities. Authenticate the browser session first by calling the login endpoint.
 
 ```python
-from mangoo import admin_routes, login_required, path
-from mangoo.admin import ModelAdmin
-from mangoo.conf import load_settings
-from mangoo.models import Entity, Integer, Text
+from hayavega import admin_routes, login_required, path
+from hayavega.admin import ModelAdmin
+from hayavega.conf import load_settings
+from hayavega.models import Entity, Integer, Text
 
 _settings = load_settings()
 
@@ -358,7 +358,7 @@ registered model gets:
 
 CSRF protection applies to every add/edit/delete submission the same way it
 does for `auth_routes`: a hidden `csrf_token` form field (plain HTML forms
-can't set a custom header) is checked against the `mangoo_csrf` cookie set
+can't set a custom header) is checked against the `hayavega_csrf` cookie set
 when the form was rendered. Bearer-token requests skip the check, same as
 elsewhere.
 
@@ -371,7 +371,7 @@ No additional driver is needed:
 ```python
 class database:
     engine = "sqlite3"
-    name = BASE_DIR / "mangoo.sqlite3"
+    name = BASE_DIR / "hayavega.sqlite3"
 ```
 
 ### PostgreSQL
@@ -383,11 +383,11 @@ uv add "psycopg[binary]"
 ```python
 class database:
     engine = "postgresql"
-    name = "mangoo"
+    name = "hayavega"
     host = "localhost"
     port = 5432
-    user = "mangoo"
-    password = os.getenv("MANGOO_DATABASE_PASSWORD")
+    user = "hayavega"
+    password = os.getenv("HAYAVEGA_DATABASE_PASSWORD")
 ```
 
 ### MySQL or MariaDB
@@ -402,11 +402,11 @@ default `caching_sha2_password` plugin -- every connection fails without it.
 ```python
 class database:
     engine = "mysql"
-    name = "mangoo"
+    name = "hayavega"
     host = "localhost"
     port = 3306
-    user = "mangoo"
-    password = os.getenv("MANGOO_DATABASE_PASSWORD")
+    user = "hayavega"
+    password = os.getenv("HAYAVEGA_DATABASE_PASSWORD")
 ```
 
 Each of these is the `database` section inside `class Settings:` in `config/settings.py`.
@@ -415,10 +415,10 @@ SQLite is fully exercised by the existing test suite. PostgreSQL and MySQL/Maria
 
 ## 13. Rust-native features
 
-### Mangoo-specific collection syntax
+### Hayavega-specific collection syntax
 
 ```python
-from mangoo import mango_list
+from hayavega import mango_list
 
 items = mango_list(["a", "b"])
 items.append("c")
@@ -426,33 +426,33 @@ items.append("c")
 
 `mango_list` has a Python-compatible fallback today. Its Rust implementation lives in:
 
-- `crates/mangoo-core/src/lib.rs`
-- `crates/mangoo-python/src/lib.rs`
+- `crates/hayavega-core/src/lib.rs`
+- `crates/hayavega-python/src/lib.rs`
 
-The PyO3 module exports `MangoList`. Once compiled as `mangoo_native`, Mangoo automatically selects it instead of the fallback.
+The PyO3 module exports `MangoList`. Once compiled as `hayavega_native`, Hayavega automatically selects it instead of the fallback.
 
 ### Compile the Rust workspace
 
 Open a new PowerShell window after installing Rust so its Cargo path is available, then run:
 
 ```powershell
-cd D:\separate_code\mangoo
+cd D:\separate_code\hayavega
 $env:Path += ";$env:USERPROFILE\.cargo\bin"
 cargo test
 ```
 
 The Python package still uses Hatchling, not Maturin: a custom build hook
 (`hatch_build.py` at the repository root) invokes `cargo build --release`
-against `crates/mangoo-python/Cargo.toml` during a normal `pip install .` or
-`pip install -e .`, and bundles the resulting `mangoo_native` extension into
+against `crates/hayavega-python/Cargo.toml` during a normal `pip install .` or
+`pip install -e .`, and bundles the resulting `hayavega_native` extension into
 that same install when `cargo` is on PATH. There is no separate manual build
 step, and no risk of a second, independently-invokable build overwriting the
-`mangoo` package, since only one build definition produces it.
+`hayavega` package, since only one build definition produces it.
 
 ## 14. Test the project
 
 ```powershell
-cd D:\separate_code\mangoo
+cd D:\separate_code\hayavega
 $env:PYTHONPATH = "$PWD\src"
 & .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
@@ -461,7 +461,7 @@ The test suite covers routing, REST, GraphQL starter behavior, authentication, T
 
 ## 15. Recommended Rust migration order
 
-1. ~~Build and package `mangoo_native` as part of a normal packaged install.~~ Done: see "Compile the Rust workspace" above.
+1. ~~Build and package `hayavega_native` as part of a normal packaged install.~~ Done: see "Compile the Rust workspace" above.
 2. Move URL matching and path normalization into Rust.
 3. Move JSON serialization and response construction into Rust.
 4. Move password/session primitives into audited Rust implementations while keeping the Python API stable.
@@ -471,12 +471,12 @@ The test suite covers routing, REST, GraphQL starter behavior, authentication, T
 
 ## 16. Production checklist
 
-- Configure a `security` section in `class Settings:`. Mangoo applies trusted-host validation, security headers, structured audit logs, an explicit CORS allow-list, and an in-memory per-client/per-path rate limit through this configuration.
+- Configure a `security` section in `class Settings:`. Hayavega applies trusted-host validation, security headers, structured audit logs, an explicit CORS allow-list, and an in-memory per-client/per-path rate limit through this configuration.
 - Keep `allowed_origins` empty unless a browser application must call the API from another origin. Never use a wildcard for authenticated browser APIs.
 - The bundled rate limiter is process-local. Replace or complement it with a shared edge or Redis-backed limiter when running more than one server process.
 - Use PostgreSQL or another externally managed production database.
-- Set a unique, secret `MANGOO_SECRET_KEY`.
-- Set `MANGOO_DEBUG=false`.
+- Set a unique, secret `HAYAVEGA_SECRET_KEY`.
+- Set `HAYAVEGA_DEBUG=false`.
 - Use HTTPS and a reverse proxy.
 - Store database credentials in a secret manager. `Settings.secret_key` itself doubles as TOTP-encryption-at-rest key material when `cryptography` is installed (`uv add cryptography`) and passed to `enable_totp`/`authenticate`/`auth_routes` as `secret_key=` -- see [Authentication](docs/topics/auth.md#two-factor-authentication-totp) -- so treat it with the same care as a database password, not as a throwaway string.
 - Enable `secure_cookies=True` for session and CSRF cookies when serving HTTPS. Add CORS rules, audit logs, password reset, email verification, and rate limiting at the edge.
@@ -495,8 +495,8 @@ class security:
     max_request_bytes = 1_048_576
 ```
 
-The runtime rejects requests whose `Host` is not in `Settings.allowed_hosts`, rejects oversized request bodies before reading them, responds to trusted CORS preflight requests, and adds CSP, frame, MIME-sniffing, referrer-policy, permissions-policy, and cross-origin isolation headers. `force_https` redirects plain HTTP and enables HSTS on secure requests. Set `trust_proxy_headers` only when a trusted reverse proxy removes client-supplied forwarding headers. Audit records are emitted to the `mangoo.audit` logger without request bodies, credentials, or query strings.
+The runtime rejects requests whose `Host` is not in `Settings.allowed_hosts`, rejects oversized request bodies before reading them, responds to trusted CORS preflight requests, and adds CSP, frame, MIME-sniffing, referrer-policy, permissions-policy, and cross-origin isolation headers. `force_https` redirects plain HTTP and enables HSTS on secure requests. Set `trust_proxy_headers` only when a trusted reverse proxy removes client-supplied forwarding headers. Audit records are emitted to the `hayavega.audit` logger without request bodies, credentials, or query strings.
 
 ## 17. Current limitations
 
-Mangoo is an early framework prototype, not a production replacement for Django yet. Templates support inheritance, loops, and conditionals but no fragments, filters, or macros; the admin's registered-model CRUD has no bulk actions, list filtering, or search; GraphQL has no fragments or directives and only a minimal, off-by-default introspection; `mangoo.ui` has no client-side reactive/signals layer in this version (see section 10) and there is still no Node.js/npm-based SPA option; and most of the runtime (routing, JSON serialization, authentication, database execution) is still Python, with Rust migrations for those pending a measured benchmark -- fragment rendering is the one exception with a proven, benchmarked win (section 10), not yet wired into the shipped API since it only covers one exact fragment shape per hardcoded renderer. Keep the public Python API stable while incrementally replacing internals with benchmarked Rust implementations.
+Hayavega is an early framework prototype, not a production replacement for Django yet. Templates support inheritance, loops, and conditionals but no fragments, filters, or macros; the admin's registered-model CRUD has no bulk actions, list filtering, or search; GraphQL has no fragments or directives and only a minimal, off-by-default introspection; `hayavega.ui` has no client-side reactive/signals layer in this version (see section 10) and there is still no Node.js/npm-based SPA option; and most of the runtime (routing, JSON serialization, authentication, database execution) is still Python, with Rust migrations for those pending a measured benchmark -- fragment rendering is the one exception with a proven, benchmarked win (section 10), not yet wired into the shipped API since it only covers one exact fragment shape per hardcoded renderer. Keep the public Python API stable while incrementally replacing internals with benchmarked Rust implementations.

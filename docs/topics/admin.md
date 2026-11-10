@@ -7,7 +7,7 @@ registration code.
 ## The built-in admin
 
 ```python
-from mangoo.admin import admin_routes
+from hayavega.admin import admin_routes
 
 urlpatterns = [
     *admin_routes(DATABASE),
@@ -20,7 +20,7 @@ management screen, gated and audited.
 ## Registering your own models
 
 ```python
-from mangoo.admin import admin_routes, ModelAdmin
+from hayavega.admin import admin_routes, ModelAdmin
 from .models import Product
 
 urlpatterns = [
@@ -54,7 +54,7 @@ that hits it.
 ## Filtering, searching, and bulk actions
 
 ```python
-from mangoo.admin import ModelAdmin
+from hayavega.admin import ModelAdmin
 from .models import Post
 
 

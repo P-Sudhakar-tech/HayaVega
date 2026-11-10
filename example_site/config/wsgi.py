@@ -1,6 +1,6 @@
 """WSGI entry point for production servers -- gunicorn, waitress, uWSGI, etc.
 
-`mango launch`/`mango.py launch` is for development only; point a real
+`hayavega launch`/`hayavega.py launch` is for development only; point a real
 server at the `application` object below instead. For example:
 
     gunicorn config.wsgi:application --workers 5 --bind 0.0.0.0:8000   # Linux/macOS
@@ -9,10 +9,10 @@ server at the `application` object below instead. For example:
 See DEPLOYMENT.md for worker-count guidance and the gunicorn/waitress split.
 """
 
-from mangoo.conf import load_settings
-from mangoo.hardening import HardeningOptions
-from mangoo.middleware import load_middleware
-from mangoo.runtime import create_application
+from hayavega.conf import load_settings
+from hayavega.hardening import HardeningOptions
+from hayavega.middleware import load_middleware
+from hayavega.runtime import create_application
 
 settings = load_settings("config.settings")
 urls = __import__(settings.root_urlconf, fromlist=["urlpatterns"])

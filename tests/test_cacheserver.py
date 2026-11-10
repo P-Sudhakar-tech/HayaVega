@@ -1,4 +1,4 @@
-"""Verifies mango cacheserver two ways: direct protocol-level unit tests
+"""Verifies hayavega cacheserver two ways: direct protocol-level unit tests
 (no network, no dependency), and a real `redis` package client talking to
 a real running instance of the server -- the test that actually proves
 wire compatibility, not just that this module's own encoder and decoder
@@ -12,8 +12,8 @@ from unittest import mock
 
 import redis
 
-from mangoo import cacheserver
-from mangoo.cache import RedisCache
+from hayavega import cacheserver
+from hayavega.cache import RedisCache
 
 
 class EncodingTests(unittest.TestCase):
@@ -251,7 +251,7 @@ class StoreTests(unittest.TestCase):
 
         store = cacheserver._Store()
         now = time.time()
-        with patch("mangoo.cacheserver.time.time", side_effect=[now, now, now + 10]):
+        with patch("hayavega.cacheserver.time.time", side_effect=[now, now, now + 10]):
             store.set("key", b"value", 1)
             self.assertEqual(store.get("key"), b"value")
             self.assertIsNone(store.get("key"))
@@ -319,7 +319,7 @@ class _RunningServer:
     """Runs a real `cacheserver` instance in a background thread with its
     own event loop, so a synchronous (blocking) `redis`-client test can
     talk to it -- the service under test is this repo's own code, not an
-    external one, so no `MANGOO_TEST_REDIS_URL`-style gating is needed."""
+    external one, so no `HAYAVEGA_TEST_REDIS_URL`-style gating is needed."""
 
     def __init__(self, *, password: str | None = None, host: str = "127.0.0.1"):
         self.password = password
@@ -467,7 +467,7 @@ class AuthTests(unittest.TestCase):
 
 
 class RedisCacheOverCacheServerTests(unittest.TestCase):
-    """`RedisCache` pointed at `mango cacheserver` instead of a real Redis
+    """`RedisCache` pointed at `hayavega cacheserver` instead of a real Redis
     instance -- the actual point of this feature: zero client-side code,
     the same `RedisCache` this project already ships and tests."""
 
@@ -692,7 +692,7 @@ class RunForeverTests(unittest.IsolatedAsyncioTestCase):
             captured["server"] = server
             return server
 
-        with mock.patch("mangoo.cacheserver.start_server", side_effect=capturing_start_server):
+        with mock.patch("hayavega.cacheserver.start_server", side_effect=capturing_start_server):
             task = asyncio.create_task(cacheserver._run_forever("127.0.0.1", 0, password=None, max_value_size=1_048_576))
             try:
                 deadline = time.monotonic() + 5
@@ -730,7 +730,7 @@ class ServeTests(unittest.TestCase):
         async def fast_completing_run_forever(host, port, *, password, max_value_size):
             received.update(host=host, port=port, password=password, max_value_size=max_value_size)
 
-        with mock.patch("mangoo.cacheserver._run_forever", side_effect=fast_completing_run_forever):
+        with mock.patch("hayavega.cacheserver._run_forever", side_effect=fast_completing_run_forever):
             cacheserver.serve("127.0.0.1", 0, password="hunter2", max_value_size=2048)
 
         self.assertEqual(received, {"host": "127.0.0.1", "port": 0, "password": "hunter2", "max_value_size": 2048})

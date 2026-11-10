@@ -1,7 +1,7 @@
 # Rust core rewrite — a phased roadmap
 
 **Status: scoped, not started.** This document is the deliverable from
-an explicit decision to pursue a full Rust rewrite of Mangoo's core,
+an explicit decision to pursue a full Rust rewrite of Hayavega's core,
 made after this session's own benchmarks found that migrating
 individual functions in isolation loses to Python/C every time it was
 tried (see `benchmarks/README.md`'s three native-function benchmark
@@ -73,12 +73,12 @@ application code — it cannot make a slow view fast.
 
 ## What "full rewrite" means here
 
-Python remains the language Mangoo's users write in: view functions,
+Python remains the language Hayavega's users write in: view functions,
 `Settings`, `urlpatterns`, everything in a project's own `config/` and
 app directories. **What moves to Rust is the framework's own internal
 implementation** underneath that Python-facing API — the same
 relationship `rust_runtime.py` already has to the WSGI server today
-(Python calls `mangoo_native.serve_wsgi`; the framework around it,
+(Python calls `hayavega_native.serve_wsgi`; the framework around it,
 including the WSGI application object itself, stays Python until later
 phases migrate it too).
 
@@ -138,7 +138,7 @@ constrain every later phase — do not rush it.
 
 ### Phase 1 — Routing + request dispatch core ✅ done, null result, not wired in
 `routing.py` (18 lines) plus the `_match()`/dispatch logic duplicated in
-`runtime.py` and `asgi.py`. `mangoo_native.Router` built and benchmarked
+`runtime.py` and `asgi.py`. `hayavega_native.Router` built and benchmarked
 at full HTTP level (not a microbenchmark -- see
 `benchmarks/native_router_vs_python.py` and `benchmarks/README.md`'s
 "A Rust router" section for the full result): **0.95x-1.005x average
@@ -175,7 +175,7 @@ own docstring already states the real cost is SQLite's own C-level
 file I/O, "paid identically by both frameworks" -- not Python wrapper
 overhead a rewrite removes. Narrowed twice, with the user's input each
 time (see this repo's own session history), down to the one genuinely
-different, untested architecture: **`mangoo_native.SerializedConnection`**
+different, untested architecture: **`hayavega_native.SerializedConnection`**
 -- one Rust-owned read-only connection, every query serialized through
 a single worker thread, instead of N threads each holding (or
 pooling) their own. Modeled directly on `SignalDispatcher`'s existing
@@ -196,11 +196,11 @@ default, 0.97x-1.03x -- exactly matching what `db.py`'s own docstring
 already documented, which also validates the benchmark methodology
 itself). Two consecutive runs, consistent both times.
 
-**Wired in** as `mangoo.db.SerializedConnection` -- a documented,
+**Wired in** as `hayavega.db.SerializedConnection` -- a documented,
 opt-in primitive (not integrated into `Selection`/`Entity`; call
 `.execute(sql, params)` directly with raw SQL, get back an already-
 materialized `list[dict]`), with a pure-Python fallback
-(`threading.Lock` + one connection) when `mangoo_native` isn't built,
+(`threading.Lock` + one connection) when `hayavega_native` isn't built,
 matching every other native feature's zero-configuration-required
 convention. SQLite only, read-only only. Documented, with the
 disclosed trade-off (every query now queues behind whichever one is
@@ -226,7 +226,7 @@ actually need to ship is a *general* engine, and that candidate
 already existed, fully built, before this session looked for it:
 `benchmarks/native_template_engine.py` is a complete wire-format
 bridge from `templates.py`'s real parsed node tree into Rust
-`TemplateNode`/`TemplateExpr` (`crates/mangoo-core/src/lib.rs`),
+`TemplateNode`/`TemplateExpr` (`crates/hayavega-core/src/lib.rs`),
 correctness-verified byte-for-byte. Running it (for the first time
 this session) gave a clear, decisive result:
 
@@ -252,8 +252,8 @@ parsed structure needs zero Python callbacks mid-parse, the same
 "real work per crossing" shape the template-render win had.
 
 Built as a faithful Rust port of `_tokenize`/`_Parser.parse_document()`
-(`mangoo_native.parse_graphql_document`, same grammar, same rejected
-constructs — directives, fragments) in `mangoo-core`/`mangoo-python`,
+(`hayavega_native.parse_graphql_document`, same grammar, same rejected
+constructs — directives, fragments) in `hayavega-core`/`hayavega-python`,
 correctness-verified field-for-field against the real Python parser
 before any timing. Measured (`benchmarks/native_graphql_parser.py`,
 including the Python-side decode back into `_FieldNode`/
@@ -265,7 +265,7 @@ including the Python-side decode back into `_FieldNode`/
 | Complex (variables, arguments, nested selections) | **Native 3.92x faster** |
 
 A decisive, reproducible win -- wired into `Schema.execute()` as a
-try-native-else-Python-fallback (`mangoo.graphql._parse_document`),
+try-native-else-Python-fallback (`hayavega.graphql._parse_document`),
 identical behavior and error messages on both paths. `execute()`'s
 own logic past parsing (binding variables, depth/field-count limits,
 calling resolvers, projecting results) is completely unchanged.

@@ -1,4 +1,4 @@
-from mangoo import path
+from hayavega import path
 
 from .views import index
 

@@ -6,8 +6,8 @@ single regex, and never arbitrary code execution.
 ## Rendering
 
 ```python
-from mangoo.conf import load_settings
-from mangoo.templates import render_template
+from hayavega.conf import load_settings
+from hayavega.templates import render_template
 
 _settings = load_settings()
 
@@ -60,7 +60,7 @@ empty placeholder, then filling in the real body:
 ```python
 from dataclasses import replace
 
-from mangoo.messages import consume_messages
+from hayavega.messages import consume_messages
 
 
 def posts_page(request):

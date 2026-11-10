@@ -1,7 +1,7 @@
-"""Functional parity tests for mangoo.rust_runtime: the same application,
+"""Functional parity tests for hayavega.rust_runtime: the same application,
 served over the native Rust WSGI server instead of wsgiref, should behave
 identically to the existing Python runtime for every route this suite
-exercises. Requires mangoo_native -- see the native-extension CI job."""
+exercises. Requires hayavega_native -- see the native-extension CI job."""
 
 import socket
 import sys
@@ -14,17 +14,17 @@ import urllib.request
 from pathlib import Path
 
 try:
-    import mangoo_native  # noqa: F401
+    import hayavega_native  # noqa: F401
 
     NATIVE_AVAILABLE = True
 except ImportError:
     NATIVE_AVAILABLE = False
 
-from mangoo import Integer, Text, api_route, path
-from mangoo.runtime import create_application
-from mangoo.rust_runtime import RustRuntimeUnavailableError
-from mangoo.rust_runtime import serve as serve_rust
-from mangoo.testing import TestClient
+from hayavega import Integer, Text, api_route, path
+from hayavega.runtime import create_application
+from hayavega.rust_runtime import RustRuntimeUnavailableError
+from hayavega.rust_runtime import serve as serve_rust
+from hayavega.testing import TestClient
 
 
 def _free_port() -> int:
@@ -48,9 +48,9 @@ def _wait_until_ready(host: str, port: int, timeout: float = 5.0) -> None:
     raise RuntimeError(f"Rust server on {host}:{port} never became ready: {last_error}")
 
 
-@unittest.skipUnless(NATIVE_AVAILABLE, "mangoo_native is not built; see the native-extension CI job")
+@unittest.skipUnless(NATIVE_AVAILABLE, "hayavega_native is not built; see the native-extension CI job")
 class RustRuntimeParityTests(unittest.TestCase):
-    """Same urlpatterns, same app -- one served by mangoo.runtime.create_application
+    """Same urlpatterns, same app -- one served by hayavega.runtime.create_application
     via TestClient (the existing, trusted WSGI path), one served by the real
     Rust server over a real socket. Every assertion compares the two."""
 
@@ -59,7 +59,7 @@ class RustRuntimeParityTests(unittest.TestCase):
         cls.directory = tempfile.TemporaryDirectory()
         cls.database = Path(cls.directory.name) / "rust_runtime.sqlite3"
 
-        from mangoo import Entity
+        from hayavega import Entity
 
         class Post(Entity):
             title = Text()
@@ -126,27 +126,27 @@ class RustRuntimeParityTests(unittest.TestCase):
 
 
 class RustRuntimeUnavailableTests(unittest.TestCase):
-    def test_serve_raises_an_actionable_error_when_mangoo_native_is_missing(self):
+    def test_serve_raises_an_actionable_error_when_hayavega_native_is_missing(self):
         if NATIVE_AVAILABLE:
-            self.skipTest("mangoo_native is built in this environment; this test targets the fallback path")
-        with self.assertRaisesRegex(RustRuntimeUnavailableError, "mangoo_native was not built"):
+            self.skipTest("hayavega_native is built in this environment; this test targets the fallback path")
+        with self.assertRaisesRegex(RustRuntimeUnavailableError, "hayavega_native was not built"):
             serve_rust([], "127.0.0.1", _free_port())
 
-    def test_serve_raises_an_actionable_error_when_mangoo_native_import_fails(self):
-        """`serve()` imports `mangoo_native` inside the function body on every
+    def test_serve_raises_an_actionable_error_when_hayavega_native_import_fails(self):
+        """`serve()` imports `hayavega_native` inside the function body on every
         call (not just at module load), so forcing the ImportError just needs
         `sys.modules` patched for this one call -- no module reload, and
         therefore no risk of leaking a stale module state to other tests."""
-        original = sys.modules.get("mangoo_native", None)
-        sys.modules["mangoo_native"] = None  # sentinel: forces ImportError on import
+        original = sys.modules.get("hayavega_native", None)
+        sys.modules["hayavega_native"] = None  # sentinel: forces ImportError on import
         try:
-            with self.assertRaisesRegex(RustRuntimeUnavailableError, "mangoo_native was not built"):
+            with self.assertRaisesRegex(RustRuntimeUnavailableError, "hayavega_native was not built"):
                 serve_rust([], "127.0.0.1", _free_port())
         finally:
             if original is None:
-                sys.modules.pop("mangoo_native", None)
+                sys.modules.pop("hayavega_native", None)
             else:
-                sys.modules["mangoo_native"] = original
+                sys.modules["hayavega_native"] = original
 
 
 if __name__ == "__main__":

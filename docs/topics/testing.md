@@ -2,14 +2,14 @@
 
 `TestClient` and `AsyncTestClient` drive your real application in-process
 &mdash; no server, no sockets, no network flakiness. This is the exact
-tooling Mangoo's own 415+ tests run on.
+tooling Hayavega's own 415+ tests run on.
 
 ## WSGI: `TestClient`
 
 ```python
 import unittest
-from mangoo.runtime import create_application
-from mangoo.testing import TestClient
+from hayavega.runtime import create_application
+from hayavega.testing import TestClient
 from .routes import urlpatterns
 
 
@@ -36,8 +36,8 @@ client instance.
 ## ASGI: `AsyncTestClient`
 
 ```python
-from mangoo.asgi import create_asgi_application
-from mangoo.testing import AsyncTestClient
+from hayavega.asgi import create_asgi_application
+from hayavega.testing import AsyncTestClient
 
 client = AsyncTestClient(create_asgi_application(urlpatterns))
 response = client.get("/api/items")  # synchronous from the caller's perspective
@@ -48,12 +48,12 @@ per call &mdash; no pytest-async plugin required.
 
 ## Testing the Rust runtime
 
-Requires `mangoo_native` to be built. Since it's a real server (not a
+Requires `hayavega_native` to be built. Since it's a real server (not a
 WSGI-callable-in-process client), tests hit it over a real socket:
 
 ```python
 import socket, threading, time
-from mangoo.rust_runtime import serve
+from hayavega.rust_runtime import serve
 
 thread = threading.Thread(target=lambda: serve(urlpatterns, "127.0.0.1", port, workers=4), daemon=True)
 thread.start()

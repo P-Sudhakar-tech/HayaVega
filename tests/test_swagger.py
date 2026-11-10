@@ -1,10 +1,10 @@
 import unittest
 
-from mangoo.auth_api import auth_routes
-from mangoo.rest import api_route
-from mangoo.runtime import create_application
-from mangoo.swagger import ERROR_SCHEMA, openapi_document
-from mangoo.testing import TestClient
+from hayavega.auth_api import auth_routes
+from hayavega.rest import api_route
+from hayavega.runtime import create_application
+from hayavega.swagger import ERROR_SCHEMA, openapi_document
+from hayavega.testing import TestClient
 
 
 class OpenApiDocumentTests(unittest.TestCase):

@@ -6,7 +6,7 @@ real SMTP (stdlib `smtplib`, no new dependency).
 ## Sending a message directly
 
 ```python
-from mangoo.mail import ConsoleEmailBackend, EmailMessage, send_mail
+from hayavega.mail import ConsoleEmailBackend, EmailMessage, send_mail
 
 backend = ConsoleEmailBackend()  # or FileEmailBackend(...) / SMTPEmailBackend(...)
 send_mail(EmailMessage(to=("alice@example.com",), subject="Welcome", body="Thanks for signing up."), backend)
@@ -30,8 +30,8 @@ class Settings:
 ```
 
 ```python
-from mangoo.conf import load_settings
-from mangoo.mail import backend_from_settings
+from hayavega.conf import load_settings
+from hayavega.mail import backend_from_settings
 
 settings = load_settings()
 backend = backend_from_settings(settings.email)
@@ -50,7 +50,7 @@ none/none/`True`).
 | `SMTPEmailBackend(host, ...)` | Real SMTP via `smtplib`, with `STARTTLS` and login when configured |
 
 Any object with a `send(message)` method works -- there's no base
-class to subclass, the same duck-typed contract `mangoo.middleware`
+class to subclass, the same duck-typed contract `hayavega.middleware`
 uses for its factories.
 
 ## Wiring real mail into `auth_routes`
@@ -60,8 +60,8 @@ token)` callable for password-reset and email-verification messages;
 `mail_notifier()` adapts any backend into that shape:
 
 ```python
-from mangoo.auth_api import auth_routes
-from mangoo.mail import backend_from_settings, mail_notifier
+from hayavega.auth_api import auth_routes
+from hayavega.mail import backend_from_settings, mail_notifier
 
 backend = backend_from_settings(settings.email)
 

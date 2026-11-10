@@ -1,7 +1,7 @@
 """Proof that the Pulse -> Signals rename kept every old call site working.
 
-``mangoo.addons.pulse`` and every ``pulse=`` keyword argument across the
-framework are deprecated aliases for ``mangoo.addons.signals`` and
+``hayavega.addons.pulse`` and every ``pulse=`` keyword argument across the
+framework are deprecated aliases for ``hayavega.addons.signals`` and
 ``signals=``: each should still work exactly as before, while raising a
 single, clear ``DeprecationWarning`` pointing at the replacement.
 """
@@ -13,15 +13,15 @@ import warnings
 from pathlib import Path
 from threading import Event
 
-from mangoo.addons.signals import SignalBus
-from mangoo.admin import admin_routes
-from mangoo.auth import create_superuser
-from mangoo.auth_api import auth_routes
-from mangoo.migrations import apply
-from mangoo.response import Response
-from mangoo.routing import path
-from mangoo.runtime import create_application
-from mangoo.testing import TestClient
+from hayavega.addons.signals import SignalBus
+from hayavega.admin import admin_routes
+from hayavega.auth import create_superuser
+from hayavega.auth_api import auth_routes
+from hayavega.migrations import apply
+from hayavega.response import Response
+from hayavega.routing import path
+from hayavega.runtime import create_application
+from hayavega.testing import TestClient
 
 PASSWORD = "Correct-Horse-7!"
 
@@ -32,8 +32,8 @@ def _wait(event: Event, message: str) -> None:
 
 
 class PulsePackageAliasTests(unittest.TestCase):
-    def test_importing_mangoo_addons_pulse_warns(self):
-        import mangoo.addons.pulse as pulse_module
+    def test_importing_hayavega_addons_pulse_warns(self):
+        import hayavega.addons.pulse as pulse_module
 
         with self.assertWarns(DeprecationWarning):
             importlib.reload(pulse_module)
@@ -41,10 +41,10 @@ class PulsePackageAliasTests(unittest.TestCase):
     def test_pulse_names_are_the_same_objects_as_their_signals_replacements(self):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
-            from mangoo.addons.pulse import BUILTIN_EVENTS as PULSE_EVENTS
-            from mangoo.addons.pulse import PulseBus, PulseEvent, PulseSubscriber
+            from hayavega.addons.pulse import BUILTIN_EVENTS as PULSE_EVENTS
+            from hayavega.addons.pulse import PulseBus, PulseEvent, PulseSubscriber
 
-        from mangoo.addons.signals import BUILTIN_EVENTS, SignalBus, SignalEvent, SignalSubscriber
+        from hayavega.addons.signals import BUILTIN_EVENTS, SignalBus, SignalEvent, SignalSubscriber
 
         self.assertIs(PulseBus, SignalBus)
         self.assertIs(PulseEvent, SignalEvent)
@@ -102,7 +102,7 @@ class DeprecatedPulseKeywordTests(unittest.TestCase):
             with self.assertWarns(DeprecationWarning):
                 app = create_application(admin_routes(database, pulse=bus))
 
-            from mangoo.auth import create_session, get_user_by_username
+            from hayavega.auth import create_session, get_user_by_username
 
             user = get_user_by_username(database, "admin")
             token = create_session(database, user)

@@ -1,7 +1,7 @@
 import sys
 import unittest
 
-from mangoo import crypto
+from hayavega import crypto
 
 
 class EncryptDecryptTests(unittest.TestCase):

@@ -7,8 +7,8 @@ LANDING_PAGE = BASE_DIR.parent / "index.html"
 
 class Settings:
     base_dir = BASE_DIR
-    secret_key = os.getenv("MANGOO_SECRET_KEY", "change-this-in-production")
-    debug = os.getenv("MANGOO_DEBUG", "true").lower() == "true"
+    secret_key = os.getenv("HAYAVEGA_SECRET_KEY", "change-this-in-production")
+    debug = os.getenv("HAYAVEGA_DEBUG", "true").lower() == "true"
     allowed_hosts = ["127.0.0.1", "localhost"]
 
     installed_apps = []
@@ -17,7 +17,7 @@ class Settings:
 
     class database:
         engine = "sqlite3"
-        name = BASE_DIR / "mangoo.sqlite3"
+        name = BASE_DIR / "hayavega.sqlite3"
 
     class server:
         host = "127.0.0.1"

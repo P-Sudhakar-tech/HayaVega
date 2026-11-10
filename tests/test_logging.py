@@ -1,12 +1,12 @@
 import logging
 import unittest
 
-from mangoo.logging import JsonFormatter, configure_logging
+from hayavega.logging import JsonFormatter, configure_logging
 
 
 class ConfigureLoggingTests(unittest.TestCase):
     def setUp(self):
-        self.logger = logging.getLogger("mangoo")
+        self.logger = logging.getLogger("hayavega")
         self._original_handlers = list(self.logger.handlers)
         self._original_level = self.logger.level
 

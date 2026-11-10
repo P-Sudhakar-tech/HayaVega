@@ -5,20 +5,20 @@ all three of the framework's existing inert Rust functions.
 These two candidates were chosen because they target the specific weak
 spots the FastAPI/Django benchmark suite (benchmarks/README.md) surfaced:
 
-1. Template rendering: Mangoo loses `template_render` to FastAPI's Jinja2
+1. Template rendering: Hayavega loses `template_render` to FastAPI's Jinja2
    on both transports. `render_post_list_page` is a hand-compiled,
    best-case Rust stand-in for exactly one template
-   (benchmarks/mangoo_app/templates/page.html) -- not a general engine.
+   (benchmarks/hayavega_app/templates/page.html) -- not a general engine.
    If even this best case doesn't beat Python by a solid margin, building
    a *general* Rust template compiler (a much bigger project) isn't
    justified either.
 
-2. ASGI per-request overhead: mangoo.asgi's request/response header
+2. ASGI per-request overhead: hayavega.asgi's request/response header
    handling runs on every request regardless of view cost, unlike the
    view itself. `decode_request_headers`/`encode_response_headers` mirror
    that exact logic.
 
-Requires mangoo_native to be built (see hatch_build.py / README.md).
+Requires hayavega_native to be built (see hatch_build.py / README.md).
 
 Usage:
     python benchmarks/native_template_and_asgi.py
@@ -33,17 +33,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 try:
-    from mangoo_native import decode_request_headers as _native_decode_headers
-    from mangoo_native import encode_response_headers as _native_encode_headers
-    from mangoo_native import render_post_list_page as _native_render_page
+    from hayavega_native import decode_request_headers as _native_decode_headers
+    from hayavega_native import encode_response_headers as _native_encode_headers
+    from hayavega_native import render_post_list_page as _native_render_page
 except ImportError as error:
-    raise SystemExit(f"mangoo_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
+    raise SystemExit(f"hayavega_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
 
-from mangoo.templates import render_template
+from hayavega.templates import render_template
 
 # --- Template rendering: Python's general interpreter vs a Rust best case --
 
-_TEMPLATE_DIR = Path(__file__).resolve().parent / "mangoo_app" / "templates"
+_TEMPLATE_DIR = Path(__file__).resolve().parent / "hayavega_app" / "templates"
 _POSTS = [{"title": f"Post {i}", "views": i * 3} for i in range(20)]
 _ROWS = [(post["title"], post["views"]) for post in _POSTS]
 
@@ -65,7 +65,7 @@ _RAW_REQUEST_HEADERS = [
     (b"accept-encoding", b"gzip, deflate, br"),
     (b"content-type", b"application/json"),
     (b"content-length", b"128"),
-    (b"cookie", b"mangoo_session=abcdef0123456789"),
+    (b"cookie", b"hayavega_session=abcdef0123456789"),
     (b"x-request-id", b"11111111222233334444555566667777"),
 ]
 

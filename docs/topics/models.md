@@ -1,13 +1,13 @@
 # Models & migrations
 
-Mangoo's ORM is a small, explicit `Entity`/`Collection`/`Selection` layer
+Hayavega's ORM is a small, explicit `Entity`/`Collection`/`Selection` layer
 &mdash; no metaclass magic beyond declaring columns, no lazy relationship
 loading to reason about.
 
 ## Defining a model
 
 ```python
-from mangoo import Entity, Text, Integer, Decimal, Toggle, Timestamp
+from hayavega import Entity, Text, Integer, Decimal, Toggle, Timestamp
 
 
 class Product(Entity):
@@ -67,9 +67,9 @@ logic.
 ## Migrations
 
 ```bash
-python mango.py newmigration blog     # generates a checksummed migration from Product's columns
-python mango.py applymigrations       # applies pending migrations, transactionally
-python mango.py migrationstatus       # shows what's applied / pending
+python hayavega.py newmigration blog     # generates a checksummed migration from Product's columns
+python hayavega.py applymigrations       # applies pending migrations, transactionally
+python hayavega.py migrationstatus       # shows what's applied / pending
 ```
 
 Migrations are forward-only, checksummed (a modified or missing migration
@@ -133,7 +133,7 @@ unchanged; `.values()` is additive, not a replacement.
 ## Transactions
 
 ```python
-from mangoo.db import connect
+from hayavega.db import connect
 
 connection = connect(DATABASE)
 with connection.atomic():
@@ -148,7 +148,7 @@ transaction.
 ## Connection pooling (opt-in, benchmark before enabling)
 
 ```python
-from mangoo import db
+from hayavega import db
 
 db.enable_connection_pooling()  # reuses one connection per (thread, database)
 db.enable_readonly_connection_pooling()  # reuses one *read-only* connection per thread
@@ -163,7 +163,7 @@ enabling either for your deployment.
 ## SQLite WAL mode (opt-in, a real write-path win)
 
 ```python
-from mangoo import db
+from hayavega import db
 
 db.enable_wal_mode()  # PRAGMA journal_mode=WAL + synchronous=NORMAL on new connections
 ```
@@ -200,7 +200,7 @@ file already in WAL mode back to its original journal mode.
 ## `SerializedConnection`: one connection, Rust-serialized, for a hot read path
 
 ```python
-from mangoo.db import SerializedConnection
+from hayavega.db import SerializedConnection
 
 reads = SerializedConnection(DATABASE)  # SQLite, read-only
 rows = reads.execute("SELECT id, title, views FROM posts WHERE published = ? ORDER BY id LIMIT ? OFFSET ?", (True, 20, 0))
@@ -210,7 +210,7 @@ rows = reads.execute("SELECT id, title, views FROM posts WHERE published = ? ORD
 A different trade-off than the pooling options above: instead of each
 thread holding (or sharing) its own connection, every call goes
 through **one** connection, serialized by a dedicated Rust worker
-thread when `mangoo_native` is built (a pure-Python lock-based fallback
+thread when `hayavega_native` is built (a pure-Python lock-based fallback
 otherwise -- same interface, no configuration needed either way).
 Measured (`benchmarks/serialized_connection_vs_python.py`) at a real,
 consistent **~1.5-1.7x** throughput improvement over both the unpooled
@@ -251,13 +251,13 @@ class database:
 
 ## Multiple databases
 
-Mangoo's built-in helpers (`Collection`, `admin_routes`, `auth_routes`,
+Hayavega's built-in helpers (`Collection`, `admin_routes`, `auth_routes`,
 migrations) each address exactly one `database` dict -- there's no
 Django-style named-connection registry or `.using("replica")`. A project
 that talks to a second database (an analytics warehouse, a legacy
 read-only source) defines its own extra named section next to `database`
 and converts it with the same public helper the loader uses internally,
-`mangoo.conf.load_database()`:
+`hayavega.conf.load_database()`:
 
 ```python title="config/settings.py"
 class Settings:
@@ -265,7 +265,7 @@ class Settings:
 
     class database:
         engine = "sqlite3"
-        name = BASE_DIR / "mangoo.sqlite3"
+        name = BASE_DIR / "hayavega.sqlite3"
 
     class databases:
         analytics = {
@@ -278,7 +278,7 @@ class Settings:
 ```
 
 ```python title="apps/blog/routes.py"
-from mangoo.conf import load_database, load_settings
+from hayavega.conf import load_database, load_settings
 from .settings import settings as config_settings
 
 _settings = load_settings()

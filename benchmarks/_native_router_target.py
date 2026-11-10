@@ -1,18 +1,18 @@
 """Driver used by native_router_vs_python.py to serve
-benchmarks/mangoo_app's exact routes/views/seed data through a WSGI
-application that uses mangoo_native.Router for route matching instead of
+benchmarks/hayavega_app's exact routes/views/seed data through a WSGI
+application that uses hayavega_native.Router for route matching instead of
 runtime.py's Python dict-based _match() closure -- everything else
 (Request/Response construction, method checking, error handling) is
 runtime.py's real, unmodified logic, so the only thing this isolates is
 the matching logic itself. No Hardening/middleware here, matching
-benchmarks/mangoo_app/app.py's own build_application(), which configures
+benchmarks/hayavega_app/app.py's own build_application(), which configures
 neither.
 
 This is a deliberate, scoped duplication of create_application()'s body
 (runtime.py), not a reusable abstraction -- it exists only to answer
 Phase 1's benchmark question (RUST_CORE_REWRITE_ROADMAP.md) and is not
 shipped as a real framework option unless that benchmark justifies wiring
-mangoo_native.Router into runtime.py/asgi.py for real. Also fixes the
+hayavega_native.Router into runtime.py/asgi.py for real. Also fixes the
 double _match() call runtime.py's application() currently makes (once for
 metrics labeling, once inside _dispatch) by reusing one match result for
 both -- a correctness/efficiency improvement independent of Rust, folded
@@ -32,28 +32,28 @@ from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from benchmarks.mangoo_app.app import seed, urlpatterns  # noqa: E402
-from mangoo.request import Request  # noqa: E402
-from mangoo.response import Response  # noqa: E402
-from mangoo.runtime import _STATUS_TEXT, _error_response  # noqa: E402
-from mangoo.swagger import documentation_routes  # noqa: E402
+from benchmarks.hayavega_app.app import seed, urlpatterns  # noqa: E402
+from hayavega.request import Request  # noqa: E402
+from hayavega.response import Response  # noqa: E402
+from hayavega.runtime import _STATUS_TEXT, _error_response  # noqa: E402
+from hayavega.swagger import documentation_routes  # noqa: E402
 
-LOGGER = logging.getLogger("mangoo.runtime")
+LOGGER = logging.getLogger("hayavega.runtime")
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def build_application():
     """A duplicate of runtime.create_application(), with _match() replaced
-    by one mangoo_native.Router call and the duplicate match removed --
+    by one hayavega_native.Router call and the duplicate match removed --
     see this module's docstring for why this is a benchmark-only
     duplication rather than a runtime.py change."""
-    from mangoo_native import Router
+    from hayavega_native import Router
 
     seed()
     route_list = [*urlpatterns]
     route_list.extend(documentation_routes(route_list, title="Benchmark (native router)", version="1.0.0"))
     router = Router([(route.pattern, route) for route in route_list])
-    hardening_layer = None  # matches benchmarks/mangoo_app/app.py's build_application(), which passes no hardening=
+    hardening_layer = None  # matches benchmarks/hayavega_app/app.py's build_application(), which passes no hardening=
     debug = False
     available_routes_html = ""
 

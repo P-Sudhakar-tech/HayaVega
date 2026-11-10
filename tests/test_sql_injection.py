@@ -1,6 +1,6 @@
 """Regression tests proving SQL injection payloads are always treated as data, never as SQL.
 
-Every query in Mangoo either uses parameterized `?` placeholders for values,
+Every query in Hayavega either uses parameterized `?` placeholders for values,
 or validates identifiers (table/column names) against a strict allowlist
 regex plus the entity's own declared columns before they ever reach a SQL
 string. These tests attack both boundaries directly with classic injection
@@ -13,19 +13,19 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.admin import ModelAdmin, admin_routes
-from mangoo.auth import authenticate, create_session, create_superuser, create_user, get_user_by_username
-from mangoo.db import connect
-from mangoo.models import Entity, EntityError, Integer, Text
-from mangoo.runtime import create_application
-from mangoo.testing import TestClient
+from hayavega.admin import ModelAdmin, admin_routes
+from hayavega.auth import authenticate, create_session, create_superuser, create_user, get_user_by_username
+from hayavega.db import connect
+from hayavega.models import Entity, EntityError, Integer, Text
+from hayavega.runtime import create_application
+from hayavega.testing import TestClient
 
 PASSWORD = "Correct-Horse-7!"
 
 # A payload that, if ever concatenated unparameterized into a query, would
 # either always match (auth bypass) or destroy the table it targets.
 TAUTOLOGY_PAYLOAD = "' OR '1'='1"
-DROP_TABLE_PAYLOAD = "x'; DROP TABLE mangoo_users; --"
+DROP_TABLE_PAYLOAD = "x'; DROP TABLE hayavega_users; --"
 DROP_PRODUCTS_PAYLOAD = "x'; DROP TABLE product_entries; --"
 
 
@@ -46,7 +46,7 @@ class AuthInjectionTests(unittest.TestCase):
     def _users_table_is_intact(self) -> bool:
         connection = connect(self.database)
         try:
-            row = connection.execute("SELECT COUNT(*) AS total FROM mangoo_users").fetchone()
+            row = connection.execute("SELECT COUNT(*) AS total FROM hayavega_users").fetchone()
             return row["total"] >= 1
         finally:
             connection.close()

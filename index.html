@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Mangoo is an early, runnable Python web framework with its own clear project conventions, automatic interactive API docs, and a Rust core taking over performance-critical paths as it matures.">
-<title>Mangoo</title>
+<meta name="description" content="Hayavega is an early, runnable Python web framework with its own clear project conventions, automatic interactive API docs, and a Rust core taking over performance-critical paths as it matures.">
+<title>Hayavega</title>
 <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,7 +22,7 @@
      combination that's become a genre default of its own. ---------- */
   :root{
     --ink:#EAF0F7; --paper:#0A0F1A; --surface:#111929; --surface-2:#182236;
-    --mango:#FF7A1A; --mango-strong:#FFA148; --mango-tint:rgba(255,122,26,.16);
+    --hayavega:#FF7A1A; --hayavega-strong:#FFA148; --hayavega-tint:rgba(255,122,26,.16);
     --leaf:#22C55E; --leaf-strong:#5EEBA0; --leaf-tint:rgba(34,197,94,.14);
     --stamp:#38BDF8; --stamp-strong:#7DD3FC; --stamp-tint:rgba(56,189,248,.14);
     --rind:#F43F5E; --rind-tint:rgba(244,63,94,.14);
@@ -35,7 +35,7 @@
        white light-mode background turns it pale cream/pink, landing
        on the exact "warm off-white + orange" look this is meant to
        avoid. Light mode gets a cool, barely-there glow instead. */
-    --glow:var(--mango-tint);
+    --glow:var(--hayavega-tint);
   }
   /* Dark is the unconditional default, matching the reference sites'
      own behavior -- a manual [data-theme="light"] toggle is the only
@@ -45,7 +45,7 @@
      identity for a large share of visitors). */
   :root[data-theme="light"]{
     --ink:#0A0F1A; --paper:#FFFFFF; --surface:#F3F5F9; --surface-2:#E7EBF2;
-    --mango:#E8640A; --mango-strong:#C2530A; --mango-tint:rgba(232,100,10,.10);
+    --hayavega:#E8640A; --hayavega-strong:#C2530A; --hayavega-tint:rgba(232,100,10,.10);
     --leaf:#15803D; --leaf-strong:#0F6B30; --leaf-tint:rgba(21,128,61,.10);
     --stamp:#0284C7; --stamp-strong:#026AA2; --stamp-tint:rgba(2,132,199,.10);
     --rind:#DC2626; --rind-tint:rgba(220,38,38,.10);
@@ -81,17 +81,17 @@
   .navlinks a{color:var(--muted); text-decoration:none;}
   .navlinks a:hover{color:var(--ink);}
   .btn{display:inline-flex; align-items:center; gap:8px; padding:10px 18px; border-radius:var(--radius); font-weight:600; font-size:.92rem; border:1px solid transparent; white-space:nowrap; text-decoration:none; transition:background .15s ease, border-color .15s ease, box-shadow .15s ease;}
-  a.btn-primary{background:linear-gradient(135deg, var(--mango), var(--mango-strong)); color:#1A1206; border-color:transparent;}
-  a.btn-primary:hover{box-shadow:0 0 0 4px var(--mango-tint);}
+  a.btn-primary{background:linear-gradient(135deg, var(--hayavega), var(--hayavega-strong)); color:#1A1206; border-color:transparent;}
+  a.btn-primary:hover{box-shadow:0 0 0 4px var(--hayavega-tint);}
   a.btn-ghost{border-color:var(--line); color:var(--ink);}
   a.btn-ghost:hover{border-color:var(--stamp); color:var(--stamp);}
 
   /* ---------- hero ---------- */
   .hero{padding:88px 0 48px; position:relative;}
   .hero::before{content:""; position:absolute; top:-120px; left:50%; width:900px; height:560px; transform:translateX(-38%); background:radial-gradient(ellipse at center, var(--glow), transparent 70%); pointer-events:none; z-index:-1;}
-  .eyebrow{display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:.85rem; color:var(--mango-strong); background:var(--mango-tint); border-radius:var(--radius); padding:6px 14px; margin-bottom:22px;}
+  .eyebrow{display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:.85rem; color:var(--hayavega-strong); background:var(--hayavega-tint); border-radius:var(--radius); padding:6px 14px; margin-bottom:22px;}
   h1.headline{font-size:clamp(2.6rem, 5.4vw, 4.4rem); font-weight:700; line-height:1.03; letter-spacing:-.02em; max-width:19ch;}
-  .welcome{font-weight:600; font-size:1.2rem; color:var(--mango-strong); margin:16px 0 0; max-width:42ch;}
+  .welcome{font-weight:600; font-size:1.2rem; color:var(--hayavega-strong); margin:16px 0 0; max-width:42ch;}
   .lead{font-size:1.15rem; color:var(--muted); max-width:52ch; margin:18px 0 30px;}
   .hero-actions{display:flex; gap:14px; flex-wrap:wrap;}
 
@@ -143,13 +143,13 @@
   .docs-rail-group h4{font-size:.76rem; font-weight:600; color:var(--muted); margin:0 0 8px;}
   .docs-rail a{display:block; padding:6px 0; font-size:.88rem; color:var(--muted); border-left:2px solid transparent; padding-left:12px; margin-left:-1px; text-decoration:none;}
   .docs-rail a:hover{color:var(--ink);}
-  .docs-rail a.active{color:var(--mango-strong); border-left-color:var(--mango); font-weight:600;}
+  .docs-rail a.active{color:var(--hayavega-strong); border-left-color:var(--hayavega); font-weight:600;}
 
   .doc-section{padding-bottom:60px; margin-bottom:60px; border-bottom:1px solid var(--line); scroll-margin-top:84px;}
   .doc-section:last-child{border-bottom:none; margin-bottom:0;}
   .doc-kicker{display:flex; align-items:center; gap:12px; margin-bottom:10px;}
   .tag{font-size:.76rem; font-weight:600; padding:3px 10px; border-radius:999px;}
-  .tag-shipped{color:var(--mango-strong); background:var(--mango-tint);}
+  .tag-shipped{color:var(--hayavega-strong); background:var(--hayavega-tint);}
   .tag-progress{color:var(--leaf-strong); background:var(--leaf-tint);}
   .tag-planned{color:var(--rind); background:var(--rind-tint);}
   .doc-section h3{font-size:1.55rem; margin-bottom:14px;}
@@ -199,13 +199,13 @@
 <header class="site">
   <div class="wrap"><nav>
     <a class="brand" href="#top">
-      <img src="assets/logo.png" alt="Mangoo mark" width="30" height="28">
-      mangoo
+      <img src="assets/logo.png" alt="Hayavega mark" width="30" height="28">
+      hayavega
     </a>
     <div class="navlinks">
       <a href="#getting-started">Documentation</a>
       <a href="#board">Status</a>
-      <a href="https://github.com/P-Sudhakar-tech/mangoo-framework" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/P-Sudhakar-tech/hayavega-framework" target="_blank" rel="noopener">GitHub</a>
       <a class="btn btn-primary" href="#getting-started">Quickstart</a>
     </div>
   </nav></div>
@@ -216,11 +216,11 @@
   <section class="hero wrap">
     <div class="eyebrow">Open-source Python framework</div>
     <h1 class="headline">Its own shape, automatic docs</h1>
-    <p class="welcome">Welcome to Mangoo &mdash; the super-fastest Python web framework.</p>
-    <p class="lead">Mangoo gives Python projects a conventional routing, entities, and migrations layer of its own, automatic OpenAPI docs and Swagger UI, hardened authentication with a full lifecycle, and a native Rust core that already wins every published benchmark scenario it's wired into. <code>pip install mangoo</code> and it's a real, tested framework, not a prototype &mdash; see exactly what's shipped below.</p>
+    <p class="welcome">Welcome to Hayavega &mdash; the super-fastest Python web framework.</p>
+    <p class="lead">Hayavega gives Python projects a conventional routing, entities, and migrations layer of its own, automatic OpenAPI docs and Swagger UI, hardened authentication with a full lifecycle, and a native Rust core that already wins every published benchmark scenario it's wired into. <code>pip install hayavega</code> and it's a real, tested framework, not a prototype &mdash; see exactly what's shipped below.</p>
     <div class="hero-actions">
       <a class="btn btn-primary" href="#getting-started">Read the quickstart</a>
-      <a class="btn btn-ghost" href="https://github.com/P-Sudhakar-tech/mangoo-framework" target="_blank" rel="noopener">View source on GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/P-Sudhakar-tech/hayavega-framework" target="_blank" rel="noopener">View source on GitHub</a>
     </div>
 
     <div class="ripeness">
@@ -229,17 +229,17 @@
         <p>Pulled straight from the project's own roadmap &mdash; not a marketing score.</p>
       </div>
       <div class="ripeness-track">
-        <div class="segment" style="--seg:var(--mango)"><span class="name">Data &amp; migrations</span><span class="state">Delivered</span></div>
-        <div class="segment" style="--seg:var(--mango)"><span class="name">Production validation</span><span class="state">Delivered</span></div>
-        <div class="segment" style="--seg:var(--mango)"><span class="name">Runtime &amp; static assets</span><span class="state">Delivered</span></div>
-        <div class="segment" style="--seg:var(--mango)"><span class="name">Auth lifecycle</span><span class="state">Delivered</span></div>
-        <div class="segment" style="--seg:var(--mango)"><span class="name">API documentation</span><span class="state">Delivered</span></div>
+        <div class="segment" style="--seg:var(--hayavega)"><span class="name">Data &amp; migrations</span><span class="state">Delivered</span></div>
+        <div class="segment" style="--seg:var(--hayavega)"><span class="name">Production validation</span><span class="state">Delivered</span></div>
+        <div class="segment" style="--seg:var(--hayavega)"><span class="name">Runtime &amp; static assets</span><span class="state">Delivered</span></div>
+        <div class="segment" style="--seg:var(--hayavega)"><span class="name">Auth lifecycle</span><span class="state">Delivered</span></div>
+        <div class="segment" style="--seg:var(--hayavega)"><span class="name">API documentation</span><span class="state">Delivered</span></div>
         <div class="segment" style="--seg:var(--leaf)"><span class="name">Developer experience</span><span class="state">In progress</span></div>
         <div class="segment" style="--seg:var(--leaf)"><span class="name">Native runtime</span><span class="state">In progress</span></div>
-        <div class="segment" style="--seg:var(--mango)"><span class="name">Mangoo Signals</span><span class="state">Delivered</span></div>
+        <div class="segment" style="--seg:var(--hayavega)"><span class="name">Hayavega Signals</span><span class="state">Delivered</span></div>
       </div>
       <div class="legend">
-        <span><span class="dot" style="background:var(--mango)"></span> Delivered</span>
+        <span><span class="dot" style="background:var(--hayavega)"></span> Delivered</span>
         <span><span class="dot" style="background:var(--leaf)"></span> In progress</span>
         <span><span class="dot" style="background:var(--rind)"></span> Planned, not started</span>
       </div>
@@ -254,10 +254,10 @@
       </div>
       <div class="transcript">
         <div class="tline"><div class="cmd"><span class="p">&gt;</span>python -m venv .venv</div><div class="note">Creates an isolated environment</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>pip install mangoo</div><div class="note">Installs Mangoo and its CLI entry points from PyPI</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>mangoo-admin newproject mysite</div><div class="note">Writes config/settings.py, config/routes.py, mango.py</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python mango.py newapp blog</div><div class="note">Adds an app package under Settings.installed_apps</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python mango.py launch</div><div class="out">Development server: http://127.0.0.1:8000/</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>pip install hayavega</div><div class="note">Installs Hayavega and its CLI entry points from PyPI</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>hayavega-admin newproject mysite</div><div class="note">Writes config/settings.py, config/routes.py, hayavega.py</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python hayavega.py newapp blog</div><div class="note">Adds an app package under Settings.installed_apps</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python hayavega.py launch</div><div class="out">Development server: http://127.0.0.1:8000/</div></div>
       </div>
     </div>
   </div>
@@ -265,11 +265,11 @@
   <section class="board wrap" id="board">
     <div class="board-head">
       <h2>What's actually true today</h2>
-      <p>Mangoo is under active, test-driven development and published on PyPI. This is an honest split of what's shipped with tests, what's built but still growing, and what's a deliberate, named gap &mdash; sourced from the project's own roadmap, refreshed November 2026.</p>
+      <p>Hayavega is under active, test-driven development and published on PyPI. This is an honest split of what's shipped with tests, what's built but still growing, and what's a deliberate, named gap &mdash; sourced from the project's own roadmap, refreshed November 2026.</p>
     </div>
     <div class="board-cols">
-      <div class="board-col" style="--col-accent:var(--mango)">
-        <h3><span class="dot" style="background:var(--mango)"></span>Shipped</h3>
+      <div class="board-col" style="--col-accent:var(--hayavega)">
+        <h3><span class="dot" style="background:var(--hayavega)"></span>Shipped</h3>
         <ul>
           <li><strong>Transactional, checksummed migrations</strong><span>Ordered SQL files, rollback-safe failure, schema-diff detection on altered columns</span></li>
           <li><strong>Both WSGI and ASGI</strong><span>Async def views, WebSockets, AsyncTestClient &mdash; sync views keep working unmodified under either</span></li>
@@ -291,7 +291,7 @@
         <h3><span class="dot" style="background:var(--rind)"></span>Deliberately out of scope (for now)</h3>
         <ul>
           <li><strong>GraphQL fragments &amp; directives</strong><span>Rejected with a clear error rather than a confusing parse failure</span></li>
-          <li><strong>A reactive/SPA frontend framework</strong><span>mangoo.ui ships a server-rendered, htmx-style hypermedia runtime instead; a Node.js/JSX-based SPA layer remains a separate, unscoped possibility</span></li>
+          <li><strong>A reactive/SPA frontend framework</strong><span>hayavega.ui ships a server-rendered, htmx-style hypermedia runtime instead; a Node.js/JSX-based SPA layer remains a separate, unscoped possibility</span></li>
           <li><strong>Release automation beyond what shipped</strong><span>Trusted-publishing CI to PyPI/TestPyPI exists; deeper release tooling is deferred until it's actually needed</span></li>
         </ul>
       </div>
@@ -320,7 +320,7 @@
         <div class="docs-rail-group">
           <h4>Interfaces</h4>
           <a href="#apis" data-rail>REST, GraphQL &amp; OpenAPI</a>
-          <a href="#pulse" data-rail>Mangoo Signals</a>
+          <a href="#pulse" data-rail>Hayavega Signals</a>
           <a href="#rust" data-rail>Rust-native core</a>
         </div>
         <div class="docs-rail-group">
@@ -334,16 +334,16 @@
         <article class="doc-section" id="getting-started">
           <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
           <h3>Getting started</h3>
-          <p>A Mangoo project follows its own conventional shape: <code>mango.py</code>, a <code>settings.py</code>, and a <code>routes.py</code>. SQLite needs no extra driver, so a first project runs with nothing beyond Python and pip.</p>
+          <p>A Hayavega project follows its own conventional shape: <code>hayavega.py</code>, a <code>settings.py</code>, and a <code>routes.py</code>. SQLite needs no extra driver, so a first project runs with nothing beyond Python and pip.</p>
           <div class="snippet-label">powershell</div>
           <pre>python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install mangoo
-mangoo-admin newproject mysite
+pip install hayavega
+hayavega-admin newproject mysite
 cd mysite
-python mango.py newapp blog
-python mango.py launch</pre>
-          <p>Open <code>http://127.0.0.1:8000/</code>. Working from a source checkout instead? <code>./mango.cmd launch 8001</code> runs straight from it without installing, and watches files to restart the server automatically &mdash; press <code>Ctrl+C</code> once to stop it cleanly.</p>
+python hayavega.py newapp blog
+python hayavega.py launch</pre>
+          <p>Open <code>http://127.0.0.1:8000/</code>. Working from a source checkout instead? <code>./hayavega.cmd launch 8001</code> runs straight from it without installing, and watches files to restart the server automatically &mdash; press <code>Ctrl+C</code> once to stop it cleanly.</p>
         </article>
 
         <article class="doc-section" id="settings">
@@ -368,7 +368,7 @@ python mango.py launch</pre>
           <h3>Routing &amp; views</h3>
           <p>Routes are plain Python callables. <code>api_route</code> declares a JSON endpoint and is picked up automatically by the built-in OpenAPI document.</p>
           <div class="doc-grid">
-            <div><div class="snippet-label">config/routes.py</div><pre><span class="kw">from</span> mangoo <span class="kw">import</span> api_route, path
+            <div><div class="snippet-label">config/routes.py</div><pre><span class="kw">from</span> hayavega <span class="kw">import</span> api_route, path
 
 <span class="kw">def</span> <span class="fn">health</span>(request):
     <span class="kw">return</span> {<span class="str">"status"</span>: <span class="str">"ok"</span>}
@@ -386,9 +386,9 @@ urlpatterns = [
         <article class="doc-section" id="entities">
           <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
           <h3>Entities &amp; queries</h3>
-          <p>Mangoo's data layer uses its own declarative entities and query verbs rather than copying an off-the-shelf ORM API one-for-one.</p>
+          <p>Hayavega's data layer uses its own declarative entities and query verbs rather than copying an off-the-shelf ORM API one-for-one.</p>
           <div class="snippet-label">blog/models.py</div>
-          <pre><span class="kw">from</span> mangoo <span class="kw">import</span> Decimal, Entity, Text
+          <pre><span class="kw">from</span> hayavega <span class="kw">import</span> Decimal, Entity, Text
 
 <span class="kw">class</span> <span class="fn">Product</span>(Entity):
     name = Text(unique=<span class="kw">True</span>)
@@ -411,7 +411,7 @@ items = (products.seek(price__above=5)
           <pre>operations = [
     <span class="str">"CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"</span>,
 ]</pre>
-          <p><code>python mango.py applymigrations</code> applies pending migrations; <code>migrationstatus</code> inspects their state. Applied files are checksummed, so an altered or missing migration is rejected rather than silently reapplied.</p>
+          <p><code>python hayavega.py applymigrations</code> applies pending migrations; <code>migrationstatus</code> inspects their state. Applied files are checksummed, so an altered or missing migration is rejected rather than silently reapplied.</p>
           <div class="callout"><strong>Schema-diff detection:</strong> <code>newmigration blog</code> generates the reviewed initial table, then only additive, nullable columns automatically. A type, nullability, or uniqueness change on an already-migrated column now raises an error naming the column, instead of silently drifting from what's declared.</div>
         </article>
 
@@ -427,13 +427,13 @@ items = (products.seek(price__above=5)
               <tr><td><code>POST /api/auth/logout</code></td><td>Revokes the session token</td></tr>
             </tbody>
           </table></div>
-          <p><code>python mango.py createadmin</code> creates the first administrator; <code>enable2fa &lt;username&gt;</code> turns on authenticator-app two-factor authentication. Only hashes of session tokens are ever stored, and audit events for logins, sessions, and admin actions are persisted without credentials. The full lifecycle ships too: password reset and email verification (single-use, expiring tokens, never logged in plain text), session listing with IP/user-agent, and a one-call revoke-all-other-sessions endpoint.</p>
+          <p><code>python hayavega.py createadmin</code> creates the first administrator; <code>enable2fa &lt;username&gt;</code> turns on authenticator-app two-factor authentication. Only hashes of session tokens are ever stored, and audit events for logins, sessions, and admin actions are persisted without credentials. The full lifecycle ships too: password reset and email verification (single-use, expiring tokens, never logged in plain text), session listing with IP/user-agent, and a one-call revoke-all-other-sessions endpoint.</p>
         </article>
 
         <article class="doc-section" id="production">
           <div class="doc-kicker"><span class="tag tag-progress">In progress</span></div>
           <h3>Production &amp; deployment</h3>
-          <p>Starting with <code>Settings.debug = False</code> requires a non-default <code>secret_key</code>, explicit <code>allowed_hosts</code>, and <code>security</code> section settings for HTTPS and secure cookies &mdash; Mangoo refuses to boot otherwise. Add <code>*health_routes(...)</code> for <code>GET /healthz</code> and <code>GET /readyz</code>.</p>
+          <p>Starting with <code>Settings.debug = False</code> requires a non-default <code>secret_key</code>, explicit <code>allowed_hosts</code>, and <code>security</code> section settings for HTTPS and secure cookies &mdash; Hayavega refuses to boot otherwise. Add <code>*health_routes(...)</code> for <code>GET /healthz</code> and <code>GET /readyz</code>.</p>
           <div class="table-wrap"><table>
             <caption>Condensed from the project's security review checklist</caption>
             <thead><tr><th>Control</th><th>Requirement</th></tr></thead>
@@ -468,15 +468,15 @@ path(<span class="str">'graphql'</span>, graphql_view(schema),
 
         <article class="doc-section" id="pulse">
           <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
-          <h3>Mangoo Signals</h3>
+          <h3>Hayavega Signals</h3>
           <p>An opt-in, in-process event bus for application lifecycle hooks. It never wires itself into the runtime &mdash; an application adds no handlers, latency, or failure modes unless it creates and uses a <code>SignalBus</code>.</p>
           <div class="snippet-label">any view or startup module</div>
-          <pre><span class="kw">from</span> mangoo.addons.signals <span class="kw">import</span> SignalBus
+          <pre><span class="kw">from</span> hayavega.addons.signals <span class="kw">import</span> SignalBus
 
 bus = SignalBus()
 bus.connect(<span class="str">"auth.login_succeeded"</span>, on_login)
 bus.publish(<span class="str">"auth.login_succeeded"</span>, actor_id=user.id)</pre>
-          <p>There is no sync-versus-async choice to make: <code>publish</code>/<code>emit</code> always hand delivery to a small persistent worker pool and return immediately, isolating subscriber failures &mdash; a Rust-native thread pool (<code>mangoo_native.SignalDispatcher</code>) when the optional extension is built, or a behavior-compatible Python <code>ThreadPoolExecutor</code> otherwise. Pass the same bus as <code>signals=</code> to <code>create_application</code>, <code>auth_routes</code>, <code>admin_routes</code>, or <code>migrations.apply</code> to receive request, auth, admin, and migration events. This add-on shipped originally as "Pulse" &mdash; <code>mangoo.addons.pulse</code> and <code>pulse=</code> still work as deprecated aliases.</p>
+          <p>There is no sync-versus-async choice to make: <code>publish</code>/<code>emit</code> always hand delivery to a small persistent worker pool and return immediately, isolating subscriber failures &mdash; a Rust-native thread pool (<code>hayavega_native.SignalDispatcher</code>) when the optional extension is built, or a behavior-compatible Python <code>ThreadPoolExecutor</code> otherwise. Pass the same bus as <code>signals=</code> to <code>create_application</code>, <code>auth_routes</code>, <code>admin_routes</code>, or <code>migrations.apply</code> to receive request, auth, admin, and migration events. This add-on shipped originally as "Pulse" &mdash; <code>hayavega.addons.pulse</code> and <code>pulse=</code> still work as deprecated aliases.</p>
         </article>
 
         <article class="doc-section" id="rust">
@@ -484,11 +484,11 @@ bus.publish(<span class="str">"auth.login_succeeded"</span>, actor_id=user.id)</
           <h3>Rust-native core</h3>
           <p>Performance-sensitive types get a Rust implementation with a behavior-compatible Python fallback, so nothing requires a Rust toolchain to run. A benchmark-first rule governs every candidate: wire in only on a decisive, measured win, and publish the losses too.</p>
           <div class="snippet-label">python</div>
-          <pre><span class="kw">from</span> mangoo <span class="kw">import</span> mango_list
+          <pre><span class="kw">from</span> hayavega <span class="kw">import</span> mango_list
 
 items = mango_list([<span class="str">"first"</span>, <span class="str">"second"</span>])
 items.append(<span class="str">"third"</span>)</pre>
-          <p><code>mango_list</code> works with no extra steps, automatically Rust-backed once the extension is built. Rust already accelerates Signals' dispatcher, one SQLite hot-read path in Models, and the GraphQL lexer/parser (2.7&ndash;3.9&times; there). Request routing, JSON serialization, and authentication operations are the next migration targets &mdash; build the extension yourself with <code>maturin develop --manifest-path crates/mangoo-python/Cargo.toml</code>, pointed at that crate specifically, not the repository root, since both currently share the project name <code>mangoo</code> and a root build silently replaces the real Python package.</p>
+          <p><code>mango_list</code> works with no extra steps, automatically Rust-backed once the extension is built. Rust already accelerates Signals' dispatcher, one SQLite hot-read path in Models, and the GraphQL lexer/parser (2.7&ndash;3.9&times; there). Request routing, JSON serialization, and authentication operations are the next migration targets &mdash; build the extension yourself with <code>maturin develop --manifest-path crates/hayavega-python/Cargo.toml</code>, pointed at that crate specifically, not the repository root, since both currently share the project name <code>hayavega</code> and a root build silently replaces the real Python package.</p>
         </article>
 
         <article class="doc-section" id="testing">
@@ -498,7 +498,7 @@ items.append(<span class="str">"third"</span>)</pre>
           <div class="snippet-label">powershell</div>
           <pre>pip install -e ".[dev]"
 pytest</pre>
-          <p><code>pytest</code> runs with a 100% line coverage gate by default (pass <code>--no-cov</code> to skip it locally). GitHub Actions runs the suite on Python 3.10, 3.11, 3.12, and 3.15 for every push and pull request, plus a job that builds <code>mangoo_native</code> and runs the tests it backs, opt-in jobs against real <code>postgres:16</code>/<code>mysql:8</code>/<code>redis:7</code> containers, a required lint/format/type-check gate, and a dependency-vulnerability scan with weekly Dependabot updates.</p>
+          <p><code>pytest</code> runs with a 100% line coverage gate by default (pass <code>--no-cov</code> to skip it locally). GitHub Actions runs the suite on Python 3.10, 3.11, 3.12, and 3.15 for every push and pull request, plus a job that builds <code>hayavega_native</code> and runs the tests it backs, opt-in jobs against real <code>postgres:16</code>/<code>mysql:8</code>/<code>redis:7</code> containers, a required lint/format/type-check gate, and a dependency-vulnerability scan with weekly Dependabot updates.</p>
         </article>
 
       </div>
@@ -509,8 +509,8 @@ pytest</pre>
 
 <footer>
   <div class="wrap">
-    <span>Mangoo &mdash; published on PyPI, under active development.</span>
-    <span><a href="https://github.com/P-Sudhakar-tech/mangoo-framework" target="_blank" rel="noopener">Source</a> &middot; <a href="https://github.com/P-Sudhakar-tech/mangoo-framework/blob/main/UPCOMING_IMPROVEMENT_ROADMAP.md" target="_blank" rel="noopener">Roadmap</a> &middot; <a href="https://github.com/P-Sudhakar-tech/mangoo-framework/blob/main/DEPLOYMENT.md" target="_blank" rel="noopener">Deployment guide</a> &middot; <a href="https://www.linkedin.com/in/ponugoti-sudhakar-37029a18b" target="_blank" rel="noopener">Contact</a></span>
+    <span>Hayavega &mdash; published on PyPI, under active development.</span>
+    <span><a href="https://github.com/P-Sudhakar-tech/hayavega-framework" target="_blank" rel="noopener">Source</a> &middot; <a href="https://github.com/P-Sudhakar-tech/hayavega-framework/blob/main/UPCOMING_IMPROVEMENT_ROADMAP.md" target="_blank" rel="noopener">Roadmap</a> &middot; <a href="https://github.com/P-Sudhakar-tech/hayavega-framework/blob/main/DEPLOYMENT.md" target="_blank" rel="noopener">Deployment guide</a> &middot; <a href="https://www.linkedin.com/in/ponugoti-sudhakar-37029a18b" target="_blank" rel="noopener">Contact</a></span>
   </div>
 </footer>
 

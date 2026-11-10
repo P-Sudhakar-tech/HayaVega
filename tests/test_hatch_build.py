@@ -1,6 +1,6 @@
 """Tests for the repo-root hatch_build.py custom build hook.
 
-hatch_build.py is not part of the installed `mangoo` package -- it only runs
+hatch_build.py is not part of the installed `hayavega` package -- it only runs
 during a wheel build -- so it is loaded directly from its file path rather
 than imported as a module.
 """
@@ -44,7 +44,7 @@ class NativeExtensionBuildHookTests(unittest.TestCase):
 
     def test_skips_when_env_var_forces_pure_python(self):
         hook = make_hook(Path("."))
-        with patch.dict("os.environ", {"MANGOO_SKIP_NATIVE_BUILD": "1"}), patch("shutil.which") as which:
+        with patch.dict("os.environ", {"HAYAVEGA_SKIP_NATIVE_BUILD": "1"}), patch("shutil.which") as which:
             hook.initialize("0.1.0", {"artifacts": [], "force_include": {}})
         which.assert_not_called()
 
@@ -76,7 +76,7 @@ class NativeExtensionBuildHookTests(unittest.TestCase):
 
     def test_bundles_extension_when_build_succeeds(self):
         with tempfile.TemporaryDirectory() as tmp:
-            fake_library = Path(tmp) / "libmangoo_native.so"
+            fake_library = Path(tmp) / "libhayavega_native.so"
             fake_library.write_bytes(b"fake-shared-object")
             app = FakeApp()
             hook = make_hook(Path(tmp), app=app)
@@ -86,15 +86,15 @@ class NativeExtensionBuildHookTests(unittest.TestCase):
 
         self.assertIs(build_data["pure_python"], False)
         self.assertTrue(build_data["infer_tag"])
-        self.assertIn("/mangoo_native.so", build_data["artifacts"])
-        self.assertEqual(list(build_data["force_include"].values()), ["mangoo_native.so"])
+        self.assertIn("/hayavega_native.so", build_data["artifacts"])
+        self.assertEqual(list(build_data["force_include"].values()), ["hayavega_native.so"])
         (staged_source,) = build_data["force_include"].keys()
         self.assertTrue(Path(staged_source).is_file())
         self.assertTrue(app.infos)
 
     def test_finalize_removes_the_staging_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
-            fake_library = Path(tmp) / "libmangoo_native.so"
+            fake_library = Path(tmp) / "libhayavega_native.so"
             fake_library.write_bytes(b"fake-shared-object")
             hook = make_hook(Path(tmp))
             with patch("shutil.which", return_value="/usr/bin/cargo"), patch("subprocess.run"), patch.object(NativeExtensionBuildHook, "_find_built_library", return_value=fake_library), patch("platform.system", return_value="Linux"):
@@ -110,7 +110,7 @@ class NativeExtensionBuildHookTests(unittest.TestCase):
         package on sys.path for anyone running Python from that directory."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            fake_library = root / "target" / "release" / "libmangoo_native.so"
+            fake_library = root / "target" / "release" / "libhayavega_native.so"
             fake_library.parent.mkdir(parents=True)
             fake_library.write_bytes(b"fake-shared-object")
             hook = make_hook(root)

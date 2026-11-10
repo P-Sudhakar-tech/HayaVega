@@ -1,10 +1,10 @@
-# Mangoo production deployment guide
+# Hayavega production deployment guide
 
 ## Running the application
 
-`mango launch` / `python mango.py launch` uses `wsgiref.simple_server`,
+`hayavega launch` / `python hayavega.py launch` uses `wsgiref.simple_server`,
 which is explicitly single-threaded and dev-only -- do not put it behind
-real traffic. Every scaffolded project (`mango newproject`) ships a
+real traffic. Every scaffolded project (`hayavega newproject`) ships a
 `config/wsgi.py` exposing a standard WSGI `application` object; point a
 real, multi-worker server at that instead:
 
@@ -43,10 +43,10 @@ kind of measurement if you want to reproduce it against your own workload.
 WSGI above stays the default; nothing about it requires ASGI. Reach for
 ASGI only when a view needs to `await` concurrent I/O -- calling another
 service, an async database driver -- that WSGI's one-thread-per-request
-model can't overlap as cheaply. `mango newproject` also scaffolds
+model can't overlap as cheaply. `hayavega newproject` also scaffolds
 `config/asgi.py`, exposing the same kind of standard `application` object
-but built with `mangoo.asgi.create_asgi_application()` instead of
-`mangoo.runtime.create_application()`:
+but built with `hayavega.asgi.create_asgi_application()` instead of
+`hayavega.runtime.create_application()`:
 
 ```bash
 uvicorn config.asgi:application --workers 4 --host 0.0.0.0 --port 8000
@@ -60,12 +60,12 @@ this guide's own `waitress --threads=16` -- so every existing sync view --
 and every existing `api_route`/`csrf_protect`/`login_required`
 view -- keeps working completely unmodified under ASGI with no migration
 required). [`benchmarks/README.md`](benchmarks/README.md#asgi-vs-fastapi)
-benchmarks Mangoo's ASGI transport against FastAPI on the same server
+benchmarks Hayavega's ASGI transport against FastAPI on the same server
 (`uvicorn`) before recommending it for anything: after fixing the default
 `asyncio.to_thread` event-loop-wide executor being sized for occasional
 CPU-bound offloading (`min(32, os.cpu_count() + 4)`, a real bottleneck
 under real concurrency) rather than a whole application's I/O-bound sync
-views, Mangoo (ASGI) wins or ties FastAPI on every scenario, though none of
+views, Hayavega (ASGI) wins or ties FastAPI on every scenario, though none of
 those scenarios exercise the concurrent I/O that is the actual reason to
 choose ASGI over WSGI in a real project
 with that shape of workload.
@@ -73,14 +73,14 @@ with that shape of workload.
 ### Rust runtime: an opt-in, settings-driven native WSGI server
 
 `Settings.server.engine = 'rust'` in a project's settings module switches
-`mango launch` (and `python mango.py launch`) from the default `wsgiref`
-dev server to `mangoo_native`'s own WSGI-compatible HTTP/1.1 server --
+`hayavega launch` (and `python hayavega.py launch`) from the default `wsgiref`
+dev server to `hayavega_native`'s own WSGI-compatible HTTP/1.1 server --
 still development tooling, not a production server recommendation of its
 own (see the gunicorn/waitress guidance above for that), but a real,
 benchmarked alternative for local development and load testing. Requires
-`mangoo_native` to have been built (`cargo` on `PATH` during
+`hayavega_native` to have been built (`cargo` on `PATH` during
 `pip install`/`pip install -e .`, the same requirement Signals' Rust
-dispatcher already has) -- `mango launch` reports a clear, actionable
+dispatcher already has) -- `hayavega launch` reports a clear, actionable
 error rather than silently falling back if it wasn't.
 
 ```python
@@ -92,7 +92,7 @@ class server:
 ```
 
 **Scope, disclosed rather than oversold:** this is a synchronous,
-fixed-thread-pool server (`workers=` on `mangoo.rust_runtime.serve`,
+fixed-thread-pool server (`workers=` on `hayavega.rust_runtime.serve`,
 default 8) -- the same concurrency model `waitress` already uses -- not a
 `tokio`/`hyper` async runtime. CPython's GIL means only one thread ever
 executes Python view code at a time regardless of the I/O layer, so async
@@ -142,10 +142,10 @@ class server:
 
 ## Before deployment
 
-1. Set a unique `MANGOO_SECRET_KEY`; never use the scaffold default.
+1. Set a unique `HAYAVEGA_SECRET_KEY`; never use the scaffold default.
 2. Set `Settings.debug = False`, explicit `Settings.allowed_hosts`, and `Settings.security.force_https = True`.
 3. Set `Settings.security.secure_cookies = True` and configure `Settings.security.trusted_proxy_ips` when a reverse proxy sends forwarded headers.
-4. Apply and verify migrations with `python mango.py applymigrations` and `python mango.py migrationstatus`.
+4. Apply and verify migrations with `python hayavega.py applymigrations` and `python hayavega.py migrationstatus`.
 5. Configure application health probes for `/healthz` and `/readyz`.
 6. If you mounted `metrics_routes`, point a Prometheus scrape config at `/metrics`.
 
@@ -159,7 +159,7 @@ strings.
 
 ## Migration deployment and rollback
 
-Take a verified database backup before applying migrations. Mangoo migrations
+Take a verified database backup before applying migrations. Hayavega migrations
 are forward-only SQL files: if a deployment must be reverted, deploy the prior
 application version and restore the verified backup, or write a reviewed
 compensating migration. Never edit an applied migration file because checksum
@@ -177,7 +177,7 @@ restore a backup to an isolated environment, run `migrationstatus`, and verify
 ## Operations
 
 Monitor the request ID in application logs, readiness failures, rate-limit
-events, and `mangoo_audit_events`. By default the built-in rate limiter is
+events, and `hayavega_audit_events`. By default the built-in rate limiter is
 process-local, so a fleet of N instances behind a load balancer independently
 enforces the configured limit N times over. To enforce one combined limit
 across every instance, opt into the Redis-backed limiter by setting

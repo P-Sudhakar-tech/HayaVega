@@ -1,4 +1,4 @@
-/* Mangoo docs -- restyled to match index.html's own design system, not
+/* Hayavega docs -- restyled to match index.html's own design system, not
    just borrow its accent color. Every token below (names and values) is
    copied straight from index.html's :root -- this file's only job is to
    map Material for MkDocs' own --md-* variables onto those same tokens,
@@ -6,7 +6,7 @@
    cards) where Material's structure doesn't leave a variable for the
    thing index.html actually does differently. The visual reference is
    the register of reflex.dev / uv / angular.dev / react.dev: a deep
-   dark background by default, one confident mango accent, code-forward
+   dark background by default, one confident hayavega accent, code-forward
    content, flat elevated panels with soft rounded corners -- not
    whimsical decoration, not a light-cream background. */
 
@@ -38,7 +38,7 @@ html { scroll-behavior: smooth; }
    "default" carries light, for the manual toggle only. ---------- */
 [data-md-color-scheme="slate"] {
   --ink: #EAF0F7; --paper: #0A0F1A; --surface: #111929; --surface-2: #182236;
-  --mango: #FF7A1A; --mango-strong: #FFA148; --mango-tint: rgba(255, 122, 26, 0.16);
+  --hayavega: #FF7A1A; --hayavega-strong: #FFA148; --hayavega-tint: rgba(255, 122, 26, 0.16);
   --leaf: #22C55E; --leaf-strong: #5EEBA0; --leaf-tint: rgba(34, 197, 94, 0.14);
   --stamp: #38BDF8; --stamp-strong: #7DD3FC; --stamp-tint: rgba(56, 189, 248, 0.14);
   --rind: #F43F5E; --rind-tint: rgba(244, 63, 94, 0.14);
@@ -49,11 +49,11 @@ html { scroll-behavior: smooth; }
      pink -- landing on the exact "warm off-white + orange" look this
      palette is meant to avoid. Light mode gets a cool, barely-there
      glow instead (see [data-md-color-scheme="default"] below). */
-  --glow: var(--mango-tint);
+  --glow: var(--hayavega-tint);
 }
 [data-md-color-scheme="default"] {
   --ink: #0A0F1A; --paper: #FFFFFF; --surface: #F3F5F9; --surface-2: #E7EBF2;
-  --mango: #E8640A; --mango-strong: #C2530A; --mango-tint: rgba(232, 100, 10, 0.10);
+  --hayavega: #E8640A; --hayavega-strong: #C2530A; --hayavega-tint: rgba(232, 100, 10, 0.10);
   --leaf: #15803D; --leaf-strong: #0F6B30; --leaf-tint: rgba(21, 128, 61, 0.10);
   --stamp: #0284C7; --stamp-strong: #026AA2; --stamp-tint: rgba(2, 132, 199, 0.10);
   --rind: #DC2626; --rind-tint: rgba(220, 38, 38, 0.10);
@@ -68,17 +68,17 @@ html { scroll-behavior: smooth; }
   --md-text-font: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --md-code-font: "Fira Code", ui-monospace, Consolas, monospace;
 
-  /* index.html's primary action color is the mango gradient (its
-     .btn-primary) -- mango is also this site's single confident accent,
+  /* index.html's primary action color is the hayavega gradient (its
+     .btn-primary) -- hayavega is also this site's single confident accent,
      so both primary and accent point at it; stamp (sky blue) carries
      links instead, matching index.html's `a{color:var(--stamp)}`. */
-  --md-primary-fg-color: var(--mango);
-  --md-primary-fg-color--light: var(--mango-tint);
-  --md-primary-fg-color--dark: var(--mango-strong);
+  --md-primary-fg-color: var(--hayavega);
+  --md-primary-fg-color--light: var(--hayavega-tint);
+  --md-primary-fg-color--dark: var(--hayavega-strong);
   --md-primary-bg-color: var(--paper);
   --md-primary-bg-color--light: var(--paper);
-  --md-accent-fg-color: var(--mango);
-  --md-accent-fg-color--transparent: var(--mango-tint);
+  --md-accent-fg-color: var(--hayavega);
+  --md-accent-fg-color--transparent: var(--hayavega-tint);
   --md-accent-bg-color: var(--paper);
 
   --md-default-fg-color: var(--ink);
@@ -116,7 +116,7 @@ html { scroll-behavior: smooth; }
   --md-typeset-del-color: color-mix(in srgb, var(--rind) 18%, transparent);
   --md-typeset-table-color: color-mix(in srgb, var(--ink) 14%, transparent);
   --md-typeset-table-color--light: color-mix(in srgb, var(--ink) 6%, transparent);
-  --md-typeset-mark-color: var(--mango-tint);
+  --md-typeset-mark-color: var(--hayavega-tint);
 
   --md-footer-bg-color: var(--surface);
   --md-footer-bg-color--dark: color-mix(in srgb, var(--surface) 85%, var(--ink));
@@ -151,7 +151,7 @@ body { background: var(--paper); }
    reliable way to override every one of them, including the
    :focus/:hover state mkdocs-material's instant-navigation applies to
    the active link after a page transition (which otherwise jumps to
-   the mango accent color instead of staying on the stamp-blue active
+   the hayavega accent color instead of staying on the stamp-blue active
    color used here). ---------- */
 .md-nav--lifted > .md-nav__list > .md-nav__item--active > .md-nav__link,
 .md-nav__item--active > .md-nav__link {
@@ -195,7 +195,7 @@ body { background: var(--paper); }
   object-fit: contain;
 }
 
-/* ---------- buttons: a mango gradient primary action, rounded like
+/* ---------- buttons: a hayavega gradient primary action, rounded like
    the reference sites' CTAs -- no shadow-heavy SaaS look, just a soft
    glow ring on hover ---------- */
 .md-button {
@@ -212,20 +212,20 @@ body { background: var(--paper); }
   background: none;
 }
 .md-button--primary {
-  background: linear-gradient(135deg, var(--mango), var(--mango-strong));
+  background: linear-gradient(135deg, var(--hayavega), var(--hayavega-strong));
   border-color: transparent;
   color: #1A1206;
 }
 .md-button--primary:hover {
-  box-shadow: 0 0 0 4px var(--mango-tint);
+  box-shadow: 0 0 0 4px var(--hayavega-tint);
   border-color: transparent;
   color: #1A1206;
 }
 
-/* ---------- hero: plain dark background with a soft mango glow behind
+/* ---------- hero: plain dark background with a soft hayavega glow behind
    it, a bold sans headline -- the same restrained treatment as
    index.html's hero ---------- */
-.mangoo-hero {
+.hayavega-hero {
   background: none;
   padding: 0;
   margin: 0 0 2.8rem;
@@ -236,7 +236,7 @@ body { background: var(--paper); }
   overflow-wrap: break-word;
   position: relative;
 }
-.mangoo-hero::before {
+.hayavega-hero::before {
   content: "";
   position: absolute;
   top: -80px;
@@ -247,7 +247,7 @@ body { background: var(--paper); }
   pointer-events: none;
   z-index: -1;
 }
-.mangoo-hero h1 {
+.hayavega-hero h1 {
   color: var(--ink);
   font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: clamp(2.2rem, 5vw, 3.4rem);
@@ -256,18 +256,18 @@ body { background: var(--paper); }
   margin: 0 0 0.8rem;
   font-weight: 700;
 }
-.mangoo-hero p {
+.hayavega-hero p {
   color: var(--muted);
   font-size: 1.1rem;
   max-width: 56ch;
   margin: 0 0 1.6rem;
 }
-.mangoo-hero p.mangoo-welcome {
+.hayavega-hero p.hayavega-welcome {
   font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-style: normal;
   font-weight: 600;
   font-size: 1.15rem;
-  color: var(--mango-strong);
+  color: var(--hayavega-strong);
   max-width: 42ch;
   margin: 0.8rem 0 0;
 }
@@ -277,21 +277,21 @@ body { background: var(--paper); }
    same "small bordered label" idea without matching that exact pill
    shape, which (paired with a warm accent) is also the shape the
    user's own portfolio site uses for its buttons. */
-.mangoo-eyebrow {
+.hayavega-eyebrow {
   display: inline-block;
   font-family: "Plus Jakarta Sans", ui-sans-serif, sans-serif;
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--mango-strong);
-  background: var(--mango-tint);
+  color: var(--hayavega-strong);
+  background: var(--hayavega-tint);
   padding: 6px 14px;
   border-radius: 10px;
   margin: 0 0 18px;
 }
 @media screen and (max-width: 44em) {
-  .mangoo-hero h1 { font-size: 1.9rem; }
-  .mangoo-hero p { font-size: 1rem; }
-  .mangoo-hero .md-button {
+  .hayavega-hero h1 { font-size: 1.9rem; }
+  .hayavega-hero p { font-size: 1rem; }
+  .hayavega-hero .md-button {
     display: block;
     text-align: center;
     margin: 0 0 0.6rem;
@@ -312,14 +312,14 @@ body { background: var(--paper); }
 .grid.cards > ul > li:hover {
   transform: none;
   box-shadow: none;
-  border-color: var(--mango);
+  border-color: var(--hayavega);
 }
 
 /* ---------- benchmark stat tiles on the performance page: terminal-dark
-   tile, rounded corners, mango value -- same accent role mango plays in
+   tile, rounded corners, hayavega value -- same accent role hayavega plays in
    index.html's "shipped" status tags, a highlighted callout rather than
    the primary color ---------- */
-.mangoo-stats {
+.hayavega-stats {
   display: grid;
   /* 145px wasn't quite wide enough to fit "template_render req/s" as
      one unbroken label -- Material's base .md-typeset overflow-wrap
@@ -328,21 +328,21 @@ body { background: var(--paper); }
   gap: 1rem;
   margin: 1.6rem 0 0.8rem;
 }
-.mangoo-stat {
+.hayavega-stat {
   background: var(--code-bg);
   border-radius: 10px;
   padding: 1.1rem 1.3rem;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--mango);
+  border-left: 3px solid var(--hayavega);
 }
-.mangoo-stat .value {
+.hayavega-stat .value {
   font-size: 1.7rem;
   font-weight: 700;
-  color: var(--mango);
+  color: var(--hayavega);
   display: block;
   line-height: 1.2;
 }
-.mangoo-stat .label {
+.hayavega-stat .label {
   font-size: 0.78rem;
   color: var(--code-mut);
   letter-spacing: 0.01em;
@@ -457,7 +457,7 @@ body { background: var(--paper); }
   white-space: nowrap;
 }
 .md-social__link:hover::after {
-  color: var(--mango-strong);
+  color: var(--hayavega-strong);
 }
 
 /* Footer bottom row: copyright on the left, "Contact us" on the right,

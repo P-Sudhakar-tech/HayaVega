@@ -1,4 +1,4 @@
-"""HTTP-level benchmark: does mangoo_native.SerializedConnection (one
+"""HTTP-level benchmark: does hayavega_native.SerializedConnection (one
 Rust-owned sqlite3 connection, every query serialized through a single
 worker thread) beat Python's existing options for db_list's actual code
 path (Selection.values() -> connect_readonly())?
@@ -13,7 +13,7 @@ existing option," not just "better than doing nothing":
        against this exact db_list scenario (see db.py's own docstring)
        and found to be within normal run-to-run variance, neither a real
        win nor a real loss.
-    3. mangoo_native.SerializedConnection -- one Rust-owned connection,
+    3. hayavega_native.SerializedConnection -- one Rust-owned connection,
        serializing every query through one worker thread instead of each
        request thread holding (or sharing) its own.
 
@@ -48,12 +48,12 @@ def main() -> None:
 
     python = sys.executable
     targets = [
-        ("No pooling (default)", [python, "-m", "waitress", "--host=127.0.0.1", "--port=9007", "--threads=16", "--call", "benchmarks.mangoo_app.app:build_application"], 9007),
+        ("No pooling (default)", [python, "-m", "waitress", "--host=127.0.0.1", "--port=9007", "--threads=16", "--call", "benchmarks.hayavega_app.app:build_application"], 9007),
         ("Readonly pooling", [python, "-m", "waitress", "--host=127.0.0.1", "--port=9012", "--threads=16", "--call", "benchmarks._readonly_pooling_target:build_application"], 9012),
         ("Serialized Connection", [python, "-m", "waitress", "--host=127.0.0.1", "--port=9011", "--threads=16", "--call", "benchmarks._serialized_connection_target:build_application"], 9011),
     ]
 
-    print(f"Benchmark: mangoo_native.SerializedConnection vs Python's DB-access options (duration={args.duration}, concurrency={args.connections})\n")
+    print(f"Benchmark: hayavega_native.SerializedConnection vs Python's DB-access options (duration={args.duration}, concurrency={args.connections})\n")
     all_results: dict[str, dict] = {}
     for name, command, port in targets:
         print(f"--- {name} ---")

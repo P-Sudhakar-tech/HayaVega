@@ -23,7 +23,7 @@ SEED_COUNT = 20
 UPSTREAM_URL = "http://127.0.0.1:9010/delay"
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-# Same session shape benchmarks/mangoo_app uses for its identical blocking
+# Same session shape benchmarks/hayavega_app uses for its identical blocking
 # route below -- see benchmarks/asgi_concurrent_io.py for why (a fair
 # comparison needs the upstream call itself to cost the same on both
 # sides). The async route below uses benchmarks/_upstream_client instead
@@ -76,8 +76,8 @@ def posts_page(request: Request):
 @application.get("/remote")
 async def remote_io():
     """Real concurrent I/O: awaits benchmarks/upstream_app instead of blocking
-    a thread for it. The direct counterpart to Mangoo (ASGI)'s `remote_io` in
-    benchmarks/mangoo_asgi_app/app.py -- see benchmarks/asgi_concurrent_io.py."""
+    a thread for it. The direct counterpart to Hayavega (ASGI)'s `remote_io` in
+    benchmarks/hayavega_asgi_app/app.py -- see benchmarks/asgi_concurrent_io.py."""
     return await fetch_upstream()
 
 
@@ -85,8 +85,8 @@ async def remote_io():
 def remote_io_blocking():
     """The blocking contrast: a plain `def` route, so FastAPI dispatches it
     through Starlette/anyio's thread pool instead of the event loop -- the
-    counterpart to Mangoo's `remote_io_blocking` in
-    benchmarks/mangoo_app/app.py. See benchmarks/asgi_concurrent_io.py."""
+    counterpart to Hayavega's `remote_io_blocking` in
+    benchmarks/hayavega_app/app.py. See benchmarks/asgi_concurrent_io.py."""
     response = _upstream_session.get(UPSTREAM_URL, timeout=5)
     return response.json()
 

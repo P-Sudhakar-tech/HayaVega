@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.request import UploadedFile
-from mangoo.uploads import save_uploaded_file
+from hayavega.request import UploadedFile
+from hayavega.uploads import save_uploaded_file
 
 
 class SaveUploadedFileTests(unittest.TestCase):

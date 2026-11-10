@@ -1,11 +1,11 @@
-"""HTTP-level benchmark: `mangoo.rust_runtime` (the new native Rust WSGI
+"""HTTP-level benchmark: `hayavega.rust_runtime` (the new native Rust WSGI
 server, `SERVER['ENGINE'] = 'rust'`) vs. the existing Python runtime served
 by `waitress` -- the "with and without" comparison for the custom Rust HTTP
-runtime work. Same app (`benchmarks/mangoo_app/app.py`), same routes, same
+runtime work. Same app (`benchmarks/hayavega_app/app.py`), same routes, same
 seeded data; only the server differs.
 
-Scope note (see `src/mangoo/rust_runtime.py` and
-`crates/mangoo-python/src/server.rs` for the full disclosure): this is a
+Scope note (see `src/hayavega/rust_runtime.py` and
+`crates/hayavega-python/src/server.rs` for the full disclosure): this is a
 synchronous, fixed-thread-pool Rust server with no HTTP keep-alive yet, not
 an async `tokio`/`hyper` runtime -- CPython's GIL means async I/O would not
 let more Python view code run concurrently than a thread pool already does,
@@ -37,10 +37,10 @@ def main() -> None:
     python = sys.executable
     targets = [
         ("Rust runtime", [python, str(ROOT / "benchmarks" / "_rust_runtime_target.py")], 9006),
-        ("Python runtime (waitress)", [python, "-m", "waitress", "--host=127.0.0.1", "--port=9007", "--threads=16", "--call", "benchmarks.mangoo_app.app:build_application"], 9007),
+        ("Python runtime (waitress)", [python, "-m", "waitress", "--host=127.0.0.1", "--port=9007", "--threads=16", "--call", "benchmarks.hayavega_app.app:build_application"], 9007),
     ]
 
-    print(f"Benchmark: mangoo.rust_runtime vs waitress (duration={args.duration}, concurrency={args.connections})\n")
+    print(f"Benchmark: hayavega.rust_runtime vs waitress (duration={args.duration}, concurrency={args.connections})\n")
     all_results: dict[str, dict] = {}
     for name, command, port in targets:
         print(f"--- {name} ---")

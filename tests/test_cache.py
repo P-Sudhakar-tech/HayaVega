@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from mangoo.cache import CacheBackendError, InMemoryCache, RedisCache, SqliteCache, cache_from_settings, cached_view
-from mangoo.response import Response, json_response
+from hayavega.cache import CacheBackendError, InMemoryCache, RedisCache, SqliteCache, cache_from_settings, cached_view
+from hayavega.response import Response, json_response
 
 
 class InMemoryCacheTests(unittest.TestCase):
@@ -48,7 +48,7 @@ class InMemoryCacheTests(unittest.TestCase):
     def test_ttl_expires_the_entry(self):
         cache = InMemoryCache()
         now = time.monotonic()
-        with patch("mangoo.cache.time.monotonic", side_effect=[now, now, now + 10]):
+        with patch("hayavega.cache.time.monotonic", side_effect=[now, now, now + 10]):
             cache.set("key", "value", ttl=1)
             self.assertEqual(cache.get("key"), "value")
             self.assertIsNone(cache.get("key"))
@@ -56,7 +56,7 @@ class InMemoryCacheTests(unittest.TestCase):
     def test_default_ttl_applies_when_not_overridden(self):
         cache = InMemoryCache(default_ttl=1)
         now = time.monotonic()
-        with patch("mangoo.cache.time.monotonic", side_effect=[now, now, now + 10]):
+        with patch("hayavega.cache.time.monotonic", side_effect=[now, now, now + 10]):
             cache.set("key", "value")
             self.assertEqual(cache.get("key"), "value")
             self.assertIsNone(cache.get("key"))
@@ -153,7 +153,7 @@ class SqliteCacheTests(unittest.TestCase):
     def test_ttl_expires_the_entry(self):
         cache = SqliteCache(self.path)
         now = time.time()
-        with patch("mangoo.cache.time.time", side_effect=[now, now, now + 10]):
+        with patch("hayavega.cache.time.time", side_effect=[now, now, now + 10]):
             cache.set("key", "value", ttl=1)
             self.assertEqual(cache.get("key"), "value")
             self.assertIsNone(cache.get("key"))
@@ -161,7 +161,7 @@ class SqliteCacheTests(unittest.TestCase):
     def test_default_ttl_applies_when_not_overridden(self):
         cache = SqliteCache(self.path, default_ttl=1)
         now = time.time()
-        with patch("mangoo.cache.time.time", side_effect=[now, now, now + 10]):
+        with patch("hayavega.cache.time.time", side_effect=[now, now, now + 10]):
             cache.set("key", "value")
             self.assertEqual(cache.get("key"), "value")
             self.assertIsNone(cache.get("key"))
@@ -184,7 +184,7 @@ class SqliteCacheTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
     def test_two_instances_pointed_at_the_same_file_share_state(self):
-        """The scenario this backend exists for: two Mangoo worker processes
+        """The scenario this backend exists for: two Hayavega worker processes
         on the same machine, both pointed at the same SQLite file, see each
         other's writes -- Redis's actual value, no separate server."""
         first = SqliteCache(self.path)
@@ -272,7 +272,7 @@ class CacheFromSettingsTests(unittest.TestCase):
 
 class CachedViewTests(unittest.TestCase):
     def _request(self, method="GET", path="/items", raw_query=""):
-        from mangoo.request import Request
+        from hayavega.request import Request
 
         return Request(method=method, path=path, query_params={}, body=b"", headers={}, raw_query=raw_query)
 

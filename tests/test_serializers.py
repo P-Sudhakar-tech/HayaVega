@@ -2,8 +2,8 @@ import json
 import unittest
 from datetime import date
 
-from mangoo import Decimal, Entity, EntitySerializer, Serializer, Text
-from mangoo.serializers import SerializationError
+from hayavega import Decimal, Entity, EntitySerializer, Serializer, Text
+from hayavega.serializers import SerializationError
 
 
 class Product(Entity):

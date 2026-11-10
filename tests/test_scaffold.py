@@ -5,23 +5,23 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.scaffold import startapp, startproject
+from hayavega.scaffold import startapp, startproject
 
 
 class ScaffoldTests(unittest.TestCase):
     def test_startproject_creates_runnable_layout(self):
         with tempfile.TemporaryDirectory() as directory:
             root = startproject("demo", Path(directory))
-            self.assertTrue((root / "mango.py").is_file())
+            self.assertTrue((root / "hayavega.py").is_file())
             self.assertTrue((root / "config" / "routes.py").is_file())
             self.assertTrue((root / "config" / "wsgi.py").is_file())
             self.assertTrue((root / "config" / "asgi.py").is_file())
-            self.assertIn("from mangoo.management", (root / "mango.py").read_text(encoding="utf-8"))
-            self.assertIn("Welcome to Mangoo", (root / "config" / "routes.py").read_text(encoding="utf-8"))
+            self.assertIn("from hayavega.management", (root / "hayavega.py").read_text(encoding="utf-8"))
+            self.assertIn("Welcome to Hayavega", (root / "config" / "routes.py").read_text(encoding="utf-8"))
 
     def test_generated_wsgi_module_exposes_a_working_wsgi_callable(self):
         """The wsgi.py a scaffolded project ships is what a real production
-        server (gunicorn/waitress) is pointed at -- not just `mango
+        server (gunicorn/waitress) is pointed at -- not just `hayavega
         launch`'s dev path -- so this exercises it as a real WSGI app,
         not just checking the file exists."""
         with tempfile.TemporaryDirectory() as directory:
@@ -39,7 +39,7 @@ class ScaffoldTests(unittest.TestCase):
                 environ = {"PATH_INFO": "/", "REQUEST_METHOD": "GET", "HTTP_HOST": "localhost"}
                 body = b"".join(wsgi.application(environ, start_response))
                 self.assertEqual(captured["status"], "200 OK")
-                self.assertIn(b"Welcome to Mangoo", body)
+                self.assertIn(b"Welcome to Hayavega", body)
             finally:
                 sys.path.remove(str(root))
                 for name in ("config.wsgi", "config.routes", "config.settings", "config"):
@@ -70,7 +70,7 @@ class ScaffoldTests(unittest.TestCase):
                 start = next(message for message in messages if message["type"] == "http.response.start")
                 body = b"".join(message.get("body", b"") for message in messages if message["type"] == "http.response.body")
                 self.assertEqual(start["status"], 200)
-                self.assertIn(b"Welcome to Mangoo", body)
+                self.assertIn(b"Welcome to Hayavega", body)
             finally:
                 sys.path.remove(str(root))
                 for name in ("config.asgi", "config.wsgi", "config.routes", "config.settings", "config"):
@@ -82,7 +82,7 @@ class ScaffoldTests(unittest.TestCase):
             self.assertTrue((root / "views.py").is_file())
             self.assertTrue((root / "routes.py").is_file())
             self.assertTrue((root / "migrations" / "__init__.py").is_file())
-            self.assertIn("from mangoo import Response", (root / "views.py").read_text(encoding="utf-8"))
+            self.assertIn("from hayavega import Response", (root / "views.py").read_text(encoding="utf-8"))
 
     def test_scaffold_rejects_existing_project_target(self):
         with tempfile.TemporaryDirectory() as directory:

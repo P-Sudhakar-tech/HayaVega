@@ -1,13 +1,13 @@
 # Routing
 
-Every Mangoo route maps a URL pattern to a plain Python function taking a
+Every Hayavega route maps a URL pattern to a plain Python function taking a
 `Request` and returning a `Response` (or, for `api_route`, anything
 JSON-serializable).
 
 ## `path()` &mdash; HTML and general views
 
 ```python
-from mangoo import path
+from hayavega import path
 
 
 def home(request):
@@ -28,7 +28,7 @@ tree under one route.
 ## `api_route()` &mdash; JSON views with automatic OpenAPI docs
 
 ```python
-from mangoo import api_route
+from hayavega import api_route
 
 
 def list_items(request):
@@ -64,8 +64,8 @@ this guarantees.
 ## Static files
 
 ```python
-from mangoo import static_routes
-from mangoo.conf import load_settings
+from hayavega import static_routes
+from hayavega.conf import load_settings
 
 _settings = load_settings()
 
@@ -82,8 +82,8 @@ against other frameworks' own static handling.
 ## Request and Response
 
 ```python
-from mangoo.request import Request
-from mangoo.response import Response, json_response
+from hayavega.request import Request
+from hayavega.response import Response, json_response
 
 
 def echo(request: Request) -> Response:

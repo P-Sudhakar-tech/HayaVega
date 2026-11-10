@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from mangoo.autoreload import has_changes, run_with_reloader, snapshot_python_files
+from hayavega.autoreload import has_changes, run_with_reloader, snapshot_python_files
 
 
 class AutoreloadTests(unittest.TestCase):
@@ -28,14 +28,14 @@ class AutoreloadTests(unittest.TestCase):
 
             self.assertTrue(has_changes(before, snapshot_python_files(root)))
 
-    @patch("mangoo.autoreload.time.sleep", side_effect=KeyboardInterrupt)
-    @patch("mangoo.autoreload.subprocess.Popen")
+    @patch("hayavega.autoreload.time.sleep", side_effect=KeyboardInterrupt)
+    @patch("hayavega.autoreload.subprocess.Popen")
     def test_ctrl_c_terminates_reloader_child(self, popen, sleep):
         process = MagicMock()
         process.poll.return_value = None
         popen.return_value = process
         with tempfile.TemporaryDirectory() as directory:
-            run_with_reloader(["python", "mango.py", "launch"], Path(directory))
+            run_with_reloader(["python", "hayavega.py", "launch"], Path(directory))
         process.terminate.assert_called_once()
         process.wait.assert_called_once()
 

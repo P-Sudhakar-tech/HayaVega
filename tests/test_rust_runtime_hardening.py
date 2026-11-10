@@ -4,7 +4,7 @@ Transfer-Encoding/malformed Content-Length, response splitting via header
 injection, and that a client that appears to malform a request does not
 corrupt a keep-alive connection for the request that follows. Talks to the
 real server over a real raw socket (not urllib, which would not let us
-send deliberately malformed requests) -- requires mangoo_native."""
+send deliberately malformed requests) -- requires hayavega_native."""
 
 import socket
 import threading
@@ -12,15 +12,15 @@ import time
 import unittest
 
 try:
-    import mangoo_native  # noqa: F401
+    import hayavega_native  # noqa: F401
 
     NATIVE_AVAILABLE = True
 except ImportError:
     NATIVE_AVAILABLE = False
 
-from mangoo import api_route, path
-from mangoo.response import Response
-from mangoo.rust_runtime import serve as serve_rust
+from hayavega import api_route, path
+from hayavega.response import Response
+from hayavega.rust_runtime import serve as serve_rust
 
 
 def _free_port() -> int:
@@ -54,7 +54,7 @@ def _reflect_header(request):
     return Response("ok", headers=(("X-Echo", value),))
 
 
-@unittest.skipUnless(NATIVE_AVAILABLE, "mangoo_native is not built; see the native-extension CI job")
+@unittest.skipUnless(NATIVE_AVAILABLE, "hayavega_native is not built; see the native-extension CI job")
 class RustRuntimeHardeningTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

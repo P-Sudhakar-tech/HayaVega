@@ -3,7 +3,7 @@
 ## Scaffold a project
 
 ```bash
-mangoo-admin newproject mysite
+hayavega-admin newproject mysite
 cd mysite
 ```
 
@@ -11,7 +11,7 @@ This creates a familiar, conventional layout:
 
 ```text
 mysite/
-├── mango.py
+├── hayavega.py
 └── config/
     ├── settings.py
     ├── routes.py
@@ -22,23 +22,23 @@ mysite/
 `config/routes.py` already wires up a few working routes out of the box:
 
 ```python title="config/routes.py"
-from mangoo import Response, api_route, path
-from mangoo.auth_api import auth_routes
-from mangoo.conf import load_settings
-from mangoo.graphql import Schema, graphql_view
+from hayavega import Response, api_route, path
+from hayavega.auth_api import auth_routes
+from hayavega.conf import load_settings
+from hayavega.graphql import Schema, graphql_view
 
 _settings = load_settings()
 
 
 def home(request):
-    return Response("<h1>Welcome to Mangoo</h1><p>Your Rust-backed project is running.</p>")
+    return Response("<h1>Welcome to Hayavega</h1><p>Your Rust-backed project is running.</p>")
 
 
 def health(request):
     return {"status": "ok"}
 
 
-schema = Schema(query={"greeting": lambda request: "Hello from Mangoo GraphQL"})
+schema = Schema(query={"greeting": lambda request: "Hello from Hayavega GraphQL"})
 
 urlpatterns = [
     path("", home),
@@ -58,11 +58,11 @@ Notice three things already working with zero extra code:
 ## Run it
 
 ```bash
-python mango.py launch
+python hayavega.py launch
 ```
 
 ```text
-Mangoo development server: http://127.0.0.1:8000/
+Hayavega development server: http://127.0.0.1:8000/
 ```
 
 Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/) for the welcome page,
@@ -72,7 +72,7 @@ to see `api/health` already documented.
 ## Add an app
 
 ```bash
-python mango.py newapp blog
+python hayavega.py newapp blog
 ```
 
 This scaffolds `apps/blog/` with its own `views.py`, `routes.py`, and
@@ -82,11 +82,11 @@ This scaffolds `apps/blog/` with its own `views.py`, `routes.py`, and
 
 ```python title="apps/blog/views.py"
 def hello(request):
-    return {"message": "Hello from Mangoo"}
+    return {"message": "Hello from Hayavega"}
 ```
 
 ```python title="apps/blog/routes.py"
-from mangoo import api_route
+from hayavega import api_route
 from .views import hello
 
 urlpatterns = [
@@ -106,7 +106,7 @@ urlpatterns = [
 ```
 
 Restart the dev server (or let `--noreload`'s absence auto-reload it) and
-`GET /hello` responds with `{"message": "Hello from Mangoo"}` &mdash; already
+`GET /hello` responds with `{"message": "Hello from Hayavega"}` &mdash; already
 listed in `/openapi.json`.
 
 ## What next

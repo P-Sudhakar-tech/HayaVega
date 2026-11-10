@@ -2,9 +2,9 @@ import unittest
 
 from test_runtime import call
 
-from mangoo import Response, path
-from mangoo.metrics import MetricsRegistry, metrics_routes
-from mangoo.runtime import create_application
+from hayavega import Response, path
+from hayavega.metrics import MetricsRegistry, metrics_routes
+from hayavega.runtime import create_application
 
 
 class MetricsRegistryTests(unittest.TestCase):
@@ -39,11 +39,11 @@ class MetricsRegistryTests(unittest.TestCase):
         registry = MetricsRegistry()
         registry.record(method="GET", path="/", status=200, duration_ms=12.5)
         text = registry.render_prometheus()
-        self.assertIn('mangoo_requests_total{method="GET",path="/",status="200"} 1', text)
-        self.assertIn("mangoo_request_duration_ms_bucket{", text)
-        self.assertIn('mangoo_request_duration_ms_bucket{method="GET",path="/",le="+Inf"} 1', text)
-        self.assertIn('mangoo_request_duration_ms_sum{method="GET",path="/"} 12.5', text)
-        self.assertIn('mangoo_request_duration_ms_count{method="GET",path="/"} 1', text)
+        self.assertIn('hayavega_requests_total{method="GET",path="/",status="200"} 1', text)
+        self.assertIn("hayavega_request_duration_ms_bucket{", text)
+        self.assertIn('hayavega_request_duration_ms_bucket{method="GET",path="/",le="+Inf"} 1', text)
+        self.assertIn('hayavega_request_duration_ms_sum{method="GET",path="/"} 12.5', text)
+        self.assertIn('hayavega_request_duration_ms_count{method="GET",path="/"} 1', text)
 
 
 class MetricsIntegrationTests(unittest.TestCase):
@@ -74,7 +74,7 @@ class MetricsIntegrationTests(unittest.TestCase):
         captured, body = call(app, "/metrics")
         self.assertEqual(captured["status"], "200 OK")
         self.assertIn("text/plain", captured["headers"]["Content-Type"])
-        self.assertIn('mangoo_requests_total{method="GET",path="hello",status="200"} 1', body.decode("utf-8"))
+        self.assertIn('hayavega_requests_total{method="GET",path="hello",status="200"} 1', body.decode("utf-8"))
 
     def test_metrics_routes_are_excluded_from_openapi_document(self):
         registry = MetricsRegistry()

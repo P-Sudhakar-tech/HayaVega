@@ -3,13 +3,13 @@ document's roadmap flagged as new scope, deferred, not yet started
 ("Tortoise ORM as a new comparison target ... uses an async driver
 (`aiosqlite`), a different shape of comparison than anything `benchmarks/`
 currently runs -- every existing target opens a plain synchronous `sqlite3`
-connection per request, Mangoo's ORM included").
+connection per request, Hayavega's ORM included").
 
 Same `Post` shape (id, title, views), same `SEED_COUNT`, and the same
 `/posts.json` scenario as `benchmarks/fastapi_app/app.py` and
-`benchmarks/mangoo_app/app.py` -- the only difference is the database layer:
+`benchmarks/hayavega_app/app.py` -- the only difference is the database layer:
 Tortoise ORM's queryset API over `aiosqlite`, awaited all the way through
-the view, instead of a synchronous `sqlite3`/Mangoo-ORM call. Scoped to
+the view, instead of a synchronous `sqlite3`/Hayavega-ORM call. Scoped to
 just `db_list` (no `/echo`, `/posts`, or `/static/...` routes) because
 that is the one scenario an async driver can plausibly change -- the other
 three scenarios in `run.py`/`rust_runtime_vs_fastapi.py` don't touch the
@@ -22,7 +22,7 @@ runs a dedicated background `threading.Thread` that executes the real,
 blocking `sqlite3` calls; `await`ing a query just parks the coroutine on a
 `Future` that thread later resolves via `call_soon_threadsafe`. So this
 comparison is really "one dedicated worker thread per connection" (Tortoise
-ORM/aiosqlite) vs. "N shared threads across every connection" (Mangoo's own
+ORM/aiosqlite) vs. "N shared threads across every connection" (Hayavega's own
 ORM, dispatched to ASGI's sync-dispatch pool or a WSGI worker thread) --
 not "async I/O vs. blocking I/O" in the sense `benchmarks/asgi_concurrent_io.py`
 tested for a real network call. That distinction matters for what a result
@@ -30,7 +30,7 @@ here does and doesn't establish, and is why this comparison needed its own
 scoping before being built rather than being folded into an existing app.
 
 Run standalone: uvicorn benchmarks.tortoise_app.app:application --port 9011
-Served for real benchmark runs by benchmarks/tortoise_vs_mangoo.py.
+Served for real benchmark runs by benchmarks/tortoise_vs_hayavega.py.
 """
 
 import tempfile
@@ -72,7 +72,7 @@ async def posts_json():
 async def echo():
     # Not one of run.py's cross-framework scenarios (see module docstring) --
     # kept only as a plain, DB-free liveness check for wait_until_ready() in
-    # benchmarks/tortoise_vs_mangoo.py, the same role it plays in every other
+    # benchmarks/tortoise_vs_hayavega.py, the same role it plays in every other
     # benchmark app in this directory.
     return {"status": "ok"}
 

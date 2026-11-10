@@ -3,14 +3,14 @@
 A raw ASGI callable, not a framework app -- the point is to add a realistic,
 controllable amount of network-bound latency (an `await asyncio.sleep`, not
 CPU work) without a framework's own request-handling overhead confounding
-the delay it exists to add. Every benchmarked view (Mangoo async, Mangoo
+the delay it exists to add. Every benchmarked view (Hayavega async, Hayavega
 sync/blocking, FastAPI async, FastAPI sync/blocking -- see
 benchmarks/asgi_concurrent_io.py) calls this same upstream identically, so
 it is the one shared, controlled variable behind the "does ASGI's
 concurrent I/O actually help" question.
 
 Run standalone: uvicorn benchmarks.upstream_app.app:application --port 9010
-Delay is configurable via MANGOO_BENCH_UPSTREAM_DELAY_MS (default 40).
+Delay is configurable via HAYAVEGA_BENCH_UPSTREAM_DELAY_MS (default 40).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import os
 
-DELAY_SECONDS = int(os.environ.get("MANGOO_BENCH_UPSTREAM_DELAY_MS", "40")) / 1000
+DELAY_SECONDS = int(os.environ.get("HAYAVEGA_BENCH_UPSTREAM_DELAY_MS", "40")) / 1000
 _BODY = b'{"ok": true}'
 # A declared content-length, for a real server's sake -- uvicorn's h11
 # implementation sends this response chunked on a keep-alive connection

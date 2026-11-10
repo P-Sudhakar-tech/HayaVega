@@ -2,9 +2,9 @@ import io
 import json
 import unittest
 
-from mangoo import api_route, path
-from mangoo.graphql import Schema, graphql_view
-from mangoo.runtime import create_application
+from hayavega import api_route, path
+from hayavega.graphql import Schema, graphql_view
+from hayavega.runtime import create_application
 
 
 def call(application, path_info, method="GET", body=b""):

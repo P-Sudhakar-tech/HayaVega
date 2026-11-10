@@ -7,7 +7,7 @@ to their own generated schema.
 ## Basic usage
 
 ```python
-from mangoo import api_route
+from hayavega import api_route
 
 
 def get_post(request):
@@ -46,7 +46,7 @@ generated document includes.
 ## Naming and versioning the document
 
 ```python
-from mangoo.runtime import create_application
+from hayavega.runtime import create_application
 
 application = create_application(urlpatterns, api_title="My API", api_version="1.0.0")
 ```
@@ -63,7 +63,7 @@ organization can agree on it.
 ## Metrics
 
 ```python
-from mangoo.metrics import MetricsRegistry, metrics_routes
+from hayavega.metrics import MetricsRegistry, metrics_routes
 
 registry = MetricsRegistry()
 application = create_application(urlpatterns, metrics=registry)

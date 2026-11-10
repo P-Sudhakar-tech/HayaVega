@@ -7,7 +7,7 @@ storage side.
 ## Defining a form
 
 ```python
-from mangoo.forms import BooleanField, CharField, EmailField, Form
+from hayavega.forms import BooleanField, CharField, EmailField, Form
 
 
 class SignupForm(Form):
@@ -59,7 +59,7 @@ Override `_convert(raw)` -- it's only called for a non-empty submitted
 value; `Field.clean()` already handles the required/empty case:
 
 ```python
-from mangoo.forms import Field, FieldError
+from hayavega.forms import Field, FieldError
 
 
 class SlugField(Field):
@@ -75,8 +75,8 @@ For simple CRUD, generate a `Form` from an `Entity`'s declared columns
 instead of hand-declaring every field:
 
 ```python
-from mangoo import Entity, Integer, Text, Toggle
-from mangoo.forms import entity_form
+from hayavega import Entity, Integer, Text, Toggle
+from hayavega.forms import entity_form
 
 
 class Product(Entity):

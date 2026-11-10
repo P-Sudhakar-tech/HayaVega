@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mangoo.checks import CheckMessage, _scan_deprecated_usage, run_checks
+from hayavega.checks import CheckMessage, _scan_deprecated_usage, run_checks
 
 
 def _settings(**overrides) -> SimpleNamespace:
@@ -82,9 +82,9 @@ class PendingMigrationCheckTests(unittest.TestCase):
         self.assertEqual(len(matches), 1)
         self.assertEqual(matches[0].level, "error")
 
-    @patch("mangoo.checks.migration_status")
+    @patch("hayavega.checks.migration_status")
     def test_pending_migrations_are_reported_as_a_warning_naming_each_one(self, mock_migration_status):
-        from mangoo.migrations import MigrationStatus
+        from hayavega.migrations import MigrationStatus
 
         mock_migration_status.return_value = [MigrationStatus("0001_initial", True), MigrationStatus("0002_add_index", False)]
         messages = run_checks(_settings())
@@ -99,10 +99,10 @@ class DeprecatedUsageScanTests(unittest.TestCase):
     def test_detects_deprecated_pulse_import(self):
         with tempfile.TemporaryDirectory() as directory:
             base_dir = Path(directory)
-            (base_dir / "views.py").write_text("from mangoo.addons.pulse import PulseBus\n", encoding="utf-8")
+            (base_dir / "views.py").write_text("from hayavega.addons.pulse import PulseBus\n", encoding="utf-8")
             messages = run_checks(_settings(base_dir=base_dir))
             findings = [message for message in messages if "views.py" in message.message]
-            self.assertTrue(any("mangoo.addons.pulse" in message.message for message in findings))
+            self.assertTrue(any("hayavega.addons.pulse" in message.message for message in findings))
             self.assertTrue(any("PulseBus" in message.message for message in findings))
 
     def test_detects_deprecated_pulse_keyword_argument(self):
@@ -115,7 +115,7 @@ class DeprecatedUsageScanTests(unittest.TestCase):
     def test_clean_project_has_no_deprecated_usage_findings(self):
         with tempfile.TemporaryDirectory() as directory:
             base_dir = Path(directory)
-            (base_dir / "urls.py").write_text("from mangoo.addons.signals import SignalBus\ncreate_application(urlpatterns, signals=bus)\n", encoding="utf-8")
+            (base_dir / "urls.py").write_text("from hayavega.addons.signals import SignalBus\ncreate_application(urlpatterns, signals=bus)\n", encoding="utf-8")
             messages = run_checks(_settings(base_dir=base_dir))
             self.assertFalse(any("deprecated" in message.message for message in messages))
 
@@ -143,18 +143,18 @@ class DeprecatedUsageScanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             base_dir = Path(directory)
             (base_dir / "views.py").write_text("PulseBus\n", encoding="utf-8")
-            with patch("mangoo.checks.Path.relative_to", side_effect=ValueError):
+            with patch("hayavega.checks.Path.relative_to", side_effect=ValueError):
                 messages = _scan_deprecated_usage(base_dir)
             self.assertTrue(any("PulseBus" in message.message for message in messages))
 
 
 class CryptoCheckTests(unittest.TestCase):
-    @patch("mangoo.checks.crypto.available", return_value=True)
+    @patch("hayavega.checks.crypto.available", return_value=True)
     def test_no_finding_when_cryptography_is_installed(self, _available):
         messages = run_checks(_settings())
         self.assertFalse(any("cryptography" in message.message for message in messages))
 
-    @patch("mangoo.checks.crypto.available", return_value=False)
+    @patch("hayavega.checks.crypto.available", return_value=False)
     def test_info_finding_when_cryptography_is_not_installed(self, _available):
         messages = run_checks(_settings())
         matches = [message for message in messages if "cryptography" in message.message]
@@ -168,9 +168,9 @@ class RunChecksOrderingTests(unittest.TestCase):
         levels = [message.level for message in messages]
         self.assertEqual(levels, sorted(levels, key=lambda level: {"error": 0, "warning": 1, "info": 2}.get(level, 3)))
 
-    @patch("mangoo.checks._scan_deprecated_usage", return_value=[])
-    @patch("mangoo.checks._pending_migration_checks", return_value=[])
-    @patch("mangoo.checks._crypto_checks", return_value=[])
-    @patch("mangoo.checks._settings_checks", return_value=[])
+    @patch("hayavega.checks._scan_deprecated_usage", return_value=[])
+    @patch("hayavega.checks._pending_migration_checks", return_value=[])
+    @patch("hayavega.checks._crypto_checks", return_value=[])
+    @patch("hayavega.checks._settings_checks", return_value=[])
     def test_a_clean_project_reports_no_issues(self, *_mocks):
         self.assertEqual(run_checks(_settings()), [])

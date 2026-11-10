@@ -3,9 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.i18n import Catalog, LanguageCatalog, _parse_accept_language, catalog_from_settings, resolve_language, translator_for
-from mangoo.request import Request
-from mangoo.templates import render_template
+from hayavega.i18n import Catalog, LanguageCatalog, _parse_accept_language, catalog_from_settings, resolve_language, translator_for
+from hayavega.request import Request
+from hayavega.templates import render_template
 
 
 def _write_catalog(directory: Path, language: str, data: dict) -> None:

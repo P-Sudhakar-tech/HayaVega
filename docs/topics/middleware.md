@@ -51,7 +51,7 @@ class Settings:
 ```
 
 `config/wsgi.py`/`config/asgi.py` already resolve and pass this list for
-you (`mangoo.middleware.load_middleware(settings.middleware)` into
+you (`hayavega.middleware.load_middleware(settings.middleware)` into
 `create_application(..., middleware=...)` /
 `create_asgi_application(..., middleware=...)`).
 
@@ -69,7 +69,7 @@ Middleware runs **after** hardening (trusted-host checks, rate
 limiting, CORS, request-size limits) and **before** the matched view.
 Hardening always runs first and can't be bypassed by a middleware --
 unlike Django, where security middleware is just another entry in the
-same list, Mangoo keeps that layer separate and non-optional on
+same list, Hayavega keeps that layer separate and non-optional on
 purpose.
 
 ## Async

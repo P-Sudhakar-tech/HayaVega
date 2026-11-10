@@ -1,4 +1,4 @@
-"""Benchmark a hardcoded Rust renderer against Mangoo's Python `mangoo.ui`
+"""Benchmark a hardcoded Rust renderer against Hayavega's Python `hayavega.ui`
 component builders, for the specific shape of work an htmx fragment swap
 does: rendering a small, fixed-shape HTML snippet, not a full page.
 
@@ -13,7 +13,7 @@ a real limitation than it was for a whole page. This tests two sizes:
 the benchmark app's 20-item list fragment, and a single-item fragment (the
 more realistic unit of a real htmx "add one item" interaction).
 
-Requires mangoo_native to be built (see hatch_build.py / README.md).
+Requires hayavega_native to be built (see hatch_build.py / README.md).
 
 Usage:
     python benchmarks/native_htmx_fragment.py
@@ -28,11 +28,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 try:
-    from mangoo_native import render_fragment_items
+    from hayavega_native import render_fragment_items
 except ImportError as error:
-    raise SystemExit(f"mangoo_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
+    raise SystemExit(f"hayavega_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
 
-from mangoo.ui import li, ul
+from hayavega.ui import li, ul
 
 _TWENTY_ITEMS = [(f"Post {i}", i * 3) for i in range(20)]
 _ONE_ITEM = [("New item", 0)]

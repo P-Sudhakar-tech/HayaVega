@@ -21,11 +21,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from mangoo.templates import _UNDEFINED, _ForNode, _IfNode, _Path, _RenderState, _resolve_attr, _resolve_chain, _TextNode, _VariableNode, render_template
-from mangoo.templates import _evaluate as evaluate
-from mangoo.templates import _render_if as render_if
+from hayavega.templates import _UNDEFINED, _ForNode, _IfNode, _Path, _RenderState, _resolve_attr, _resolve_chain, _TextNode, _VariableNode, render_template
+from hayavega.templates import _evaluate as evaluate
+from hayavega.templates import _render_if as render_if
 
-_TEMPLATE_DIR = Path(__file__).resolve().parent / "mangoo_app" / "templates"
+_TEMPLATE_DIR = Path(__file__).resolve().parent / "hayavega_app" / "templates"
 _CONTEXT = {"posts": [{"title": f"Post {i}", "views": i * 3} for i in range(20)]}
 
 

@@ -1,9 +1,9 @@
 import unittest
 
-from mangoo.asgi import create_asgi_application
-from mangoo.hardening import HardeningOptions
-from mangoo.testing import WebSocketClosed, WebSocketTestSession, connect_websocket
-from mangoo.websocket import WebSocket, WebSocketDisconnect, websocket_path
+from hayavega.asgi import create_asgi_application
+from hayavega.hardening import HardeningOptions
+from hayavega.testing import WebSocketClosed, WebSocketTestSession, connect_websocket
+from hayavega.websocket import WebSocket, WebSocketDisconnect, websocket_path
 
 
 async def _echo(ws):
@@ -126,7 +126,7 @@ class WebSocketHardeningTests(unittest.IsolatedAsyncioTestCase):
     async def test_rejection_publishes_a_signal(self):
         from threading import Event
 
-        from mangoo.addons.signals import SignalBus
+        from hayavega.addons.signals import SignalBus
 
         bus = SignalBus()
         seen = Event()
@@ -149,7 +149,7 @@ class WebSocketSignalsTests(unittest.IsolatedAsyncioTestCase):
     async def test_connect_and_disconnect_publish_signals(self):
         from threading import Event
 
-        from mangoo.addons.signals import SignalBus
+        from hayavega.addons.signals import SignalBus
 
         bus = SignalBus()
         seen = Event()
@@ -177,7 +177,7 @@ async def _sends_an_unexpected_message_first(scope, receive, send):
 
 class WebSocketTestSessionUnitTests(unittest.IsolatedAsyncioTestCase):
     """Drives ``WebSocketTestSession`` directly against a raw ASGI callable --
-    the client-harness behavior these cover doesn't depend on Mangoo's own
+    the client-harness behavior these cover doesn't depend on Hayavega's own
     websocket dispatcher."""
 
     async def test_entering_the_session_rejects_an_unexpected_first_message_type(self):

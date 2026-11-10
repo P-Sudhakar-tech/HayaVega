@@ -1,11 +1,11 @@
-"""Measure what Mangoo's hypermedia (htmx-style) update pattern actually
+"""Measure what Hayavega's hypermedia (htmx-style) update pattern actually
 saves for a real interaction, versus a full page reload.
 
-This is intentionally Mangoo-only, not a cross-framework comparison:
+This is intentionally Hayavega-only, not a cross-framework comparison:
 FastAPI and Django don't ship a hypermedia runtime out of the box (adding
 one would mean benchmarking a third-party library's overhead, the same
 reasoning benchmarks/README.md gives for excluding GraphQL from the
-cross-framework table). `mangoo.ui`'s `mangoo-ui.js` already implements
+cross-framework table). `hayavega.ui`'s `hayavega-ui.js` already implements
 the real htmx attribute convention (hx-get/hx-target/hx-swap) for
 partial-fragment swaps; what this measures is the server-side cost of
 serving what an hx-get would fetch (GET /posts/fragment, just the <ul>)
@@ -37,9 +37,9 @@ FRAGMENT_SCENARIOS = [
 
 def build_target() -> Target:
     return Target(
-        "Mangoo",
+        "Hayavega",
         9005,
-        [sys.executable, "-m", "waitress", "--host=127.0.0.1", "--port=9005", "--threads=16", "--call", "benchmarks.mangoo_app.app:build_application"],
+        [sys.executable, "-m", "waitress", "--host=127.0.0.1", "--port=9005", "--threads=16", "--call", "benchmarks.hayavega_app.app:build_application"],
         "waitress",
     )
 

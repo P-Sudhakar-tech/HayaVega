@@ -1,5 +1,5 @@
-"""Benchmark a Rust GraphQL lexer+parser (mangoo_native.parse_graphql_document)
-against mangoo.graphql's pure-Python `_tokenize`/`_Parser.parse_document()`,
+"""Benchmark a Rust GraphQL lexer+parser (hayavega_native.parse_graphql_document)
+against hayavega.graphql's pure-Python `_tokenize`/`_Parser.parse_document()`,
 before wiring it in -- per this project's own stated principle: "Benchmark
 each candidate first; schedule only once a measured win justifies it."
 
@@ -9,7 +9,7 @@ and parsing a query string into a parsed structure is a candidate, since
 that step needs zero Python callbacks mid-parse. See
 RUST_CORE_REWRITE_ROADMAP.md's Phase 6 entry.
 
-Requires mangoo_native to be built (see hatch_build.py / README.md).
+Requires hayavega_native to be built (see hatch_build.py / README.md).
 
 Usage:
     python benchmarks/native_graphql_parser.py
@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import timeit
 
-from mangoo.graphql import GraphQLSyntaxError, _FieldNode, _Parser, _tokenize, _VariableDefinition, _VariableRef
+from hayavega.graphql import GraphQLSyntaxError, _FieldNode, _Parser, _tokenize, _VariableDefinition, _VariableRef
 
 try:
-    from mangoo_native import parse_graphql_document as _native_parse_graphql_document
+    from hayavega_native import parse_graphql_document as _native_parse_graphql_document
 except ImportError as error:
-    raise SystemExit(f"mangoo_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
+    raise SystemExit(f"hayavega_native is not built: {error}. See README.md's 'Building the Rust-backed dispatcher' section.") from error
 
 
 _SMALL_QUERY = "{ greeting }"

@@ -7,7 +7,7 @@ a whole view's response.
 ## Using a cache directly
 
 ```python
-from mangoo.cache import InMemoryCache, RedisCache, SqliteCache
+from hayavega.cache import InMemoryCache, RedisCache, SqliteCache
 
 cache = InMemoryCache(max_entries=10_000)  # one process, no dependency
 cache = SqliteCache("cache.sqlite3")  # every process on one machine, no dependency, no server
@@ -23,7 +23,7 @@ serialization.
 local SQLite file -- Redis's actual value (one shared cache instead of
 one per worker) for several WSGI/ASGI worker processes on a single
 machine, without running a separate service. It reuses `db.connect()`,
-the exact connection layer `mangoo.jobs`/`mangoo.migrations` already
+the exact connection layer `hayavega.jobs`/`hayavega.migrations` already
 use, and enables WAL mode so a writer never blocks a reader and vice
 versa. Like `RedisCache`, values are JSON-encoded via `msgspec`, so
 only JSON-safe values round-trip, and a `key_prefix` scopes every key
@@ -49,8 +49,8 @@ class Settings:
 ```
 
 ```python
-from mangoo.cache import cache_from_settings
-from mangoo.conf import load_settings
+from hayavega.cache import cache_from_settings
+from hayavega.conf import load_settings
 
 settings = load_settings()
 cache = cache_from_settings(settings.cache)
@@ -58,18 +58,18 @@ cache = cache_from_settings(settings.cache)
 
 `"in_memory"` accepts `max_entries` (default `10_000`) and
 `default_ttl`; `"sqlite"` accepts `path` (default
-`mangoo_cache.sqlite3`, relative to the process's working directory --
+`hayavega_cache.sqlite3`, relative to the process's working directory --
 pass an absolute path, e.g. `BASE_DIR / "cache.sqlite3"`, for anything
 beyond local experimentation), `default_ttl`, and `key_prefix` (default
-`mangoo:cache:`); `"redis"` accepts `redis_url` (default
+`hayavega:cache:`); `"redis"` accepts `redis_url` (default
 `redis://localhost:6379/0`), `default_ttl`, and `key_prefix` (default
-`mangoo:cache:`) -- the same
+`hayavega:cache:`) -- the same
 `backend_from_settings()` shape [Email](email.md) already uses.
 
 ## Caching a whole view
 
 ```python
-from mangoo.cache import cached_view
+from hayavega.cache import cached_view
 
 
 @cached_view(cache, ttl=60)
@@ -108,26 +108,26 @@ expires, without recomputing.
 
 `RedisCache` talks to a server over the standard `redis` Python
 package, which speaks real RESP on the wire -- so instead of installing
-and running actual Redis, a project can run Mangoo's own built-in
+and running actual Redis, a project can run Hayavega's own built-in
 cache server and point `RedisCache` at that instead, with **no client
 code changes at all**:
 
 ```bash
-mango cacheserver
+hayavega cacheserver
 ```
 
 ```python
-from mangoo.cache import RedisCache
+from hayavega.cache import RedisCache
 
 cache = RedisCache()  # redis://localhost:6379/0 -- cacheserver's own default port
 ```
 
-This is a real, standalone, networked TCP server (`mango cacheserver
+This is a real, standalone, networked TCP server (`hayavega cacheserver
 [--host H] [--port P] [--password PW]`, default `127.0.0.1:6379`,
 matching `RedisCache()`'s own zero-argument default) -- unlike
 `SqliteCache`, it can be reached from **any number of machines**, the
 same way a real Redis instance can: point several app servers at one
-`mango cacheserver` process and they share one cache.
+`hayavega cacheserver` process and they share one cache.
 
 It implements enough of RESP2/RESP3 for `RedisCache` -- `GET`, `SET`
 (`EX`/`PX`), `DEL`, `EXISTS`, `EXPIRE`, `SCAN` (`MATCH`/`COUNT`),
@@ -144,7 +144,7 @@ silently missing:
   `InMemoryCache` already has; data is lost on restart.
 - No `EVAL`/Lua scripting -- `hardening.RedisRateLimiter` needs this
   for its atomic increment-and-expire, so it still needs a real Redis
-  instance; `mango cacheserver` returns a clear error for `EVAL`
+  instance; `hayavega cacheserver` returns a clear error for `EVAL`
   rather than hanging.
 - No multiple numbered databases (`SELECT n` is accepted as a no-op)
   -- use `key_prefix` for isolation, same as `RedisCache`/`SqliteCache`.
@@ -158,7 +158,7 @@ just documented. For more than one machine, bind to a real interface
 and set a password:
 
 ```bash
-mango cacheserver --host 0.0.0.0 --port 6379 --password "$CACHE_PASSWORD"
+hayavega cacheserver --host 0.0.0.0 --port 6379 --password "$CACHE_PASSWORD"
 ```
 
 ```python

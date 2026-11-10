@@ -1,7 +1,7 @@
 import unittest
 
-from mangoo import Entity, Integer, Text, Toggle
-from mangoo.forms import BooleanField, CharField, DecimalField, EmailField, Field, FieldError, Form, IntegerField, entity_form
+from hayavega import Entity, Integer, Text, Toggle
+from hayavega.forms import BooleanField, CharField, DecimalField, EmailField, Field, FieldError, Form, IntegerField, entity_form
 
 
 class _FakeRequest:

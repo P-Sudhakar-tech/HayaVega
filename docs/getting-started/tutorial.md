@@ -1,12 +1,12 @@
 # Your first app: a tiny blog API
 
 This walks through a complete, small feature: a `Post` model, a migration,
-a list endpoint, and a test &mdash; the shape of most real work in Mangoo.
+a list endpoint, and a test &mdash; the shape of most real work in Hayavega.
 
 ## 1. Define a model
 
 ```python title="apps/blog/models.py"
-from mangoo import Entity, Integer, Text
+from hayavega import Entity, Integer, Text
 
 
 class Post(Entity):
@@ -22,19 +22,19 @@ for the full column-type reference.
 ## 2. Generate and apply a migration
 
 ```bash
-python mango.py newmigration blog
-python mango.py applymigrations
+python hayavega.py newmigration blog
+python hayavega.py applymigrations
 ```
 
 This generates a checksummed migration file from `Post`'s columns and
 applies it &mdash; transactionally, so a failed migration never leaves a
-half-applied schema. `python mango.py migrationstatus` shows what's
+half-applied schema. `python hayavega.py migrationstatus` shows what's
 pending.
 
 ## 3. Write a view
 
 ```python title="apps/blog/views.py"
-from mangoo import api_route
+from hayavega import api_route
 from .models import Post
 from .settings_helper import DATABASE  # however your app resolves its DB config
 
@@ -58,7 +58,7 @@ when to reach for `.fetch()` instead).
 ## 4. Wire the routes
 
 ```python title="apps/blog/routes.py"
-from mangoo import api_route
+from hayavega import api_route
 from .views import create_post, list_posts
 
 urlpatterns = [
@@ -74,8 +74,8 @@ schema to maintain.
 
 ```python title="apps/blog/tests.py"
 import unittest
-from mangoo.runtime import create_application
-from mangoo.testing import TestClient
+from hayavega.runtime import create_application
+from hayavega.testing import TestClient
 from .routes import urlpatterns
 
 

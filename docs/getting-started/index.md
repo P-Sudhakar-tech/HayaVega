@@ -1,6 +1,6 @@
 # Getting started
 
-New to Mangoo? Start here.
+New to Hayavega? Start here.
 
 <div class="grid cards" markdown>
 
@@ -8,7 +8,7 @@ New to Mangoo? Start here.
 
     ---
 
-    Get Mangoo installed, with or without the optional Rust native extension.
+    Get Hayavega installed, with or without the optional Rust native extension.
 
     [:material-arrow-right: Installation](installation.md)
 
@@ -30,13 +30,13 @@ New to Mangoo? Start here.
 
 </div>
 
-## What Mangoo assumes you already know
+## What Hayavega assumes you already know
 
-Mangoo borrows deliberately from established, well-understood conventions,
+Hayavega borrows deliberately from established, well-understood conventions,
 so prior experience with a similarly-structured Python web framework
 transfers directly:
 
-- **Project layout**: `mango.py`, `settings.py`, `routes.py`, migrations, and an admin site all work the way you'd expect from a conventional Python web project.
+- **Project layout**: `hayavega.py`, `settings.py`, `routes.py`, migrations, and an admin site all work the way you'd expect from a conventional Python web project.
 - **API documentation**: `api_route`-decorated views generate an OpenAPI schema automatically, the same way many modern API frameworks' route decorators do.
 
 If none of that is familiar yet, the [tutorial](tutorial.md) doesn't assume it &mdash; it starts from a blank project.

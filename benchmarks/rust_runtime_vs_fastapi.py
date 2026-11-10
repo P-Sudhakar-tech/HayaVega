@@ -1,15 +1,15 @@
-"""HTTP-level benchmark: `mangoo.rust_runtime` (`SERVER['ENGINE'] = 'rust'`)
+"""HTTP-level benchmark: `hayavega.rust_runtime` (`SERVER['ENGINE'] = 'rust'`)
 vs. FastAPI on its own idiomatic server (`uvicorn`) -- the direct comparison
 `rust_runtime_vs_wsgi.py` and `run.py` never ran between them: the former
-only compares the Rust runtime against Mangoo's own `waitress` baseline, and
+only compares the Rust runtime against Hayavega's own `waitress` baseline, and
 the latter's cross-framework FastAPI numbers all predate the Rust runtime
-existing, so every published Mangoo-vs-FastAPI table so far used `waitress`,
-not the Rust runtime, as Mangoo's WSGI server. Same apps, same routes, same
-seeded data as `run.py` (`benchmarks/mangoo_app/app.py` and
-`benchmarks/fastapi_app/app.py`); only which server fronts Mangoo differs.
+existing, so every published Hayavega-vs-FastAPI table so far used `waitress`,
+not the Rust runtime, as Hayavega's WSGI server. Same apps, same routes, same
+seeded data as `run.py` (`benchmarks/hayavega_app/app.py` and
+`benchmarks/fastapi_app/app.py`); only which server fronts Hayavega differs.
 
-Scope note (see `src/mangoo/rust_runtime.py` and
-`crates/mangoo-python/src/server.rs` for the full disclosure): the Rust
+Scope note (see `src/hayavega/rust_runtime.py` and
+`crates/hayavega-python/src/server.rs` for the full disclosure): the Rust
 runtime is a synchronous, fixed-thread-pool server, not an async
 `tokio`/`hyper` runtime -- CPython's GIL means async I/O would not let more
 Python view code run concurrently than a thread pool already does. FastAPI
@@ -116,11 +116,11 @@ def main() -> None:
 
     python = sys.executable
     targets = [
-        ("Mangoo (Rust runtime)", [python, str(ROOT / "benchmarks" / "_rust_runtime_target.py")], 9006),
+        ("Hayavega (Rust runtime)", [python, str(ROOT / "benchmarks" / "_rust_runtime_target.py")], 9006),
         ("FastAPI (uvicorn)", [python, "-m", "uvicorn", "benchmarks.fastapi_app.app:application", "--host", "127.0.0.1", "--port", "9002"], 9002),
     ]
 
-    print(f"Benchmark: mangoo.rust_runtime vs FastAPI/uvicorn (duration={args.duration}, concurrency={args.connections})\n")
+    print(f"Benchmark: hayavega.rust_runtime vs FastAPI/uvicorn (duration={args.duration}, concurrency={args.connections})\n")
     all_results: dict[str, dict[str, ScenarioResult]] = {}
     for name, command, port in targets:
         print(f"--- {name} ---")
@@ -133,8 +133,8 @@ def main() -> None:
         print()
 
     if len(all_results) == 2:
-        print("--- Summary (Mangoo Rust runtime vs FastAPI/uvicorn) ---")
-        rust = all_results.get("Mangoo (Rust runtime)", {})
+        print("--- Summary (Hayavega Rust runtime vs FastAPI/uvicorn) ---")
+        rust = all_results.get("Hayavega (Rust runtime)", {})
         fastapi_results = all_results.get("FastAPI (uvicorn)", {})
         for scenario_name, _ in SCENARIOS:
             if scenario_name in rust and scenario_name in fastapi_results:

@@ -45,9 +45,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from mangoo.templates import _UNDEFINED, _BlockNode, _ForNode, _IfNode, _resolve_chain, _TextNode, _VariableNode, render_template
-from mangoo.templates import _evaluate as evaluate
-from mangoo.templates import _truthy as truthy
+from hayavega.templates import _UNDEFINED, _BlockNode, _ForNode, _IfNode, _resolve_chain, _TextNode, _VariableNode, render_template
+from hayavega.templates import _evaluate as evaluate
+from hayavega.templates import _truthy as truthy
 
 
 class _Unsupported(Exception):
@@ -166,7 +166,7 @@ def compile_template(template_name: str, directories: tuple[Path, ...]) -> _Comp
 
 # --- Benchmark 1: the real benchmark suite's page.html (variables + for) ---
 
-_TEMPLATE_DIR = Path(__file__).resolve().parents[0] / "mangoo_app" / "templates"
+_TEMPLATE_DIR = Path(__file__).resolve().parents[0] / "hayavega_app" / "templates"
 _POSTS_CONTEXT = {"posts": [{"title": f"Post {i}", "views": i * 3} for i in range(20)]}
 _PAGE_COMPILED = compile_template("page.html", (_TEMPLATE_DIR,))
 

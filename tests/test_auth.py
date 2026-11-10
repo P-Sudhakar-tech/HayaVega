@@ -9,10 +9,10 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from mangoo import auth as auth_module
-from mangoo import crypto
-from mangoo.audit import audit_events
-from mangoo.auth import (
+from hayavega import auth as auth_module
+from hayavega import crypto
+from hayavega.audit import audit_events
+from hayavega.auth import (
     UserAlreadyExistsError,
     _totp_code,
     authenticate,
@@ -51,7 +51,7 @@ class AuthenticationTests(unittest.TestCase):
         self.assertFalse(verify_password("incorrect-password", encoded))
 
     def test_verify_password_accepts_a_legacy_pbkdf2_hash(self):
-        """Pre-scrypt Mangoo records are `pbkdf2_sha256$<iterations>$<salt>$<key>`
+        """Pre-scrypt Hayavega records are `pbkdf2_sha256$<iterations>$<salt>$<key>`
         -- `verify_password` must still check these so a legacy user can log
         in at all (before `authenticate` upgrades the hash to scrypt)."""
         iterations = 100_000
@@ -91,7 +91,7 @@ class AuthenticationTests(unittest.TestCase):
         create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
         connection = sqlite3.connect(self.database)
         try:
-            connection.execute("UPDATE mangoo_users SET is_active = 0 WHERE username = 'admin'")
+            connection.execute("UPDATE hayavega_users SET is_active = 0 WHERE username = 'admin'")
             connection.commit()
         finally:
             connection.close()
@@ -107,7 +107,7 @@ class AuthenticationTests(unittest.TestCase):
     def _raw_totp_secret(self) -> str:
         connection = sqlite3.connect(self.database)
         try:
-            return connection.execute("SELECT totp_secret FROM mangoo_users WHERE username = 'admin'").fetchone()[0]
+            return connection.execute("SELECT totp_secret FROM hayavega_users WHERE username = 'admin'").fetchone()[0]
         finally:
             connection.close()
 
@@ -135,7 +135,7 @@ class AuthenticationTests(unittest.TestCase):
         code = _totp_code(secret, int(time.time()))
         self.assertIsNone(authenticate(self.database, "admin", PASSWORD, code, secret_key="a-different-secret"))
 
-    @patch("mangoo.auth.crypto.encrypt")
+    @patch("hayavega.auth.crypto.encrypt")
     def test_totp_secret_falls_back_to_plaintext_when_cryptography_is_unavailable(self, encrypt):
         encrypt.side_effect = crypto.EncryptionUnavailableError("cryptography is not installed")
         create_superuser(self.database, "admin", "admin@example.com", PASSWORD)
@@ -174,7 +174,7 @@ class AuthenticationTests(unittest.TestCase):
         legacy_hash = "pbkdf2_sha256${}${}${}".format(iterations, base64.b64encode(salt).decode("ascii"), base64.b64encode(derived_key).decode("ascii"))
         connection = sqlite3.connect(self.database)
         try:
-            connection.execute("UPDATE mangoo_users SET password_hash = ? WHERE username = 'admin'", (legacy_hash,))
+            connection.execute("UPDATE hayavega_users SET password_hash = ? WHERE username = 'admin'", (legacy_hash,))
             connection.commit()
         finally:
             connection.close()
@@ -183,7 +183,7 @@ class AuthenticationTests(unittest.TestCase):
 
         connection = sqlite3.connect(self.database)
         try:
-            stored = connection.execute("SELECT password_hash FROM mangoo_users WHERE username = 'admin'").fetchone()[0]
+            stored = connection.execute("SELECT password_hash FROM hayavega_users WHERE username = 'admin'").fetchone()[0]
         finally:
             connection.close()
         self.assertTrue(stored.startswith("scrypt$"))
@@ -301,7 +301,7 @@ class InitializeAuthDbCachingTests(unittest.TestCase):
 
     def test_a_second_call_against_the_same_database_skips_the_ddl_round_trip(self):
         database = Path(self.temporary_directory.name) / "users.sqlite3"
-        with patch("mangoo.auth._connect", wraps=auth_module._connect) as connect_spy:
+        with patch("hayavega.auth._connect", wraps=auth_module._connect) as connect_spy:
             initialize_auth_db(database)
             initialize_auth_db(database)
         self.assertEqual(connect_spy.call_count, 1)
@@ -309,7 +309,7 @@ class InitializeAuthDbCachingTests(unittest.TestCase):
     def test_a_different_database_gets_its_own_independent_cache_entry(self):
         first = Path(self.temporary_directory.name) / "first.sqlite3"
         second = Path(self.temporary_directory.name) / "second.sqlite3"
-        with patch("mangoo.auth._connect", wraps=auth_module._connect) as connect_spy:
+        with patch("hayavega.auth._connect", wraps=auth_module._connect) as connect_spy:
             initialize_auth_db(first)
             initialize_auth_db(second)
         self.assertEqual(connect_spy.call_count, 2)
@@ -327,7 +327,7 @@ class InitializeAuthDbCachingTests(unittest.TestCase):
 
 class SchemaBackfillTests(unittest.TestCase):
     """`initialize_auth_db` upgrades a pre-existing SQLite schema in place
-    (columns added by later Mangoo releases) via `ALTER TABLE ... ADD COLUMN`,
+    (columns added by later Hayavega releases) via `ALTER TABLE ... ADD COLUMN`,
     instead of assuming every database was created fresh by the current
     schema."""
 
@@ -341,7 +341,7 @@ class SchemaBackfillTests(unittest.TestCase):
         try:
             connection.execute(
                 """
-                CREATE TABLE mangoo_users (
+                CREATE TABLE hayavega_users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT NOT NULL UNIQUE,
                     email TEXT NOT NULL UNIQUE,
@@ -360,7 +360,7 @@ class SchemaBackfillTests(unittest.TestCase):
 
         connection = sqlite3.connect(self.database)
         try:
-            columns = {row[1] for row in connection.execute("PRAGMA table_info(mangoo_users)")}
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(hayavega_users)")}
         finally:
             connection.close()
         self.assertTrue({"failed_attempts", "locked_until", "totp_secret", "totp_enabled", "email_verified"} <= columns)
@@ -373,7 +373,7 @@ class SchemaBackfillTests(unittest.TestCase):
         try:
             connection.execute(
                 """
-                CREATE TABLE mangoo_users (
+                CREATE TABLE hayavega_users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT NOT NULL UNIQUE,
                     email TEXT NOT NULL UNIQUE,
@@ -391,9 +391,9 @@ class SchemaBackfillTests(unittest.TestCase):
             )
             connection.execute(
                 """
-                CREATE TABLE mangoo_sessions (
+                CREATE TABLE hayavega_sessions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL REFERENCES mangoo_users(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES hayavega_users(id) ON DELETE CASCADE,
                     token_hash TEXT NOT NULL UNIQUE,
                     expires_at INTEGER NOT NULL,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -408,7 +408,7 @@ class SchemaBackfillTests(unittest.TestCase):
 
         connection = sqlite3.connect(self.database)
         try:
-            columns = {row[1] for row in connection.execute("PRAGMA table_info(mangoo_sessions)")}
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(hayavega_sessions)")}
         finally:
             connection.close()
         self.assertTrue({"ip_address", "user_agent"} <= columns)
@@ -420,7 +420,7 @@ class SchemaBackfillTests(unittest.TestCase):
 
 class SessionSweepTests(unittest.TestCase):
     """`authenticate_session`/`list_sessions` no longer delete expired
-    `mangoo_sessions` rows on every call -- only at most once per
+    `hayavega_sessions` rows on every call -- only at most once per
     `auth_module._SESSION_SWEEP_INTERVAL_SECONDS` per database, since the
     SELECT each one runs already filters on `expires_at > ?` itself; the
     physical delete is housekeeping, not a correctness dependency."""
@@ -452,7 +452,7 @@ class SessionSweepTests(unittest.TestCase):
         authenticate_session(self.database, token)
         connection = auth_module._connect(self.database)
         try:
-            still_present = connection.execute("SELECT 1 FROM mangoo_sessions WHERE token_hash = ?", (token_hash,)).fetchone()
+            still_present = connection.execute("SELECT 1 FROM hayavega_sessions WHERE token_hash = ?", (token_hash,)).fetchone()
         finally:
             connection.close()
         self.assertIsNotNone(still_present, "the row should still physically exist within the sweep interval")
@@ -461,7 +461,7 @@ class SessionSweepTests(unittest.TestCase):
         authenticate_session(self.database, token)
         connection = auth_module._connect(self.database)
         try:
-            gone = connection.execute("SELECT 1 FROM mangoo_sessions WHERE token_hash = ?", (token_hash,)).fetchone()
+            gone = connection.execute("SELECT 1 FROM hayavega_sessions WHERE token_hash = ?", (token_hash,)).fetchone()
         finally:
             connection.close()
         self.assertIsNone(gone, "the row should be swept once the interval has elapsed")

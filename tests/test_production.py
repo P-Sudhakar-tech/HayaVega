@@ -4,9 +4,9 @@ from unittest.mock import patch
 
 from test_hardening import call
 
-from mangoo import health_routes
-from mangoo.production import ProductionConfigurationError, validate_production
-from mangoo.runtime import create_application
+from hayavega import health_routes
+from hayavega.production import ProductionConfigurationError, validate_production
+from hayavega.runtime import create_application
 
 
 class ProductionTests(unittest.TestCase):
@@ -29,7 +29,7 @@ class ProductionTests(unittest.TestCase):
         self.assertEqual(ready_body, b'{"status":"ok","database":"ok"}')
 
     def test_readiness_reports_unavailable_when_the_database_connection_fails(self):
-        with patch("mangoo.production.connect", side_effect=RuntimeError("connection refused")):
+        with patch("hayavega.production.connect", side_effect=RuntimeError("connection refused")):
             application = create_application(health_routes(":memory:"))
             ready, ready_body = call(application, "/readyz")
         self.assertTrue(ready["status"].startswith("503"))

@@ -1,4 +1,4 @@
-from mangoo import Response
+from hayavega import Response
 
 
 def index(request):

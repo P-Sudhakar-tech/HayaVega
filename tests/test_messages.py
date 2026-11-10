@@ -1,7 +1,7 @@
 import unittest
 
-from mangoo.messages import INFO, MESSAGES_COOKIE_NAME, SUCCESS, add_message, consume_messages
-from mangoo.response import Response
+from hayavega.messages import INFO, MESSAGES_COOKIE_NAME, SUCCESS, add_message, consume_messages
+from hayavega.response import Response
 
 
 class _FakeRequest:

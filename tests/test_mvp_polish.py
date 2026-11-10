@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo import Response, TestClient, path, render_template, static_routes
-from mangoo.runtime import create_application
+from hayavega import Response, TestClient, path, render_template, static_routes
+from hayavega.runtime import create_application
 
 
 class MvpPolishTests(unittest.TestCase):
@@ -75,7 +75,7 @@ class MvpPolishTests(unittest.TestCase):
             raise ValueError("db password is hunter2 at host 10.0.0.5")
 
         app = create_application([path("broken", broken)])
-        with self.assertLogs("mangoo.runtime", "ERROR"):
+        with self.assertLogs("hayavega.runtime", "ERROR"):
             response = TestClient(app).get("/broken")
         self.assertEqual(response.status_code, 500)
         self.assertIn("ValueError", response.text)
@@ -85,13 +85,13 @@ class MvpPolishTests(unittest.TestCase):
         self.assertNotIn(__file__, response.text)
 
     def test_api_route_error_returns_a_json_envelope_not_html(self):
-        from mangoo import api_route
+        from hayavega import api_route
 
         def broken(request):
             raise ValueError("db password is hunter2 at host 10.0.0.5")
 
         app = create_application([api_route("broken", broken)])
-        with self.assertLogs("mangoo.runtime", "ERROR"):
+        with self.assertLogs("hayavega.runtime", "ERROR"):
             response = TestClient(app).get("/broken")
         self.assertEqual(response.status_code, 500)
         body = response.json()

@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import mangoo.db as db_module
-from mangoo.db import (
+import hayavega.db as db_module
+from hayavega.db import (
     Connection,
     DatabaseConfigurationError,
     DatabaseDriverError,
@@ -37,15 +37,15 @@ class DatabaseTests(unittest.TestCase):
             connection = connect({"ENGINE": "sqlite3", "NAME": Path(directory) / "data.sqlite3"})
             try:
                 connection.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, name TEXT)")
-                connection.execute("INSERT INTO sample (name) VALUES (?)", ("Mangoo",))
+                connection.execute("INSERT INTO sample (name) VALUES (?)", ("Hayavega",))
                 connection.commit()
-                self.assertEqual(connection.execute("SELECT name FROM sample").fetchone()["name"], "Mangoo")
+                self.assertEqual(connection.execute("SELECT name FROM sample").fetchone()["name"], "Hayavega")
             finally:
                 connection.close()
 
     def test_unknown_database_engine_is_rejected(self):
         with self.assertRaisesRegex(DatabaseConfigurationError, "Unsupported"):
-            connect({"ENGINE": "oracle", "NAME": "mangoo"})
+            connect({"ENGINE": "oracle", "NAME": "hayavega"})
 
     def test_user_id_definition_covers_every_supported_engine(self):
         self.assertEqual(user_id_definition("sqlite3"), "INTEGER PRIMARY KEY AUTOINCREMENT")
@@ -243,9 +243,9 @@ class WalModeTests(unittest.TestCase):
         connection = connect(self.database)
         try:
             connection.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, name TEXT)")
-            connection.execute("INSERT INTO sample (name) VALUES (?)", ("Mangoo",))
+            connection.execute("INSERT INTO sample (name) VALUES (?)", ("Hayavega",))
             connection.commit()
-            self.assertEqual(connection.execute("SELECT name FROM sample").fetchone()["name"], "Mangoo")
+            self.assertEqual(connection.execute("SELECT name FROM sample").fetchone()["name"], "Hayavega")
         finally:
             connection.close()
 
@@ -270,10 +270,10 @@ class WalModeTests(unittest.TestCase):
         (DatabaseConfigurationError for an unknown engine) whether or not
         the flag is on, proving the sqlite-only branch guard is real."""
         with self.assertRaises(DatabaseConfigurationError):
-            connect({"ENGINE": "oracle", "NAME": "mangoo"})
+            connect({"ENGINE": "oracle", "NAME": "hayavega"})
         enable_wal_mode()
         with self.assertRaises(DatabaseConfigurationError):
-            connect({"ENGINE": "oracle", "NAME": "mangoo"})
+            connect({"ENGINE": "oracle", "NAME": "hayavega"})
 
 
 class ReadonlyFallbackTests(unittest.TestCase):
@@ -288,9 +288,9 @@ class ReadonlyFallbackTests(unittest.TestCase):
         self.addCleanup(disable_readonly_connection_pooling)
 
     def test_non_sqlite_engine_delegates_straight_to_connect(self):
-        config = {"ENGINE": "postgres", "NAME": "mangoo"}
+        config = {"ENGINE": "postgres", "NAME": "hayavega"}
         fake_connection = object()
-        with mock.patch("mangoo.db.connect", return_value=fake_connection) as connect_mock:
+        with mock.patch("hayavega.db.connect", return_value=fake_connection) as connect_mock:
             result = connect_readonly(config)
         connect_mock.assert_called_once_with(config)
         self.assertIs(result, fake_connection)
@@ -446,7 +446,7 @@ class StaleConnectionReconnectTests(unittest.TestCase):
         connection.pooled = True
         fresh_raw = _FlakyRaw(fail_times=0, exc=stale)
 
-        with mock.patch("mangoo.db._open", return_value=Connection(fresh_raw, "mysql", config=connection._config)) as opened:
+        with mock.patch("hayavega.db._open", return_value=Connection(fresh_raw, "mysql", config=connection._config)) as opened:
             result = connection.execute("SELECT 1").fetchone()
 
         opened.assert_called_once_with(connection._config)
@@ -462,7 +462,7 @@ class StaleConnectionReconnectTests(unittest.TestCase):
         connection.pooled = True
         fresh_raw = _FlakyRaw(fail_times=0, exc=stale)
 
-        with mock.patch("mangoo.db._open", return_value=Connection(fresh_raw, "mysql", config=connection._config)):
+        with mock.patch("hayavega.db._open", return_value=Connection(fresh_raw, "mysql", config=connection._config)):
             connection.execute("SELECT 1")
 
         self.assertIs(connection.raw, fresh_raw)
@@ -475,7 +475,7 @@ class StaleConnectionReconnectTests(unittest.TestCase):
         connection = Connection(flaky_raw, "mysql", config={"ENGINE": "mysql", "NAME": "x"})
         connection.pooled = True
 
-        with mock.patch("mangoo.db._open") as opened:
+        with mock.patch("hayavega.db._open") as opened:
             with self.assertRaises(pymysql.err.ProgrammingError):
                 connection.execute("SELECT 1")
 
@@ -490,7 +490,7 @@ class StaleConnectionReconnectTests(unittest.TestCase):
         connection = Connection(flaky_raw, "mysql", config={"ENGINE": "mysql", "NAME": "x"})
         connection.pooled = False
 
-        with mock.patch("mangoo.db._open") as opened:
+        with mock.patch("hayavega.db._open") as opened:
             with self.assertRaises(pymysql.err.OperationalError):
                 connection.execute("SELECT 1")
 
@@ -507,7 +507,7 @@ class StaleConnectionReconnectTests(unittest.TestCase):
         connection.pooled = True
         still_stale_raw = _FlakyRaw(fail_times=99, exc=stale)
 
-        with mock.patch("mangoo.db._open", return_value=Connection(still_stale_raw, "mysql", config=connection._config)) as opened:
+        with mock.patch("hayavega.db._open", return_value=Connection(still_stale_raw, "mysql", config=connection._config)) as opened:
             with self.assertRaises(pymysql.err.OperationalError):
                 connection.execute("SELECT 1")
 
@@ -597,17 +597,17 @@ class SerializedConnectionTests(unittest.TestCase):
         self.assertFalse(any(thread.is_alive() for thread in threads), "a worker thread never completed -- possible deadlock")
         self.assertEqual(errors, [])
 
-    def test_uses_the_native_implementation_when_mangoo_native_is_built(self):
-        from mangoo.db import _NativeSerializedConnection
+    def test_uses_the_native_implementation_when_hayavega_native_is_built(self):
+        from hayavega.db import _NativeSerializedConnection
 
         if _NativeSerializedConnection is None:
-            self.skipTest("mangoo_native is not built in this environment")
+            self.skipTest("hayavega_native is not built in this environment")
         serialized = SerializedConnection(self.database)
         self.addCleanup(serialized.close)
         self.assertIsInstance(serialized._impl, _NativeSerializedConnection)
 
-    def test_falls_back_to_pure_python_when_mangoo_native_is_unavailable(self):
-        with mock.patch("mangoo.db._NativeSerializedConnection", None):
+    def test_falls_back_to_pure_python_when_hayavega_native_is_unavailable(self):
+        with mock.patch("hayavega.db._NativeSerializedConnection", None):
             serialized = SerializedConnection(self.database)
             self.addCleanup(serialized.close)
             self.assertEqual(type(serialized._impl).__name__, "_FallbackSerializedConnection")
@@ -619,7 +619,7 @@ class SerializedConnectionTests(unittest.TestCase):
         -- the native implementation is what SerializedConnection actually
         uses in this environment, so without forcing the fallback here,
         this specific implementation's own closed-check never runs."""
-        with mock.patch("mangoo.db._NativeSerializedConnection", None):
+        with mock.patch("hayavega.db._NativeSerializedConnection", None):
             serialized = SerializedConnection(self.database)
             serialized.close()
             with self.assertRaises(RuntimeError):
@@ -627,13 +627,13 @@ class SerializedConnectionTests(unittest.TestCase):
 
 
 class NativeSerializedConnectionImportFallbackTests(unittest.TestCase):
-    """mangoo.db's `try: import mangoo_native ... except ImportError:
+    """hayavega.db's `try: import hayavega_native ... except ImportError:
     _NativeSerializedConnection = None` only runs at module import time.
-    `test_falls_back_to_pure_python_when_mangoo_native_is_unavailable` above
+    `test_falls_back_to_pure_python_when_hayavega_native_is_unavailable` above
     mocks the already-bound attribute, which never executes those two lines.
 
-    Reaching them for real means re-executing the module with `mangoo_native`
-    made unimportable -- but `importlib.reload(mangoo.db)` would do that *in
+    Reaching them for real means re-executing the module with `hayavega_native`
+    made unimportable -- but `importlib.reload(hayavega.db)` would do that *in
     place*, redefining every class in the live module (including
     `DatabaseDriverError`, `Connection`, ...) as a brand-new class object.
     Every other test in this process that imported those names before the
@@ -641,28 +641,28 @@ class NativeSerializedConnectionImportFallbackTests(unittest.TestCase):
     (DatabaseDriverError, ...)` fail even when the right error is raised,
     since it's no longer the *same* class the module now raises. So instead
     of reloading the shared module, a throwaway module object is loaded from
-    the same source file under a different name -- `mangoo.db` itself, and
+    the same source file under a different name -- `hayavega.db` itself, and
     everything already imported from it, is never touched."""
 
-    def test_module_level_import_falls_back_when_mangoo_native_is_unavailable(self):
-        original = sys.modules.get("mangoo_native", None)
-        sys.modules["mangoo_native"] = None  # sentinel: forces ImportError on import
+    def test_module_level_import_falls_back_when_hayavega_native_is_unavailable(self):
+        original = sys.modules.get("hayavega_native", None)
+        sys.modules["hayavega_native"] = None  # sentinel: forces ImportError on import
         try:
-            spec = importlib.util.spec_from_file_location("mangoo._db_reimport_test", db_module.__file__)
+            spec = importlib.util.spec_from_file_location("hayavega._db_reimport_test", db_module.__file__)
             fresh_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(fresh_module)
             self.assertIsNone(fresh_module._NativeSerializedConnection)
         finally:
             if original is None:
-                sys.modules.pop("mangoo_native", None)
+                sys.modules.pop("hayavega_native", None)
             else:
-                sys.modules["mangoo_native"] = original
+                sys.modules["hayavega_native"] = original
 
 
 class DriverImportFallbackTests(unittest.TestCase):
     """`_open()`'s postgres/mysql branches import their driver lazily (inside
     the function, not at module load) and raise `DatabaseDriverError` if it
-    isn't installed -- so, unlike the `mangoo_native` cases above, forcing
+    isn't installed -- so, unlike the `hayavega_native` cases above, forcing
     this only needs `sys.modules` patched for the one call, no reload."""
 
     def _force_missing(self, module_name):
@@ -681,7 +681,7 @@ class DriverImportFallbackTests(unittest.TestCase):
         forced = self._force_missing("psycopg")
         try:
             with self.assertRaisesRegex(DatabaseDriverError, "psycopg"):
-                connect({"ENGINE": "postgresql", "NAME": "mangoo"})
+                connect({"ENGINE": "postgresql", "NAME": "hayavega"})
         finally:
             self._restore(forced)
 
@@ -689,7 +689,7 @@ class DriverImportFallbackTests(unittest.TestCase):
         forced = self._force_missing("pymysql")
         try:
             with self.assertRaisesRegex(DatabaseDriverError, "pymysql"):
-                connect({"ENGINE": "mysql", "NAME": "mangoo"})
+                connect({"ENGINE": "mysql", "NAME": "hayavega"})
         finally:
             self._restore(forced)
 

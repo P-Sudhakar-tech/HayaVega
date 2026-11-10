@@ -3,12 +3,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.admin import ModelAdmin, _handle_bulk_action, admin_routes
-from mangoo.audit import audit_events
-from mangoo.auth import create_session, create_superuser, create_user
-from mangoo.models import Entity, Integer, Text, Toggle
-from mangoo.runtime import create_application
-from mangoo.testing import TestClient
+from hayavega.admin import ModelAdmin, _handle_bulk_action, admin_routes
+from hayavega.audit import audit_events
+from hayavega.auth import create_session, create_superuser, create_user
+from hayavega.models import Entity, Integer, Text, Toggle
+from hayavega.runtime import create_application
+from hayavega.testing import TestClient
 
 
 class Product(Entity):
@@ -19,7 +19,7 @@ class Product(Entity):
 
 def _csrf_from(response) -> tuple[str, str]:
     token = re.search(r"name='csrf_token' value='([^']*)'", response.text).group(1)
-    cookie_value = re.search(r"mangoo_csrf=([^;]*)", response.headers.get("Set-Cookie", "")).group(1)
+    cookie_value = re.search(r"hayavega_csrf=([^;]*)", response.headers.get("Set-Cookie", "")).group(1)
     return token, cookie_value
 
 
@@ -43,7 +43,7 @@ class ModelAdminSetup(unittest.TestCase):
     def create_product(self, **fields) -> int:
         get_response = self.client.get("/admin/product/new", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         response = self.client.post("/admin/product/new", form_data={"csrf_token": token, **fields}, headers=headers)
         return int(response.headers["Location"].rsplit("/", 1)[1])
 
@@ -88,7 +88,7 @@ class CreateTests(ModelAdminSetup):
     def test_missing_required_field_is_a_validation_error_not_a_crash(self):
         get_response = self.client.get("/admin/product/new", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         response = self.client.post("/admin/product/new", form_data={"csrf_token": token, "price": "5"}, headers=headers)
         self.assertEqual(response.status_code, 400)
         self.assertIn("required", response.text)
@@ -96,7 +96,7 @@ class CreateTests(ModelAdminSetup):
     def test_malformed_integer_is_a_validation_error_not_a_crash(self):
         get_response = self.client.get("/admin/product/new", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         response = self.client.post("/admin/product/new", form_data={"csrf_token": token, "name": "x", "price": "not-a-number"}, headers=headers)
         self.assertEqual(response.status_code, 400)
         self.assertIn("valid value", response.text)
@@ -114,7 +114,7 @@ class PaginationTests(ModelAdminSetup):
         for i in range(5):
             get_response = client.get("/admin/product/new", headers=self.bearer(self.admin_token))
             token, cookie_value = _csrf_from(get_response)
-            headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+            headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
             client.post("/admin/product/new", form_data={"csrf_token": token, "name": f"item{i}", "price": str(i)}, headers=headers)
 
         page1 = client.get("/admin/product", headers=self.bearer(self.admin_token))
@@ -142,7 +142,7 @@ class UpdateAndDeleteTests(ModelAdminSetup):
         record_id = self.create_product(name="Widget", price="10")
         get_response = self.client.get(f"/admin/product/{record_id}", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         self.client.post(f"/admin/product/{record_id}", form_data={"csrf_token": token, "name": "Widget2", "price": "20"}, headers=headers)
 
         detail = self.client.get(f"/admin/product/{record_id}", headers=self.bearer(self.admin_token))
@@ -154,7 +154,7 @@ class UpdateAndDeleteTests(ModelAdminSetup):
         record_id = self.create_product(name="Widget", price="10")
         get_response = self.client.get(f"/admin/product/{record_id}", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         self.client.post(f"/admin/product/{record_id}", form_data={"csrf_token": token, "name": "Widget", "price": "10"}, headers=headers)
         events = [e for e in audit_events(self.database) if e["event_type"] == "admin.product.updated"]
         self.assertEqual(events, [])
@@ -163,7 +163,7 @@ class UpdateAndDeleteTests(ModelAdminSetup):
         record_id = self.create_product(name="Widget", price="10")
         get_response = self.client.get(f"/admin/product/{record_id}", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         self.client.post(f"/admin/product/{record_id}", form_data={"csrf_token": token, "name": "Widget2", "price": "10"}, headers=headers)
         detail = self.client.get(f"/admin/product/{record_id}", headers=self.bearer(self.admin_token))
         self.assertIn("admin.product.updated", detail.text)
@@ -173,7 +173,7 @@ class UpdateAndDeleteTests(ModelAdminSetup):
         record_id = self.create_product(name="Widget", price="10")
         get_response = self.client.get(f"/admin/product/{record_id}", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         response = self.client.post(f"/admin/product/{record_id}/delete", form_data={"csrf_token": token}, headers=headers)
         self.assertEqual(response.status_code, 303)
 
@@ -204,7 +204,7 @@ class UpdateAndDeleteTests(ModelAdminSetup):
         record_id = self.create_product(name="Widget", price="10")
         get_response = self.client.get(f"/admin/product/{record_id}", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         response = self.client.post(f"/admin/product/{record_id}", form_data={"csrf_token": token, "name": "x", "price": "nope"}, headers=headers)
         self.assertEqual(response.status_code, 400)
         self.assertIn("valid value", response.text)
@@ -214,7 +214,7 @@ class SignalsIntegrationTests(ModelAdminSetup):
     def test_model_admin_actions_publish_admin_action_events(self):
         from threading import Event
 
-        from mangoo.addons.signals import SignalBus
+        from hayavega.addons.signals import SignalBus
 
         bus = SignalBus()
         actions = []
@@ -231,7 +231,7 @@ class SignalsIntegrationTests(ModelAdminSetup):
 
         get_response = client.get("/admin/product/new", headers=self.bearer(self.admin_token))
         token, cookie_value = _csrf_from(get_response)
-        headers = {**self.bearer(self.admin_token), "Cookie": f"mangoo_csrf={cookie_value}"}
+        headers = {**self.bearer(self.admin_token), "Cookie": f"hayavega_csrf={cookie_value}"}
         client.post("/admin/product/new", form_data={"csrf_token": token, "name": "Widget", "price": "10"}, headers=headers)
         client.get("/admin/product", headers=self.bearer(self.admin_token))
 
@@ -243,22 +243,22 @@ class SignalsIntegrationTests(ModelAdminSetup):
 class CsrfProtectionTests(ModelAdminSetup):
     def test_cookie_session_without_csrf_token_is_rejected(self):
         token = create_session(self.database, self.admin_user)
-        response = self.client.post("/admin/product/new", form_data={"name": "x", "price": "1"}, headers={"Cookie": f"mangoo_session={token}"})
+        response = self.client.post("/admin/product/new", form_data={"name": "x", "price": "1"}, headers={"Cookie": f"hayavega_session={token}"})
         self.assertEqual(response.status_code, 403)
 
     def test_cookie_session_with_wrong_csrf_token_is_rejected(self):
         token = create_session(self.database, self.admin_user)
-        get_response = self.client.get("/admin/product/new", headers={"Cookie": f"mangoo_session={token}"})
+        get_response = self.client.get("/admin/product/new", headers={"Cookie": f"hayavega_session={token}"})
         _, cookie_value = _csrf_from(get_response)
-        headers = {"Cookie": f"mangoo_session={token}; mangoo_csrf={cookie_value}"}
+        headers = {"Cookie": f"hayavega_session={token}; hayavega_csrf={cookie_value}"}
         response = self.client.post("/admin/product/new", form_data={"csrf_token": "wrong", "name": "x", "price": "1"}, headers=headers)
         self.assertEqual(response.status_code, 403)
 
     def test_cookie_session_with_correct_csrf_token_succeeds(self):
         token = create_session(self.database, self.admin_user)
-        get_response = self.client.get("/admin/product/new", headers={"Cookie": f"mangoo_session={token}"})
+        get_response = self.client.get("/admin/product/new", headers={"Cookie": f"hayavega_session={token}"})
         csrf, cookie_value = _csrf_from(get_response)
-        headers = {"Cookie": f"mangoo_session={token}; mangoo_csrf={cookie_value}"}
+        headers = {"Cookie": f"hayavega_session={token}; hayavega_csrf={cookie_value}"}
         response = self.client.post("/admin/product/new", form_data={"csrf_token": csrf, "name": "x", "price": "1"}, headers=headers)
         self.assertEqual(response.status_code, 303)
 
@@ -432,7 +432,7 @@ class BulkActionsTests(unittest.TestCase):
         view's own ``POST`` branch, which already guarantees the method --
         its own method guard is otherwise unreachable through routing, so
         it's called directly here with a non-POST request."""
-        from mangoo.request import Request
+        from hayavega.request import Request
 
         request = Request(method="GET", path="/admin/product", query_params={}, body=b"", headers={})
         response = _handle_bulk_action(request, self.database, ModelAdmin(Product, actions={"deactivate": lambda records: None}), "admin/product", lambda *a, **k: None)

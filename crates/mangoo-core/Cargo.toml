@@ -1,7 +1,0 @@
-[package]
-name = "mangoo-core"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-name = "mangoo_core"

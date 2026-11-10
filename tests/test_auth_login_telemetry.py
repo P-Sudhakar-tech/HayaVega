@@ -4,11 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.audit import audit_events
-from mangoo.auth import authenticate, create_session, create_user, list_sessions
-from mangoo.auth_api import auth_routes
-from mangoo.hardening import HardeningOptions, is_trusted_proxy_source, parse_trusted_proxy_networks, resolve_client_ip
-from mangoo.runtime import create_application
+from hayavega.audit import audit_events
+from hayavega.auth import authenticate, create_session, create_user, list_sessions
+from hayavega.auth_api import auth_routes
+from hayavega.hardening import HardeningOptions, is_trusted_proxy_source, parse_trusted_proxy_networks, resolve_client_ip
+from hayavega.runtime import create_application
 
 PASSWORD = "Correct-Horse-7!"
 

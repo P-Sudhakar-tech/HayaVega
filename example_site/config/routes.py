@@ -1,8 +1,8 @@
-from mangoo import Response, admin_routes, api_route, path, static_routes
-from mangoo.auth_api import auth_routes
-from mangoo.conf import load_settings
-from mangoo.graphql import Schema, graphql_view
-from mangoo.ui import Alert, Button, Card, Page, div, li, ui_routes, ul
+from hayavega import Response, admin_routes, api_route, path, static_routes
+from hayavega.auth_api import auth_routes
+from hayavega.conf import load_settings
+from hayavega.graphql import Schema, graphql_view
+from hayavega.ui import Alert, Button, Card, Page, div, li, ui_routes, ul
 
 from .settings import LANDING_PAGE
 
@@ -14,13 +14,13 @@ def home(request):
 
 
 def health(request):
-    return {"status": "ok", "service": "Mangoo REST API"}
+    return {"status": "ok", "service": "Hayavega REST API"}
 
 
-schema = Schema(query={"greeting": lambda request: "Hello from Mangoo GraphQL"})
+schema = Schema(query={"greeting": lambda request: "Hello from Hayavega GraphQL"})
 
-# A small anonymous demo of mangoo.ui: server-rendered components and
-# mangoo-ui.js hypermedia interactivity (hx-get/hx-target/hx-swap), no
+# A small anonymous demo of hayavega.ui: server-rendered components and
+# hayavega-ui.js hypermedia interactivity (hx-get/hx-target/hx-swap), no
 # JavaScript build step. It's anonymous on purpose (no login), so it
 # doesn't exercise csrf_protect -- see tests/test_ui_hypermedia.py for the
 # CSRF-protected, cookie-authenticated version of the hypermedia pattern.
@@ -33,15 +33,15 @@ def _items_fragment():
 
 def ui_demo(request):
     body = Page(
-        "Mangoo UI demo",
+        "Hayavega UI demo",
         Card(
             "Try it",
-            Alert("This page is server-rendered mangoo.ui components; the list below updates via mangoo-ui.js without a page reload.", variant="info"),
+            Alert("This page is server-rendered hayavega.ui components; the list below updates via hayavega-ui.js without a page reload.", variant="info"),
             Button("Add an item", hx_post="/ui-demo/items", hx_target="#items-wrapper"),
             div(_items_fragment(), id="items-wrapper"),
         ),
-        stylesheets=["/mangoo-ui/mangoo-ui.css"],
-        scripts=["/mangoo-ui/mangoo-ui.js"],
+        stylesheets=["/hayavega-ui/hayavega-ui.css"],
+        scripts=["/hayavega-ui/hayavega-ui.js"],
     )
     return Response(body)
 

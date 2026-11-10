@@ -5,10 +5,10 @@ from pathlib import Path
 from threading import Event as ThreadingEvent
 from unittest.mock import patch
 
-from mangoo import Decimal, Entity, Integer, Text, Timestamp, Toggle
-from mangoo.addons.signals import SignalBus
-from mangoo.models import EntityError, MissingEntityError
-from mangoo.models import connect_readonly as models_connect_readonly
+from hayavega import Decimal, Entity, Integer, Text, Timestamp, Toggle
+from hayavega.addons.signals import SignalBus
+from hayavega.models import EntityError, MissingEntityError
+from hayavega.models import connect_readonly as models_connect_readonly
 
 
 def _wait(flag: ThreadingEvent, message: str) -> None:
@@ -61,7 +61,7 @@ class ModelSelectionTests(unittest.TestCase):
         for a second connection and a CREATE TABLE IF NOT EXISTS round trip
         once the table is already known to exist in this process."""
         self.products.append(name="Notebook", price=9.5, published=True, stock=10)
-        with patch("mangoo.models.connect_readonly", wraps=models_connect_readonly) as spy:
+        with patch("hayavega.models.connect_readonly", wraps=models_connect_readonly) as spy:
             Product.collection(self.database).browse().arrange("id").fetch()
             Product.collection(self.database).browse().arrange("id").fetch()
         self.assertEqual(spy.call_count, 2, "each fetch should open exactly one read-only connection once the table is already prepared")

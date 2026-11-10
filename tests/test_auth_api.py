@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.auth import create_superuser
-from mangoo.auth_api import auth_routes
-from mangoo.runtime import create_application
+from hayavega.auth import create_superuser
+from hayavega.auth_api import auth_routes
+from hayavega.runtime import create_application
 
 PASSWORD = "Correct-Horse-7!"
 
@@ -64,7 +64,7 @@ class AuthenticationApiTests(unittest.TestCase):
         """`auth_routes` without an explicit `notify=` falls back to
         `log_mail_notifier`, which only logs -- no mail provider configured
         out of the box."""
-        with self.assertLogs("mangoo.auth.mail", level="INFO") as captured_logs:
+        with self.assertLogs("hayavega.auth.mail", level="INFO") as captured_logs:
             captured, _ = call(self.application, "/api/auth/password-reset/request", "POST", {"username": "admin"})
         self.assertEqual(captured["status"], "202 OK")
         self.assertIn("password_reset", captured_logs.output[0])

@@ -12,7 +12,7 @@ full writeup).
   mistake in this setup -- documented, same treatment this repo already
   gives gunicorn's Windows limitation. Usable via WSL/Linux/macOS if a
   contributor wants that deeper view (it can also attribute memory to
-  mangoo_native's Rust code, which pure-Python tools cannot).
+  hayavega_native's Rust code, which pure-Python tools cannot).
 
 - memory_profiler's @profile samples process RSS per source line. For a
   tight loop like a template render, CPython's own reference counting
@@ -41,7 +41,7 @@ tool answers both.
 Requires: pip install memory_profiler (optional dev dependency, not
 shipped with the framework or added to pyproject.toml -- same
 manual-install treatment benchmarks/README.md already gives
-fastapi/uvicorn/django/jinja2/waitress, none of which mangoo depends on).
+fastapi/uvicorn/django/jinja2/waitress, none of which hayavega depends on).
 
 Usage:
     python -m memory_profiler benchmarks/memory_profile_templates.py
@@ -56,9 +56,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from memory_profiler import profile
 
-from mangoo.templates import render_template
+from hayavega.templates import render_template
 
-_TEMPLATE_DIR = Path(__file__).resolve().parent / "mangoo_app" / "templates"
+_TEMPLATE_DIR = Path(__file__).resolve().parent / "hayavega_app" / "templates"
 _CONTEXT = {"posts": [{"title": f"Post {i}", "views": i * 3} for i in range(20)]}
 
 

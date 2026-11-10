@@ -1,5 +1,5 @@
 """HTTP-level benchmark: does moving route matching to Rust
-(mangoo_native.Router, see crates/mangoo-python/src/lib.rs) help, when
+(hayavega_native.Router, see crates/hayavega-python/src/lib.rs) help, when
 measured as it would actually be used -- once per real HTTP request,
 not in a tight microbenchmark loop?
 
@@ -8,14 +8,14 @@ re-measure what normalize_path's already-rejected candidate measured (a
 tiny Python operation vs. the same operation behind a PyO3 FFI call) --
 see that candidate's result in benchmarks/README.md before assuming this
 one wins just because it's wrapped differently. This compares two real
-WSGI applications, same app (benchmarks/mangoo_app's exact routes/views/
+WSGI applications, same app (benchmarks/hayavega_app's exact routes/views/
 seed data), same server (waitress, both sides, so only the matching logic
 differs -- unlike rust_runtime_vs_wsgi.py, which also changes the server):
 
-    - Baseline: benchmarks/mangoo_app/app.py's real, unmodified
+    - Baseline: benchmarks/hayavega_app/app.py's real, unmodified
       create_application() (runtime.py's Python dict-based _match()).
     - Candidate: benchmarks/_native_router_target.py's build_application()
-      (mangoo_native.Router for matching; everything else identical).
+      (hayavega_native.Router for matching; everything else identical).
 
 Run: python benchmarks/native_router_vs_python.py [--duration 10s] [--connections 30]
 """
@@ -41,11 +41,11 @@ def main() -> None:
 
     python = sys.executable
     targets = [
-        ("Python _match()", [python, "-m", "waitress", "--host=127.0.0.1", "--port=9007", "--threads=16", "--call", "benchmarks.mangoo_app.app:build_application"], 9007),
+        ("Python _match()", [python, "-m", "waitress", "--host=127.0.0.1", "--port=9007", "--threads=16", "--call", "benchmarks.hayavega_app.app:build_application"], 9007),
         ("Native Router", [python, "-m", "waitress", "--host=127.0.0.1", "--port=9008", "--threads=16", "--call", "benchmarks._native_router_target:build_application"], 9008),
     ]
 
-    print(f"Benchmark: mangoo_native.Router vs runtime.py's Python _match() (duration={args.duration}, concurrency={args.connections})\n")
+    print(f"Benchmark: hayavega_native.Router vs runtime.py's Python _match() (duration={args.duration}, concurrency={args.connections})\n")
     all_results: dict[str, dict] = {}
     for name, command, port in targets:
         print(f"--- {name} ---")

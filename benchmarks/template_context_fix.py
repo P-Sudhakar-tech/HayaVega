@@ -9,7 +9,7 @@ variable and `loop` metadata. Two alternatives were tried:
    the copy it avoided. Reverted; kept here as a documented dead end.
 2. Mutate `context` in place for the loop variable and `loop` metadata,
    restoring the previous values once after the whole loop finishes --
-   the fix actually shipped. See `_render_for` in `mangoo/templates.py`.
+   the fix actually shipped. See `_render_for` in `hayavega/templates.py`.
 
 Measures both speed and peak memory (tracemalloc, stdlib -- no new
 dependency) for the actual shipped `render_template()` (the fix, already
@@ -29,12 +29,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from mangoo.templates import _UNDEFINED as UNDEFINED
-from mangoo.templates import _evaluate as evaluate
-from mangoo.templates import _ForNode, _IfNode, _RenderState, _resolve_chain, _TextNode, _VariableNode, render_template
-from mangoo.templates import _render_if as render_if
+from hayavega.templates import _UNDEFINED as UNDEFINED
+from hayavega.templates import _evaluate as evaluate
+from hayavega.templates import _ForNode, _IfNode, _RenderState, _resolve_chain, _TextNode, _VariableNode, render_template
+from hayavega.templates import _render_if as render_if
 
-_TEMPLATE_DIR = Path(__file__).resolve().parent / "mangoo_app" / "templates"
+_TEMPLATE_DIR = Path(__file__).resolve().parent / "hayavega_app" / "templates"
 _CONTEXT = {"posts": [{"title": f"Post {i}", "views": i * 3} for i in range(20)]}
 
 # A wider context, to make the old O(len(context)) copy cost visible even

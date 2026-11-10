@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from mangoo.request import MultipartUnavailableError, Request
+from hayavega.request import MultipartUnavailableError, Request
 
 
 def _multipart_body(boundary: str, *, title: str, filename: str, file_content: bytes, file_content_type: str = "image/png") -> bytes:
@@ -17,7 +17,7 @@ def _request(body: bytes, boundary: str) -> Request:
 
 class MultipartParsingTests(unittest.TestCase):
     def setUp(self):
-        self.boundary = "MangooTestBoundary123"
+        self.boundary = "HayavegaTestBoundary123"
         self.body = _multipart_body(self.boundary, title="Hello World", filename="pic.png", file_content=b"\x89PNG-fake-bytes")
 
     def test_form_returns_plain_fields(self):

@@ -1,20 +1,20 @@
 ---
-title: Mangoo
+title: Hayavega
 description: A structured Python web framework with automatic, interactive API documentation and a Rust-accelerated core.
 hide:
   - navigation
   - toc
 ---
 
-<div class="mangoo-hero" markdown>
+<div class="hayavega-hero" markdown>
 
 Open-source Python framework
-{: .mangoo-eyebrow }
+{: .hayavega-eyebrow }
 
-# Mangoo
+# Hayavega
 
-Welcome to Mangoo &mdash; the super-fastest Python web framework.
-{: .mangoo-welcome }
+Welcome to Hayavega &mdash; the super-fastest Python web framework.
+{: .hayavega-welcome }
 
 A conventional, batteries-included project structure. Automatic, interactive API documentation, generated from your code. A Rust core where it actually wins the benchmark, and honestly disclosed where it doesn't.
 
@@ -22,7 +22,7 @@ A conventional, batteries-included project structure. Automatic, interactive API
 
 </div>
 
-## Why Mangoo
+## Why Hayavega
 
 <div class="grid cards" markdown>
 
@@ -67,19 +67,19 @@ A conventional, batteries-included project structure. Automatic, interactive API
 ## See it in thirty seconds
 
 ```bash
-pip install mangoo
-mangoo-admin newproject mysite
+pip install hayavega
+hayavega-admin newproject mysite
 cd mysite
-python mango.py newapp blog
-python mango.py launch
+python hayavega.py newapp blog
+python hayavega.py launch
 ```
 
 ```python title="config/routes.py"
-from mangoo import api_route, path
+from hayavega import api_route, path
 
 
 def hello(request):
-    return {"message": "Hello from Mangoo"}
+    return {"message": "Hello from Hayavega"}
 
 
 urlpatterns = [

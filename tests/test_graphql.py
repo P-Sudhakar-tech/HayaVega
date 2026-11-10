@@ -3,8 +3,8 @@ import sys
 import unittest
 from unittest import mock
 
-import mangoo.graphql as graphql_module
-from mangoo.graphql import GraphQLSyntaxError, Schema, _depth, _Parser, _tokenize, graphql_view
+import hayavega.graphql as graphql_module
+from hayavega.graphql import GraphQLSyntaxError, Schema, _depth, _Parser, _tokenize, graphql_view
 
 
 class SchemaArgumentsTests(unittest.TestCase):
@@ -92,7 +92,7 @@ class LexerAndParserEdgeCaseTests(unittest.TestCase):
     # The tests below construct `_tokenize`/`_Parser` directly (the same
     # pattern as `test_pathologically_nested_query_is_rejected_during_parsing`
     # above) because `Schema.execute()` prefers the Rust-ported
-    # `mangoo_native.parse_graphql_document` whenever it is built, which
+    # `hayavega_native.parse_graphql_document` whenever it is built, which
     # would otherwise never exercise these pure-Python code paths.
 
     def test_comment_without_a_trailing_newline_is_skipped_by_the_pure_python_tokenizer(self):
@@ -404,7 +404,7 @@ class GraphQLViewTests(unittest.TestCase):
 
 
 class NativeParserBridgeTests(unittest.TestCase):
-    """`Schema.execute()` parses via `mangoo_native.parse_graphql_document`
+    """`Schema.execute()` parses via `hayavega_native.parse_graphql_document`
     when built (benchmarks/native_graphql_parser.py measured a 2.7-3.9x win),
     falling back to `_Parser`/`_tokenize` otherwise -- same result either way."""
 
@@ -418,19 +418,19 @@ class NativeParserBridgeTests(unittest.TestCase):
         }
     """
 
-    def test_uses_the_native_parser_when_mangoo_native_is_built(self):
-        from mangoo.graphql import _native_parse_graphql_document
+    def test_uses_the_native_parser_when_hayavega_native_is_built(self):
+        from hayavega.graphql import _native_parse_graphql_document
 
         if _native_parse_graphql_document is None:
-            self.skipTest("mangoo_native is not built in this environment")
+            self.skipTest("hayavega_native is not built in this environment")
         seen = {}
         schema = Schema(query={"posts": lambda request, **kwargs: seen.update(kwargs) or []})
         result = schema.execute(self._QUERY, None, variables={"tags": ["a", "b"]})
         self.assertEqual(result, {"data": {"posts": []}})
         self.assertEqual(seen, {"limit": 10, "tags": ["a", "b"], "extra": {"active": True, "score": 3.5}})
 
-    def test_falls_back_to_pure_python_when_mangoo_native_is_unavailable(self):
-        with mock.patch("mangoo.graphql._native_parse_graphql_document", None):
+    def test_falls_back_to_pure_python_when_hayavega_native_is_unavailable(self):
+        with mock.patch("hayavega.graphql._native_parse_graphql_document", None):
             seen = {}
             schema = Schema(query={"posts": lambda request, **kwargs: seen.update(kwargs) or []})
             result = schema.execute(self._QUERY, None, variables={"tags": ["a", "b"]})
@@ -438,39 +438,39 @@ class NativeParserBridgeTests(unittest.TestCase):
             self.assertEqual(seen, {"limit": 10, "tags": ["a", "b"], "extra": {"active": True, "score": 3.5}})
 
     def test_native_and_fallback_paths_report_the_same_syntax_error(self):
-        from mangoo.graphql import _native_parse_graphql_document
+        from hayavega.graphql import _native_parse_graphql_document
 
         if _native_parse_graphql_document is None:
-            self.skipTest("mangoo_native is not built in this environment")
+            self.skipTest("hayavega_native is not built in this environment")
         schema = Schema(query={"greeting": lambda request: "hi"})
         native_result = schema.execute("{ greeting @skip }", None)
-        with mock.patch("mangoo.graphql._native_parse_graphql_document", None):
+        with mock.patch("hayavega.graphql._native_parse_graphql_document", None):
             fallback_result = schema.execute("{ greeting @skip }", None)
         self.assertIn("errors", native_result)
         self.assertIn("errors", fallback_result)
 
 
 class NativeParserImportFallbackTests(unittest.TestCase):
-    """mangoo.graphql's `try: import mangoo_native ... except ImportError:
+    """hayavega.graphql's `try: import hayavega_native ... except ImportError:
     _native_parse_graphql_document = None` only runs at module import time.
     `NativeParserBridgeTests` above mocks the already-bound attribute, which
     never executes those two lines.
 
     Reaching them for real means re-executing the module with
-    `mangoo_native` made unimportable -- but `importlib.reload
-    (mangoo.graphql)` would do that *in place*, rebinding every name in the
+    `hayavega_native` made unimportable -- but `importlib.reload
+    (hayavega.graphql)` would do that *in place*, rebinding every name in the
     live module (including `GraphQLSyntaxError`, `Schema`, ...) to new
     objects, which would desync every reference this test file already
     holds to the old ones (e.g. `assertRaises(GraphQLSyntaxError)` would stop
     matching). Loading a throwaway module object from the same source file
-    under a different name avoids that: `mangoo.graphql` itself is never
+    under a different name avoids that: `hayavega.graphql` itself is never
     touched."""
 
-    def test_module_falls_back_to_the_pure_python_parser_when_mangoo_native_is_unavailable(self):
-        original = sys.modules.get("mangoo_native", None)
-        sys.modules["mangoo_native"] = None  # sentinel: forces ImportError on import
+    def test_module_falls_back_to_the_pure_python_parser_when_hayavega_native_is_unavailable(self):
+        original = sys.modules.get("hayavega_native", None)
+        sys.modules["hayavega_native"] = None  # sentinel: forces ImportError on import
         try:
-            spec = importlib.util.spec_from_file_location("mangoo._graphql_reimport_test", graphql_module.__file__)
+            spec = importlib.util.spec_from_file_location("hayavega._graphql_reimport_test", graphql_module.__file__)
             fresh_module = importlib.util.module_from_spec(spec)
             sys.modules[spec.name] = fresh_module  # dataclasses in this module need their class's module registered
             try:
@@ -483,9 +483,9 @@ class NativeParserImportFallbackTests(unittest.TestCase):
             self.assertEqual(result, {"data": {"greet": "Hello, Ada!"}})
         finally:
             if original is None:
-                sys.modules.pop("mangoo_native", None)
+                sys.modules.pop("hayavega_native", None)
             else:
-                sys.modules["mangoo_native"] = original
+                sys.modules["hayavega_native"] = original
 
 
 if __name__ == "__main__":

@@ -1,9 +1,9 @@
-"""Opt-in integration coverage; set MANGOO_TEST_REDIS_URL to run it.
+"""Opt-in integration coverage; set HAYAVEGA_TEST_REDIS_URL to run it.
 
 Unlike the PostgreSQL/MySQL integration tests, one of these tests (the
 missing-dependency check) runs everywhere without a real Redis, since it only
 needs `import redis` to fail. The rest require a real Redis instance and are
-skipped unless MANGOO_TEST_REDIS_URL is set, matching the DB integration
+skipped unless HAYAVEGA_TEST_REDIS_URL is set, matching the DB integration
 test pattern.
 """
 
@@ -14,7 +14,7 @@ import unittest
 import uuid
 from unittest.mock import patch
 
-from mangoo.hardening import RateLimiter, RateLimiterBackendError, RedisRateLimiter
+from hayavega.hardening import RateLimiter, RateLimiterBackendError, RedisRateLimiter
 
 
 class RedisRateLimiterMissingDependencyTests(unittest.TestCase):
@@ -24,10 +24,10 @@ class RedisRateLimiterMissingDependencyTests(unittest.TestCase):
                 RedisRateLimiter(limit=5, window_seconds=60)
 
 
-@unittest.skipUnless(os.getenv("MANGOO_TEST_REDIS_URL"), "Redis integration environment is not configured")
+@unittest.skipUnless(os.getenv("HAYAVEGA_TEST_REDIS_URL"), "Redis integration environment is not configured")
 class RedisRateLimiterIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.redis_url = os.environ["MANGOO_TEST_REDIS_URL"]
+        self.redis_url = os.environ["HAYAVEGA_TEST_REDIS_URL"]
         try:
             self.limiter = RedisRateLimiter(limit=3, window_seconds=2, redis_url=self.redis_url)
             # Confirm connectivity up front so a genuinely unreachable Redis
@@ -38,7 +38,7 @@ class RedisRateLimiterIntegrationTests(unittest.TestCase):
         except Exception as error:  # noqa: BLE001 - any connection failure means "skip", not "fail"
             self.skipTest(f"Redis at {self.redis_url} is not reachable: {error}")
         self.key = f"test-{uuid.uuid4()}"
-        self.addCleanup(self.limiter._client.delete, f"mangoo:ratelimit:{self.key}")
+        self.addCleanup(self.limiter._client.delete, f"hayavega:ratelimit:{self.key}")
 
     def test_allows_up_to_the_limit_then_denies(self):
         self.assertTrue(self.limiter.allow(self.key))
@@ -59,7 +59,7 @@ class RedisRateLimiterIntegrationTests(unittest.TestCase):
     def test_two_independent_instances_share_one_combined_limit(self):
         """This is the scenario this feature exists to fix.
 
-        Two `RedisRateLimiter` objects here stand in for two separate Mangoo
+        Two `RedisRateLimiter` objects here stand in for two separate Hayavega
         processes behind a load balancer, both pointed at the same Redis and
         the same rate-limit key. Requests are interleaved between them, and
         the *combined* total allowed across both must respect the configured
@@ -75,7 +75,7 @@ class RedisRateLimiterIntegrationTests(unittest.TestCase):
         instance_a = RedisRateLimiter(limit=3, window_seconds=5, redis_url=self.redis_url)
         instance_b = RedisRateLimiter(limit=3, window_seconds=5, redis_url=self.redis_url)
         key = f"shared-{uuid.uuid4()}"
-        self.addCleanup(instance_a._client.delete, f"mangoo:ratelimit:{key}")
+        self.addCleanup(instance_a._client.delete, f"hayavega:ratelimit:{key}")
 
         results = []
         for instance in (instance_a, instance_b, instance_a, instance_b, instance_a, instance_b):

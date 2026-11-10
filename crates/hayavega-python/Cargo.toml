@@ -1,0 +1,14 @@
+[package]
+name = "hayavega-python"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "hayavega_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.30", features = ["extension-module"] }
+hayavega-core = { path = "../hayavega-core" }
+rustls = { version = "0.23.44", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2.2.0"

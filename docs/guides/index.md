@@ -1,6 +1,6 @@
 # Guides
 
-Task-oriented pages: the parts of Mangoo you touch while actually
+Task-oriented pages: the parts of Hayavega you touch while actually
 building an app. Start with [Routing](../topics/routing.md) if you're
 new &mdash; everything else builds on how `path()`/`api_route()` map
 URLs to Python functions. For the deeper subsystems underneath (ASGI,

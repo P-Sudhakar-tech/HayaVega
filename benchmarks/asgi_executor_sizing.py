@@ -2,7 +2,7 @@
 added to close the ASGI-vs-FastAPI gap documented in
 `benchmarks/README.md#asgi-vs-fastapi` and `INDUSTRY_LEADERSHIP_ROADMAP.md`.
 
-Every synchronous view in `mangoo.asgi` used to be dispatched through
+Every synchronous view in `hayavega.asgi` used to be dispatched through
 `asyncio.to_thread`, which runs on the event loop's *default* executor --
 lazily created as `ThreadPoolExecutor(max_workers=min(32, os.cpu_count() + 4))`.
 That sizing is tuned for occasional CPU-bound offloading, not for a whole

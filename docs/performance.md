@@ -14,16 +14,16 @@ server. Full identities of the comparison frameworks are in
 
 ## vs. other popular frameworks
 
-<div class="mangoo-stats" markdown>
-<div class="mangoo-stat"><span class="value">3520</span><span class="label">json_echo req/s</span></div>
-<div class="mangoo-stat"><span class="value">920</span><span class="label">db_list req/s</span></div>
-<div class="mangoo-stat"><span class="value">799</span><span class="label">template_render req/s</span></div>
-<div class="mangoo-stat"><span class="value">1384</span><span class="label">static_file req/s</span></div>
+<div class="hayavega-stats" markdown>
+<div class="hayavega-stat"><span class="value">3520</span><span class="label">json_echo req/s</span></div>
+<div class="hayavega-stat"><span class="value">920</span><span class="label">db_list req/s</span></div>
+<div class="hayavega-stat"><span class="value">799</span><span class="label">template_render req/s</span></div>
+<div class="hayavega-stat"><span class="value">1384</span><span class="label">static_file req/s</span></div>
 </div>
 
-<p style="margin-top:-1.2rem;font-size:0.82rem;color:var(--md-default-fg-color--light)">Mangoo, WSGI transport, 30 concurrent connections</p>
+<p style="margin-top:-1.2rem;font-size:0.82rem;color:var(--md-default-fg-color--light)">Hayavega, WSGI transport, 30 concurrent connections</p>
 
-| Scenario | Mangoo (WSGI) | Mangoo (ASGI) | Async framework | Sync framework |
+| Scenario | Hayavega (WSGI) | Hayavega (ASGI) | Async framework | Sync framework |
 |---|---:|---:|---:|---:|
 | `json_echo` | **3520** | 2153 | 1490 | 1463 |
 | `db_list` | **920** | 906 | 634 | 452 |
@@ -34,7 +34,7 @@ _req/s, higher is better. Single-machine, single-run &mdash; see
 `benchmarks/results/RESULTS.md` in the repository for p50/p90/p99 and
 success rate on every row._
 
-Mangoo leads every published scenario on both transports.
+Hayavega leads every published scenario on both transports.
 
 ## The Rust runtime vs. a reference WSGI server
 
@@ -69,7 +69,7 @@ candidate history live in `RUST_CORE_REWRITE_ROADMAP.md`.
 
 ## Two more wins, found via a real cross-framework comparison
 
-Building the same sample e-commerce API in Mangoo and two other popular
+Building the same sample e-commerce API in Hayavega and two other popular
 frameworks (one async, one sync) and benchmarking all three (not a
 synthetic microbenchmark) surfaced two real framework-level fixes:
 
@@ -80,7 +80,7 @@ synthetic microbenchmark) surfaced two real framework-level fixes:
   `SELECT`'s own `expires_at > ?` filter already rejects an expired
   session regardless). A real authenticated endpoint that had been
   losing to the equivalent endpoints in the other two frameworks despite
-  Mangoo winning every other scenario went from behind to a decisive **~2.7&ndash;2.9&times;**
+  Hayavega winning every other scenario went from behind to a decisive **~2.7&ndash;2.9&times;**
   win. See [Authentication](topics/auth.md).
 - **Opt-in SQLite WAL mode**: SQLite's untouched defaults
   (`journal_mode=DELETE`, `synchronous=FULL`) cost ~6.4&ndash;6.9ms per

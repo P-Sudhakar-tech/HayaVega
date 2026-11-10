@@ -1,9 +1,9 @@
-"""Isolated benchmark for `mangoo.db.connect_readonly()`, added to close part
+"""Isolated benchmark for `hayavega.db.connect_readonly()`, added to close part
 of the WSGI `template_render`/`db_list` gap to FastAPI documented in
 `INDUSTRY_LEADERSHIP_ROADMAP.md`. Connection pooling was already tried for
 that gap and made WSGI worse (many threads holding a connection open
 contends under SQLite on this environment -- see
-`mangoo.db.enable_connection_pooling`'s docstring). This benchmark checks a
+`hayavega.db.enable_connection_pooling`'s docstring). This benchmark checks a
 different, narrower idea: does opening the per-request connection read-only
 (`sqlite3.connect("file:...?mode=ro", uri=True)`) rather than read-write beat
 a plain `connect()` for `Selection.fetch()`/`values()`/`total()`, which never
@@ -40,8 +40,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from mangoo import Entity, Integer, Text  # noqa: E402
-from mangoo.db import connect  # noqa: E402
+from hayavega import Entity, Integer, Text  # noqa: E402
+from hayavega.db import connect  # noqa: E402
 
 
 class Post(Entity):
@@ -50,7 +50,7 @@ class Post(Entity):
 
 
 def build_db(run: int) -> Path:
-    db_path = Path(tempfile.gettempdir()) / f"mangoo_bench_readonly_reads_{run}.sqlite3"
+    db_path = Path(tempfile.gettempdir()) / f"hayavega_bench_readonly_reads_{run}.sqlite3"
     if db_path.exists():
         db_path.unlink()
     collection = Post.collection(db_path)
@@ -64,7 +64,7 @@ def make_callables(db_path: Path):
         return Post.collection(db_path).browse().arrange("id").window(20).values("title", "views")
 
     def orm_values_rw() -> list[dict]:
-        with patch("mangoo.models.connect_readonly", connect):
+        with patch("hayavega.models.connect_readonly", connect):
             return Post.collection(db_path).browse().arrange("id").window(20).values("title", "views")
 
     def raw_rw() -> list[dict]:

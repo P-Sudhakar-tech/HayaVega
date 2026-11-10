@@ -1,6 +1,6 @@
 import unittest
 
-from mangoo import Response, path
+from hayavega import Response, path
 
 
 class RoutingTests(unittest.TestCase):

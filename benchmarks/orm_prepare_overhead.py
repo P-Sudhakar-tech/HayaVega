@@ -6,7 +6,7 @@ call*, on top of the connection the actual query itself opens -- unlike
 ``benchmarks/fastapi_app/app.py``'s ``fetch_posts()``, which opens exactly
 one connection and runs exactly one statement. This never showed up in any
 apples-to-apples framework comparison because the comparison apps don't use
-Mangoo's ORM; it only shows up when Mangoo's own `fetch()` is measured
+Hayavega's ORM; it only shows up when Hayavega's own `fetch()` is measured
 against what it could be.
 
 Run: python benchmarks/orm_prepare_overhead.py
@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from mangoo import Entity, Integer, Text  # noqa: E402
+from hayavega import Entity, Integer, Text  # noqa: E402
 
 
 class Post(Entity):
@@ -29,7 +29,7 @@ class Post(Entity):
 
 
 def main() -> None:
-    db_path = Path(tempfile.gettempdir()) / "mangoo_bench_prepare_overhead.sqlite3"
+    db_path = Path(tempfile.gettempdir()) / "hayavega_bench_prepare_overhead.sqlite3"
     if db_path.exists():
         db_path.unlink()
 

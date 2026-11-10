@@ -8,7 +8,7 @@ one-thread-per-request model can't overlap as cheaply.
 ## Setup
 
 ```python title="config/asgi.py"
-from mangoo.asgi import create_asgi_application
+from hayavega.asgi import create_asgi_application
 from .routes import urlpatterns
 
 application = create_asgi_application(urlpatterns, api_title="My API", api_version="1.0.0")
@@ -18,7 +18,7 @@ application = create_asgi_application(urlpatterns, api_title="My API", api_versi
 uvicorn config.asgi:application --host 0.0.0.0 --port 8000
 ```
 
-`mango newproject` scaffolds this file automatically alongside
+`hayavega newproject` scaffolds this file automatically alongside
 `config/wsgi.py`.
 
 ## Sync and async views, unmodified
@@ -61,8 +61,8 @@ protection, and testing.
 ## Testing
 
 ```python
-from mangoo.testing import AsyncTestClient
-from mangoo.asgi import create_asgi_application
+from hayavega.testing import AsyncTestClient
+from hayavega.asgi import create_asgi_application
 
 client = AsyncTestClient(create_asgi_application(urlpatterns))
 response = client.get("/api/items")
@@ -74,7 +74,7 @@ required, matching this project's `unittest`-based style.
 
 ## Why choose WSGI vs ASGI
 
-Mangoo's own [published benchmarks](../performance.md) show ASGI winning
+Hayavega's own [published benchmarks](../performance.md) show ASGI winning
 or tying every comparable framework measured on every scenario &mdash; but
 none of those scenarios exercise the concurrent I/O that's the actual
 reason to choose ASGI over WSGI in a real project. Choose ASGI when you have `async def`

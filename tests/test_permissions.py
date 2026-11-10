@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mangoo.auth import add_user_to_group, create_group, create_superuser, create_user, get_group_by_name, remove_user_from_group, user_permissions
-from mangoo.security import has_permission_required
+from hayavega.auth import add_user_to_group, create_group, create_superuser, create_user, get_group_by_name, remove_user_from_group, user_permissions
+from hayavega.security import has_permission_required
 
 PASSWORD = "Correct-Horse-7!"
 
@@ -105,7 +105,7 @@ class HasPermissionRequiredTests(unittest.TestCase):
 
 
 def _session_token(database, user) -> str:
-    from mangoo.auth import create_session
+    from hayavega.auth import create_session
 
     return create_session(database, user)
 
