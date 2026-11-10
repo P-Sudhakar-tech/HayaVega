@@ -109,18 +109,7 @@ def build_targets(connections: int = 50) -> list[Target]:
         Target(
             "Django",
             9003,
-            # Fewer threads than Hayavega's waitress target, deliberately: each
-            # Django request runs real middleware/URL-resolution Python under
-            # the GIL (Hayavega's equivalent work is mostly in its Rust
-            # runtime, which releases the GIL), so driving the same high
-            # thread count here causes GIL-contention thrashing under load --
-            # observed on a CPU-constrained CI runner as every request timing
-            # out ("aborted due to deadline") rather than merely slower
-            # responses. A small, CPU-sized pool avoids the thrash; the
-            # matching --connection-limit still accepts the full load instead
-            # of refusing connections, it just queues them for one of these
-            # threads instead of spawning more context-switching workers.
-            [python, "-m", "waitress", "--host=127.0.0.1", "--port=9003", "--threads=8", f"--connection-limit={connection_limit}", "benchmarks.django_app.app:application"],
+            [python, "-m", "waitress", "--host=127.0.0.1", "--port=9003", "--threads=16", f"--connection-limit={connection_limit}", "benchmarks.django_app.app:application"],
             "waitress (Windows substitute for gunicorn; see README)",
         ),
     ]
