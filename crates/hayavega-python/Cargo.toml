@@ -12,4 +12,4 @@ pyo3 = { version = "0.30", features = ["extension-module"] }
 hayavega-core = { path = "../hayavega-core" }
 rustls = { version = "0.23.44", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pemfile = "2.2.0"
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
