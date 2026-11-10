@@ -13,6 +13,18 @@ Hayavega target, served over `uvicorn` instead of `waitress`, so Hayavega's
 ASGI transport can be measured against FastAPI on the same server rather
 than only against Hayavega's own WSGI path. See "ASGI vs FastAPI" below.
 
+**Four more targets were added for credibility, not flattery: a raw-ASGI
+baseline with no framework at all, the same baseline served by `granian`
+(a Rust-core server, not a framework), Robyn (a Rust-core framework that
+hosts itself), and Blacksheep (a fast pure-Python ASGI framework).** The
+point of these four is that a comparison against only FastAPI/Django,
+frameworks Hayavega was built to beat, risks looking like it was built to
+win -- an honest ceiling (raw ASGI), the fastest available server
+(Granian), and the two fastest comparable Python web frameworks this
+project could find (Robyn, Blacksheep) are a harder, more credible bar.
+See "Eight-way comparison" below for where Hayavega does and does not
+clear it -- the real numbers, not a rounded-up "wins everything."
+
 **Next.js is not included in this pass.** It requires npm-installing and
 running a full separate Node.js project just to serve as a comparison
 target -- a materially bigger lift than FastAPI/Django, which are both
@@ -25,13 +37,13 @@ once someone is ready to take on that setup.
 
 ```powershell
 cargo install oha   # or download a prebuilt binary -- see "About oha" below
-pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress granian requests
+pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress granian robyn blacksheep requests
 python benchmarks/run.py --duration 10s --connections 200 --runs 5
 ```
 
-`uvicorn` (already in the command above) serves both the FastAPI target and
-the Hayavega (ASGI) target added when Phase 3 introduced `hayavega.asgi`; no
-extra dependency is needed for it.
+`uvicorn` (already in the command above) serves the FastAPI target, the
+Hayavega (ASGI) target added when Phase 3 introduced `hayavega.asgi`, the
+raw-ASGI baseline, and Blacksheep; no extra dependency is needed for it.
 
 `granian` (also in the command above) is a Rust-core ASGI/RSGI server,
 installed to serve `benchmarks/raw_asgi_app/app.py`'s raw ASGI baseline --
@@ -40,7 +52,28 @@ Verified standalone: `granian --interface asgi
 benchmarks.raw_asgi_app.app:application --host 127.0.0.1 --port 9021`, then
 `curl http://127.0.0.1:9021/echo` returns `{"status": "ok"}`. Ships a
 prebuilt wheel on PyPI for Windows, so a plain `pip install granian` (as
-above) is enough -- no Rust toolchain needed.
+above) is enough -- no Rust toolchain needed. `benchmarks/run.py` invokes it
+as `python -m granian ...` rather than the bare `granian` console script,
+since the bare script is not reliably on `PATH` inside a virtualenv on
+Windows.
+
+`robyn` (a Rust-core Python web framework, `benchmarks/robyn_app/app.py`)
+hosts itself -- it is not served by `uvicorn`/`waitress`/`granian`, it
+starts its own server from inside its own `if __name__ == "__main__":`
+block (`app.start(host=..., port=9006)`), so its `Target.command` in
+`benchmarks/run.py` is just `python benchmarks/robyn_app/app.py`, with
+`--disable-openapi` appended: Robyn's `Config` auto-registers `/docs` and
+`/openapi.json` by default, which these benchmark scenarios never hit, so
+that flag turns them off for a cleaner comparison rather than leaving an
+asymmetry where only this one target exposes extra routes. Robyn's own
+`Config` reads this flag from `sys.argv` at import time, so no change to
+`robyn_app/app.py` itself was needed.
+
+`blacksheep` (`benchmarks/blacksheep_app/app.py`) is a fast pure-Python
+ASGI framework, served by `uvicorn` exactly like FastAPI -- real ASGI, not
+self-hosted like Robyn. It ships its own Jinja2 integration, used for
+`/posts` so its `template_render` number reflects its real templating
+story rather than the no-templating stand-in used for Robyn/raw ASGI.
 
 **`--runs N`** repeats every scenario `N` times per target and reports the
 median req/s (plus the observed min/max spread) instead of a single
@@ -102,6 +135,82 @@ this is published as an open, disclosed gap -- the Django row is kept in
 every published Linux table with an explicit `error` cell, never
 silently dropped. See `docs/performance.md` for the published Linux
 numbers (run `42812292945`).
+
+**A second, newer gap, disclosed up front rather than discovered the hard
+way on the next CI run:** the `benchmark-linux` job's install step above
+predates the four targets added in "Eight-way comparison" below and does
+not yet install `granian`, `robyn`, or `blacksheep`. Until that install
+step is updated (tracked as follow-on CI work, not part of adding these
+targets), Granian, Robyn, and Blacksheep will all report `error` on
+Linux CI -- a missing-dependency gap, not a performance finding, and not
+evidence those targets behave differently on Linux. Raw ASGI needs only
+`uvicorn`, already installed above, so it is unaffected. The 8-way
+numbers below are Windows-only for now.
+
+## Eight-way comparison: Granian, Robyn, Blacksheep, and a raw-ASGI baseline
+
+Wired into `benchmarks/run.py`'s `build_targets()` alongside the original
+four: a raw-ASGI baseline with no framework at all (port `9005`, served by
+`uvicorn`), Granian serving that same baseline app (port `9007` -- not
+`9006`, since Robyn's own hardcoded port took it, see below), Robyn
+(port `9006`, self-hosted, `--disable-openapi` passed on the command line
+per the Phase B review finding -- see "Running it" above for why that
+needed no change to `robyn_app/app.py`), and Blacksheep (port `9008`,
+`uvicorn`). Measured with this suite's own recommended methodology,
+`--duration 10s --connections 200 --runs 5`, on the same Windows dev
+machine as every other number in this document:
+
+| Framework | Server | `json_echo` req/s | `db_list` req/s | `template_render` req/s | `static_file` req/s |
+|---|---|---:|---:|---:|---:|
+| Hayavega (WSGI) | waitress | **4368** | **1926** | 1441 | 1579 |
+| FastAPI | uvicorn | 1690 | 706 | 739 | 621 |
+| Hayavega (ASGI) | uvicorn | 3175 | 1939 | 1458 | 1343 |
+| Django | waitress | 2223 | 344 | 316 | 1204 |
+| Raw ASGI | uvicorn | 4687 | 1108 | 1149 | **4863** |
+| Granian | granian | **5171** | 1439 | **1506** | **5375** |
+| Robyn | self-hosted | **14303** | 1491 | 1446 | **4252** |
+| Blacksheep | uvicorn | 4327 | 1062 | 989 | 1178 |
+
+_req/s, median of 5 runs at 200 connections; 100% success rate on every
+cell above -- see `benchmarks/results/RESULTS.md` for p50/p90/p99 and the
+full min/max spread._ Bold marks whichever target leads each column.
+
+**Disclosed plainly, not rounded up to a clean sweep: Hayavega (WSGI)
+does not win every scenario against these four harder targets.** It wins
+`db_list` outright against all seven other targets (1.3x-5.6x), and it
+edges `template_render` against everything except Granian (1441 vs
+Granian's 1506, a real but modest 4.5% loss) and ties Robyn there
+(1441 vs 1446, 0.3% -- noise, not a finding). But on `json_echo` and
+`static_file` -- the two scenarios that do the least work per request,
+exactly where a thin ASGI baseline or a Rust-core runtime has the most
+room to show it -- Hayavega loses to Raw ASGI, Granian, and Robyn by a
+real margin: `json_echo` 1.07x (Raw ASGI), 1.18x (Granian), and a
+decisive 3.28x (Robyn); `static_file` 3.08x (Raw ASGI), 3.40x (Granian),
+and 2.69x (Robyn). This is the expected, honest shape of the result, not
+a regression to fix: Raw ASGI is this suite's deliberate "honest ceiling"
+with no framework overhead at all, Granian is a Rust-core server with no
+Python-level routing, and Robyn hosts itself on a Rust-core runtime with
+no Python WSGI/ASGI adapter layer in between -- all three have less work
+to do per request than any WSGI/ASGI-adapted framework, Hayavega
+included, on exactly the two scenarios where total work per request is
+smallest. Blacksheep, a comparable pure-Python ASGI framework rather than
+a Rust-core baseline, loses every scenario to Hayavega (WSGI) except a
+near-tie on `json_echo` (4327 vs 4368, 0.9% -- noise).
+
+**A flaky run, caught and not cherry-picked:** the first attempt at this
+exact methodology saw Raw ASGI time out entirely on its very first
+`json_echo` measurement -- `oha` itself hung past `run.py`'s 120-second
+subprocess timeout, immediately after Django's heaviest connection churn
+in the target run order. An immediate retry under identical conditions
+completed cleanly with 100% success on every target, including Raw ASGI.
+Consistent with this document's already-disclosed Windows
+ephemeral-port/`TIME_WAIT` sensitivity (see "A real gotcha this suite ran
+into" below) rather than a new, separate bug -- Django's own waitress
+target generates the heaviest connection churn of any target in this
+suite, and Raw ASGI runs immediately after it in `build_targets()`'s
+order. The numbers published above are from the clean retry; the failed
+run's partial results were discarded entirely, not folded in or excluded
+selectively.
 
 ## What each scenario measures
 

@@ -112,6 +112,38 @@ def build_targets(connections: int = 50) -> list[Target]:
             [python, "-m", "waitress", "--host=127.0.0.1", "--port=9003", "--threads=16", f"--connection-limit={connection_limit}", "benchmarks.django_app.app:application"],
             "waitress (Windows substitute for gunicorn; see README)",
         ),
+        Target(
+            "Raw ASGI",
+            9005,
+            [python, "-m", "uvicorn", "benchmarks.raw_asgi_app.app:application", "--host", "127.0.0.1", "--port", "9005"],
+            "uvicorn (no framework at all -- the honest-ceiling baseline; see README)",
+        ),
+        Target(
+            "Granian",
+            # 9006 is Robyn's own hardcoded port below (its app.py binds it
+            # itself, not via a server flag this list controls) -- Granian
+            # gets the next free port instead of 9006 to avoid colliding
+            # with it, rather than editing robyn_app/app.py just to free 9006.
+            9007,
+            [python, "-m", "granian", "--interface", "asgi", "benchmarks.raw_asgi_app.app:application", "--host", "127.0.0.1", "--port", "9007"],
+            "granian (a server, not a framework, serving the same raw-ASGI baseline app; see README)",
+        ),
+        Target(
+            "Robyn",
+            # Robyn starts itself from inside benchmarks/robyn_app/app.py's
+            # own __main__ block (app.start(host=..., port=9006)), not via
+            # an external ASGI server this list invokes -- the port here
+            # must match what that file hardcodes.
+            9006,
+            [python, "benchmarks/robyn_app/app.py", "--disable-openapi"],
+            "self-hosted (Robyn's own Rust-core server; not run via uvicorn/waitress)",
+        ),
+        Target(
+            "Blacksheep",
+            9008,
+            [python, "-m", "uvicorn", "benchmarks.blacksheep_app.app:application", "--host", "127.0.0.1", "--port", "9008"],
+            "uvicorn (its standard/idiomatic server, same as FastAPI)",
+        ),
     ]
 
 

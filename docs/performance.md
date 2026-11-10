@@ -112,12 +112,48 @@ around 4.6s vs. p50 around 75ms on `db_list`. This was not root-caused
 as part of publishing these numbers; it is published as-is, honestly, as
 a lead for a future investigation rather than papered over or excluded.
 
-Hayavega leads every published scenario on both transports on Windows.
-On Linux CI, Hayavega's ASGI transport leads every scenario; the WSGI
+Hayavega leads every published scenario on both transports on Windows
+**against FastAPI and Django**, the two comparison frameworks above. On
+Linux CI, Hayavega's ASGI transport leads every scenario; the WSGI
 transport leads `json_echo` and `static_file` but trails the async
 framework on `db_list`/`template_render` on this specific runner --
 the same gap disclosed immediately above, published honestly rather
-than rounded up to a clean sweep.
+than rounded up to a clean sweep. Against the four harder targets below
+(a raw-ASGI baseline, Granian, Robyn, Blacksheep), that clean sweep does
+not hold -- see the disclosure under that table.
+
+### Windows (dev machine), eight-way comparison: Granian, Robyn, Blacksheep, and a raw-ASGI baseline
+
+Four harder targets, added for credibility rather than flattery: a
+raw-ASGI baseline with no framework at all, that same baseline served by
+Granian (a Rust-core server), Robyn (a Rust-core framework that hosts
+itself), and Blacksheep (a fast pure-Python ASGI framework). Same
+methodology as the re-measured table above (`--duration 10s --connections
+200 --runs 5`, same Windows dev machine). Full detail (p50/p90/p99,
+exact invocations, port assignments, a flaky first run caught and
+discarded on retry) is in `benchmarks/README.md`'s "Eight-way comparison"
+section.
+
+| Scenario | Hayavega (WSGI) | Raw ASGI | Granian | Robyn | Blacksheep |
+|---|---:|---:|---:|---:|---:|
+| `json_echo` | 4368 | 4687 | **5171** | 14303 | 4327 |
+| `db_list` | **1926** | 1108 | 1439 | 1491 | 1062 |
+| `template_render` | 1441 | 1149 | **1506** | 1446 | 989 |
+| `static_file` | 1579 | 4863 | **5375** | 4252 | 1178 |
+
+_req/s, median of 5 runs at 200 connections, 100% success on every cell._
+
+**Disclosed, not rounded up: Hayavega does not win every scenario here.**
+It wins `db_list` outright against all four, by 1.3&ndash;1.7&times;, and
+effectively ties `template_render` with Robyn (0.3% apart) while trailing
+Granian there by a real 4.5%. But on `json_echo` and `static_file` -- the
+two scenarios with the least work per request, exactly where a thinner
+stack has the most room to show it -- Hayavega loses to Raw ASGI,
+Granian, and Robyn by a real margin, up to Robyn's decisive
+**3.28&times;** on `json_echo`. Blacksheep, the one new target that is
+also a full Python web framework rather than a bare baseline or a
+Rust-core runtime, loses every scenario to Hayavega except an
+effectively-tied `json_echo` (0.9% apart).
 
 ## The Rust runtime vs. a reference WSGI server
 
@@ -199,6 +235,14 @@ This project's standing rule: publish what loses, not only what wins.
   fresh runs and found to average to a statistical tie, with individual runs swinging up to 17%
   in either direction &mdash; a lesson in not trusting a single-run
   benchmark number for this specific scenario.
+- **`json_echo` and `static_file` against Raw ASGI, Granian, and Robyn**:
+  up to a decisive 3.28&times; loss to Robyn on `json_echo`, and
+  3.08&ndash;3.40&times; losses to Raw ASGI/Granian on `static_file` --
+  the two scenarios with the least work per request, against three
+  targets with less framework/adapter overhead per request than Hayavega
+  has on any transport. See "Windows (dev machine), eight-way
+  comparison" above for the full table and the one scenario (`db_list`)
+  where Hayavega beats all three instead.
 
 ## Methodology notes worth knowing
 
