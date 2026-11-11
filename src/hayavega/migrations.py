@@ -163,7 +163,7 @@ def _declared_columns(paths: Iterable[Path]) -> dict[str, dict[str, str]]:
 def migration_directories(settings) -> list[str]:
     """Return each installed app's ``migrations`` directory, in declaration order.
 
-    Shared by `hayavega.py applymigrations`/`migrationstatus`/`newmigration`
+    Shared by `manage.py applymigrations`/`migrationstatus`/`newmigration`
     and the `diagnose` command's pending-migration check, so both walk
     `settings.installed_apps` identically rather than maintaining two
     copies of the same import-and-locate logic.

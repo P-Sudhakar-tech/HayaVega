@@ -65,7 +65,7 @@ after it never run). Two ready-made ones ship alongside the default:
 match -- pair it with a length/complexity validator, since alone it
 enforces neither).
 
-`hayavega.py createadmin` reads `Settings.password_validators` (dotted
+`manage.py createadmin` reads `Settings.password_validators` (dotted
 paths to already-built validators, resolved the same way
 `job_handlers` is) when set, falling back to the default otherwise:
 

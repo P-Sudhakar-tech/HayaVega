@@ -2,7 +2,7 @@
 
 ## Running the application
 
-`hayavega launch` / `python hayavega.py launch` uses `wsgiref.simple_server`,
+`hayavega launch` / `python manage.py launch` uses `wsgiref.simple_server`,
 which is explicitly single-threaded and dev-only -- do not put it behind
 real traffic. Every scaffolded project (`hayavega newproject`) ships a
 `config/wsgi.py` exposing a standard WSGI `application` object; point a
@@ -73,7 +73,7 @@ with that shape of workload.
 ### Rust runtime: an opt-in, settings-driven native WSGI server
 
 `Settings.server.engine = 'rust'` in a project's settings module switches
-`hayavega launch` (and `python hayavega.py launch`) from the default `wsgiref`
+`hayavega launch` (and `python manage.py launch`) from the default `wsgiref`
 dev server to `hayavega_native`'s own WSGI-compatible HTTP/1.1 server --
 still development tooling, not a production server recommendation of its
 own (see the gunicorn/waitress guidance above for that), but a real,
@@ -145,7 +145,7 @@ class server:
 1. Set a unique `HAYAVEGA_SECRET_KEY`; never use the scaffold default.
 2. Set `Settings.debug = False`, explicit `Settings.allowed_hosts`, and `Settings.security.force_https = True`.
 3. Set `Settings.security.secure_cookies = True` and configure `Settings.security.trusted_proxy_ips` when a reverse proxy sends forwarded headers.
-4. Apply and verify migrations with `python hayavega.py applymigrations` and `python hayavega.py migrationstatus`.
+4. Apply and verify migrations with `python manage.py applymigrations` and `python manage.py migrationstatus`.
 5. Configure application health probes for `/healthz` and `/readyz`.
 6. If you mounted `metrics_routes`, point a Prometheus scrape config at `/metrics`.
 

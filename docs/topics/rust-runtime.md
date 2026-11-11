@@ -14,7 +14,7 @@ class server:
 ```
 
 ```bash
-python hayavega.py launch
+python manage.py launch
 ```
 
 If `hayavega_native` wasn't built for this install, `hayavega launch` reports

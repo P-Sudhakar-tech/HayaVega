@@ -10,7 +10,7 @@ def startproject(name: str, target: Path | None = None) -> Path:
     root = (target or Path.cwd()) / name
     if root.exists():
         raise FileExistsError(f"Project already exists: {root}")
-    _write(root / "hayavega.py", "from hayavega.management.commands import execute_from_command_line\n\nif __name__ == '__main__':\n    execute_from_command_line()\n")
+    _write(root / "manage.py", "from hayavega.management.commands import execute_from_command_line\n\nif __name__ == '__main__':\n    execute_from_command_line()\n")
     _write(root / "config" / "__init__.py", "")
     _write(
         root / "config" / "settings.py",
@@ -43,7 +43,7 @@ def startproject(name: str, target: Path | None = None) -> Path:
         root / "config" / "wsgi.py",
         (
             '"""WSGI entry point for production servers -- gunicorn, waitress, uWSGI, etc.\n\n'
-            "`hayavega launch`/`hayavega.py launch` is for development only; point a real\n"
+            "`hayavega launch`/`manage.py launch` is for development only; point a real\n"
             "server at the `application` object below instead. For example:\n\n"
             "    gunicorn config.wsgi:application --workers 5 --bind 0.0.0.0:8000   # Linux/macOS\n"
             "    waitress-serve --port=8000 config.wsgi:application                 # any platform, incl. Windows\n\n"

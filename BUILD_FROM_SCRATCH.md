@@ -8,7 +8,7 @@ This guide describes the project as it exists today, how to run it from a clean 
 
 | Area | Current state |
 |---|---|
-| Project and app scaffolding | Implemented: `newproject`, `newapp`, `hayavega.py` layout (`startproject`/`startapp` still work as deprecated aliases) |
+| Project and app scaffolding | Implemented: `newproject`, `newapp`, `manage.py` layout (`startproject`/`startapp` still work as deprecated aliases) |
 | Development server | Implemented: WSGI server, route dispatch, autoreload, `Ctrl+C` shutdown |
 | Settings | Implemented: a conventional `settings.py`, typed loader, structured database/server settings |
 | REST | Implemented: JSON routes, method checks, example health endpoint |
@@ -106,7 +106,7 @@ With the environment active:
 ```powershell
 hayavega newproject mysite
 cd mysite
-python hayavega.py newapp blog
+python manage.py newapp blog
 hayavega launch 8000
 ```
 
@@ -114,7 +114,7 @@ Generated projects have this shape:
 
 ```text
 mysite/
-|- hayavega.py
+|- manage.py
 |- config/
 |  |- settings.py
 |  `- routes.py
@@ -158,7 +158,7 @@ class Settings:
 settings = Settings()
 ```
 
-`hayavega.conf.load_settings()` imports `config.settings`, validates `settings`, and returns a `ProjectSettings` with everything resolved (`settings.database`, `settings.server_port`, etc.) -- the same object `config/wsgi.py`, `config/asgi.py`, and every `hayavega.py` command already load. Never commit a production `Settings.secret_key` or database password. Use environment variables.
+`hayavega.conf.load_settings()` imports `config.settings`, validates `settings`, and returns a `ProjectSettings` with everything resolved (`settings.database`, `settings.server_port`, etc.) -- the same object `config/wsgi.py`, `config/asgi.py`, and every `manage.py` command already load. Never commit a production `Settings.secret_key` or database password. Use environment variables.
 
 ## 8. REST APIs
 
@@ -299,8 +299,8 @@ measurement and a worked example.
 ### Create a superuser
 
 ```powershell
-python hayavega.py createadmin
-python hayavega.py enable2fa admin
+python manage.py createadmin
+python manage.py enable2fa admin
 ```
 
 `enable2fa` prints a TOTP secret. Add it to an authenticator app and keep it private.

@@ -57,8 +57,8 @@ chose above &mdash; `trust_proxy_headers`/`trusted_proxy_ips` in the
 - [ ] `Settings.debug = False`
 - [ ] `Settings.allowed_hosts` is your real domain list, not empty or `["*"]`
 - [ ] `Settings.security.force_https = True`
-- [ ] `python hayavega.py diagnose` reports nothing at `error` severity
-- [ ] `python hayavega.py migrationstatus` shows nothing pending
+- [ ] `python manage.py diagnose` reports nothing at `error` severity
+- [ ] `python manage.py migrationstatus` shows nothing pending
 
 ## Migration deployment and rollback
 

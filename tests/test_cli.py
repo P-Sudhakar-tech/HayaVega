@@ -34,7 +34,7 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with patch("hayavega.cli.Path.cwd", return_value=Path(directory)):
                 main(["newproject", "demo"])
-            self.assertTrue((Path(directory) / "demo" / "hayavega.py").is_file())
+            self.assertTrue((Path(directory) / "demo" / "manage.py").is_file())
 
     def test_newapp_creates_an_app(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -47,7 +47,7 @@ class CliTests(unittest.TestCase):
             stderr = io.StringIO()
             with patch("hayavega.cli.Path.cwd", return_value=Path(directory)), redirect_stderr(stderr):
                 main(["startproject", "demo"])
-            self.assertTrue((Path(directory) / "demo" / "hayavega.py").is_file())
+            self.assertTrue((Path(directory) / "demo" / "manage.py").is_file())
             self.assertIn("deprecated", stderr.getvalue())
             self.assertIn("newproject", stderr.getvalue())
 

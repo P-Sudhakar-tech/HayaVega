@@ -67,9 +67,9 @@ logic.
 ## Migrations
 
 ```bash
-python hayavega.py newmigration blog     # generates a checksummed migration from Product's columns
-python hayavega.py applymigrations       # applies pending migrations, transactionally
-python hayavega.py migrationstatus       # shows what's applied / pending
+python manage.py newmigration blog     # generates a checksummed migration from Product's columns
+python manage.py applymigrations       # applies pending migrations, transactionally
+python manage.py migrationstatus       # shows what's applied / pending
 ```
 
 Migrations are forward-only, checksummed (a modified or missing migration

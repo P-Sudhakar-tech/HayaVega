@@ -11,7 +11,7 @@ This creates a familiar, conventional layout:
 
 ```text
 mysite/
-├── hayavega.py
+├── manage.py
 └── config/
     ├── settings.py
     ├── routes.py
@@ -58,7 +58,7 @@ Notice three things already working with zero extra code:
 ## Run it
 
 ```bash
-python hayavega.py launch
+python manage.py launch
 ```
 
 ```text
@@ -72,7 +72,7 @@ to see `api/health` already documented.
 ## Add an app
 
 ```bash
-python hayavega.py newapp blog
+python manage.py newapp blog
 ```
 
 This scaffolds `apps/blog/` with its own `views.py`, `routes.py`, and

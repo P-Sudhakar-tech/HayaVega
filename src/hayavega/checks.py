@@ -1,6 +1,6 @@
 """Proactive diagnostics for a Hayavega project.
 
-`hayavega diagnose` / `hayavega.py diagnose` reports unsafe settings, use of
+`hayavega diagnose` / `manage.py diagnose` reports unsafe settings, use of
 deprecated (Pulse-era) APIs, and pending migrations before a developer
 hits any of them at runtime -- the same category of tool Django's own
 `manage.py check` provides, under a name that doesn't collide with it
@@ -100,7 +100,7 @@ def _pending_migration_checks(settings) -> list[CheckMessage]:
     pending = [record.name for record in records if not record.applied]
     if not pending:
         return []
-    return [CheckMessage("warning", f"{len(pending)} pending migration(s): {', '.join(pending)}.", "Run `hayavega.py applymigrations` to apply them.")]
+    return [CheckMessage("warning", f"{len(pending)} pending migration(s): {', '.join(pending)}.", "Run `manage.py applymigrations` to apply them.")]
 
 
 def run_checks(settings) -> list[CheckMessage]:

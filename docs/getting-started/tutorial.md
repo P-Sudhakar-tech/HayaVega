@@ -22,13 +22,13 @@ for the full column-type reference.
 ## 2. Generate and apply a migration
 
 ```bash
-python hayavega.py newmigration blog
-python hayavega.py applymigrations
+python manage.py newmigration blog
+python manage.py applymigrations
 ```
 
 This generates a checksummed migration file from `Post`'s columns and
 applies it &mdash; transactionally, so a failed migration never leaves a
-half-applied schema. `python hayavega.py migrationstatus` shows what's
+half-applied schema. `python manage.py migrationstatus` shows what's
 pending.
 
 ## 3. Write a view

@@ -72,8 +72,8 @@ A conventional, batteries-included project structure. Automatic, interactive API
 pip install hayavega
 hayavega-admin newproject mysite
 cd mysite
-python hayavega.py newapp blog
-python hayavega.py launch
+python manage.py newapp blog
+python manage.py launch
 ```
 
 ```python title="config/routes.py"

@@ -57,7 +57,7 @@ Without it, or without `secret_key`, the secret is stored in plaintext
 instead -- `hayavega diagnose` reports that fallback as an `info`-level
 finding.
 
-`hayavega.py enable2fa` already passes `Settings.secret_key` for you; code
+`manage.py enable2fa` already passes `Settings.secret_key` for you; code
 that calls `enable_totp`/`authenticate`/`auth_routes` directly needs to
 pass it explicitly. If a user's secret was stored encrypted, every later
 `authenticate()` call for them needs the *same* `secret_key`, or the TOTP
@@ -90,10 +90,10 @@ the full set consumed by both `hayavega.runtime.create_application` and
 `hayavega.asgi.create_asgi_application` &mdash; identical enforcement on
 either transport.
 
-## `hayavega.py diagnose`
+## `manage.py diagnose`
 
 ```bash
-python hayavega.py diagnose
+python manage.py diagnose
 ```
 
 Proactively reports unsafe settings (`Settings.debug` left on, a placeholder
@@ -105,7 +105,7 @@ Severity scales with whether `Settings.debug` is on.
 ## Production validation
 
 ```bash
-python hayavega.py launch  # validates production settings before starting
+python manage.py launch  # validates production settings before starting
 ```
 
 Fails with actionable errors for unsafe configuration &mdash; a missing

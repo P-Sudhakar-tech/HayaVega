@@ -255,9 +255,9 @@
       <div class="transcript">
         <div class="tline"><div class="cmd"><span class="p">&gt;</span>python -m venv .venv</div><div class="note">Creates an isolated environment</div></div>
         <div class="tline"><div class="cmd"><span class="p">&gt;</span>pip install hayavega</div><div class="note">Installs Hayavega and its CLI entry points from PyPI</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>hayavega-admin newproject mysite</div><div class="note">Writes config/settings.py, config/routes.py, hayavega.py</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python hayavega.py newapp blog</div><div class="note">Adds an app package under Settings.installed_apps</div></div>
-        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python hayavega.py launch</div><div class="out">Development server: http://127.0.0.1:8000/</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>hayavega-admin newproject mysite</div><div class="note">Writes config/settings.py, config/routes.py, manage.py</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python manage.py newapp blog</div><div class="note">Adds an app package under Settings.installed_apps</div></div>
+        <div class="tline"><div class="cmd"><span class="p">&gt;</span>python manage.py launch</div><div class="out">Development server: http://127.0.0.1:8000/</div></div>
       </div>
     </div>
   </div>
@@ -334,15 +334,15 @@
         <article class="doc-section" id="getting-started">
           <div class="doc-kicker"><span class="tag tag-shipped">Shipped</span></div>
           <h3>Getting started</h3>
-          <p>A Hayavega project follows its own conventional shape: <code>hayavega.py</code>, a <code>settings.py</code>, and a <code>routes.py</code>. SQLite needs no extra driver, so a first project runs with nothing beyond Python and pip.</p>
+          <p>A Hayavega project follows its own conventional shape: <code>manage.py</code>, a <code>settings.py</code>, and a <code>routes.py</code>. SQLite needs no extra driver, so a first project runs with nothing beyond Python and pip.</p>
           <div class="snippet-label">powershell</div>
           <pre>python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install hayavega
 hayavega-admin newproject mysite
 cd mysite
-python hayavega.py newapp blog
-python hayavega.py launch</pre>
+python manage.py newapp blog
+python manage.py launch</pre>
           <p>Open <code>http://127.0.0.1:8000/</code>. Working from a source checkout instead? <code>./hayavega.cmd launch 8001</code> runs straight from it without installing, and watches files to restart the server automatically &mdash; press <code>Ctrl+C</code> once to stop it cleanly.</p>
         </article>
 
@@ -411,7 +411,7 @@ items = (products.seek(price__above=5)
           <pre>operations = [
     <span class="str">"CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"</span>,
 ]</pre>
-          <p><code>python hayavega.py applymigrations</code> applies pending migrations; <code>migrationstatus</code> inspects their state. Applied files are checksummed, so an altered or missing migration is rejected rather than silently reapplied.</p>
+          <p><code>python manage.py applymigrations</code> applies pending migrations; <code>migrationstatus</code> inspects their state. Applied files are checksummed, so an altered or missing migration is rejected rather than silently reapplied.</p>
           <div class="callout"><strong>Schema-diff detection:</strong> <code>newmigration blog</code> generates the reviewed initial table, then only additive, nullable columns automatically. A type, nullability, or uniqueness change on an already-migrated column now raises an error naming the column, instead of silently drifting from what's declared.</div>
         </article>
 
@@ -427,7 +427,7 @@ items = (products.seek(price__above=5)
               <tr><td><code>POST /api/auth/logout</code></td><td>Revokes the session token</td></tr>
             </tbody>
           </table></div>
-          <p><code>python hayavega.py createadmin</code> creates the first administrator; <code>enable2fa &lt;username&gt;</code> turns on authenticator-app two-factor authentication. Only hashes of session tokens are ever stored, and audit events for logins, sessions, and admin actions are persisted without credentials. The full lifecycle ships too: password reset and email verification (single-use, expiring tokens, never logged in plain text), session listing with IP/user-agent, and a one-call revoke-all-other-sessions endpoint.</p>
+          <p><code>python manage.py createadmin</code> creates the first administrator; <code>enable2fa &lt;username&gt;</code> turns on authenticator-app two-factor authentication. Only hashes of session tokens are ever stored, and audit events for logins, sessions, and admin actions are persisted without credentials. The full lifecycle ships too: password reset and email verification (single-use, expiring tokens, never logged in plain text), session listing with IP/user-agent, and a one-call revoke-all-other-sessions endpoint.</p>
         </article>
 
         <article class="doc-section" id="production">

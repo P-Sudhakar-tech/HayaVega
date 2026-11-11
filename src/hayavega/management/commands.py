@@ -195,7 +195,7 @@ def _runworker() -> None:
 
 
 def _cacheserver(args: list[str]) -> None:
-    """Runs standalone -- no project, no `Settings`, needed: `hayavega.py
+    """Runs standalone -- no project, no `Settings`, needed: `manage.py
     cacheserver` (via this function) and the installed `hayavega cacheserver`
     (via `cli.py`'s own subparser) both reach this one implementation."""
     parser = argparse.ArgumentParser(prog="hayavega cacheserver", add_help=False)
@@ -217,7 +217,7 @@ def _dispatch_custom_command(name: str, extra_args: list[str]) -> bool:
     command named `name`, and run it if found.
 
     Returns `False` for an unrecognized name *or* when settings can't
-    even be loaded (e.g. `hayavega.py` invoked outside a real project) --
+    even be loaded (e.g. `manage.py` invoked outside a real project) --
     the caller falls through to `HELP_TEXT` either way, so a project
     with no `config.settings` module never sees an unrelated import
     error where it previously just saw the help text.

@@ -46,7 +46,7 @@ full methodology, scope, and honest caveats in
 ## What works now
 
 - `newproject` and `newapp` scaffolding (`startproject`/`startapp` still work as deprecated aliases)
-- A conventional `hayavega.py`, `settings.py`, and `routes.py` project layout
+- A conventional `manage.py`, `settings.py`, and `routes.py` project layout
 - A development server and Python views
 - Both WSGI (default) and ASGI deployment, the latter for projects that need `async def` views
 - A small PyO3 native module (`hayavega_native`) for the Rust/Python boundary
@@ -62,8 +62,8 @@ python -m venv .venv
 pip install hayavega
 hayavega-admin newproject mysite
 cd mysite
-python hayavega.py newapp blog
-python hayavega.py launch
+python manage.py newapp blog
+python manage.py launch
 ```
 
 Working from this repository checkout instead (e.g. to build the optional
@@ -166,7 +166,7 @@ Each project has a conventional `config/settings.py`, but instead of Django's fl
 - `database` (a nested `class database:` section) for the database location and credentials.
 - `server` (a nested `class server:` section) for the development host and port.
 
-For example, change the default development port in `Settings.server.port`, or override it temporarily with `python hayavega.py launch 8001`.
+For example, change the default development port in `Settings.server.port`, or override it temporarily with `python manage.py launch 8001`.
 
 `middleware` is a list of dotted paths to request/response middleware factories, resolved and wired into `config/wsgi.py`/`config/asgi.py` automatically -- see [Middleware](docs/topics/middleware.md) for the factory contract and ordering rules.
 
@@ -215,14 +215,14 @@ operations = [
 ]
 ```
 
-Run `python hayavega.py applymigrations` to apply pending migrations, or
-`python hayavega.py migrationstatus` to inspect their state. Each migration runs
+Run `python manage.py applymigrations` to apply pending migrations, or
+`python manage.py migrationstatus` to inspect their state. Each migration runs
 in its own transaction; if any operation fails, neither its schema changes nor
 its history row are committed. Applied files are checksummed, so changed or
 missing migration files are rejected instead of silently proceeding.
 
 For an app with declared `Entity` classes, create the reviewed initial table
-migration with `python hayavega.py newmigration blog` (after adding `"blog"`
+migration with `python manage.py newmigration blog` (after adding `"blog"`
 to `Settings.installed_apps`). Later invocations generate only nullable `ADD COLUMN`
 operations and record a dependency on the preceding migration. New tables,
 non-nullable fields, field alterations, and removals must remain explicit,
@@ -239,7 +239,7 @@ Before starting with `Settings.debug = False`, Hayavega requires a non-default
 to your URL patterns to expose `GET /healthz` (liveness) and `GET /readyz`
 (database readiness) for your deployment platform.
 
-Run `python hayavega.py diagnose` (or `hayavega diagnose`) to catch the same
+Run `python manage.py diagnose` (or `hayavega diagnose`) to catch the same
 class of issue *before* a deploy attempt fails on it: unsafe settings
 (`debug` left on, a placeholder `secret_key`, a wildcard `allowed_hosts`),
 deprecated Pulse-era API usage anywhere in your own project files, and
@@ -413,7 +413,7 @@ view: a paginated, status-filterable list of jobs (`pending`/`running`/
 
 ## Custom management commands
 
-`hayavega.py`'s command set (`launch`, `newapp`, `createadmin`, ...) is a
+`manage.py`'s command set (`launch`, `newapp`, `createadmin`, ...) is a
 fixed, closed list -- but a project can register its own, resolved the
 same dotted-path-from-settings way `job_handlers` already is:
 
@@ -428,7 +428,7 @@ commands = {"hello": "myapp.commands.hello_command"}
 ```
 
 ```powershell
-python hayavega.py hello world
+python manage.py hello world
 ```
 
 A custom command receives the remaining CLI arguments as a plain
@@ -781,7 +781,7 @@ The serializer normalizes entities, mappings, lists, and dates, then encodes the
 Create the first administrator for a project with:
 
 ```powershell
-python hayavega.py createadmin
+python manage.py createadmin
 ```
 
 Hayavega prompts for a username, email address, and password confirmation. It stores users in the project's local SQLite database (`hayavega.sqlite3` by default), with salted scrypt password hashes. Application code can validate credentials with `hayavega.authenticate(database_path, username, password)`.
@@ -791,10 +791,10 @@ Hayavega prompts for a username, email address, and password confirmation. It st
 Hayavega's built-in authentication uses salted, memory-hard scrypt password hashes; by default requires passwords of at least 12 characters with lowercase, uppercase, numeric, and symbol characters (replaceable with your own `validators=[...]` list, or project-wide via `Settings.password_validators` -- see [Password policy](docs/topics/auth.md#password-policy)); locks an account for 15 minutes after five failed attempts; and stores only hashes of session tokens. Enable authenticator-app two-factor authentication with:
 
 ```powershell
-python hayavega.py enable2fa admin
+python manage.py enable2fa admin
 ```
 
-The command prints a secret to add to a TOTP-compatible authenticator app. Keep it private: it is shown only when two-factor authentication is enabled. `hayavega.py enable2fa` automatically encrypts the stored secret with a key derived from `Settings.secret_key` when `cryptography` is installed (`uv add cryptography`); without it, `hayavega diagnose` reports that the secret is stored in plaintext instead. Calling `enable_totp`/`authenticate`/`auth_routes` directly from your own code needs `secret_key=` passed explicitly -- see [Authentication](docs/topics/auth.md#two-factor-authentication-totp).
+The command prints a secret to add to a TOTP-compatible authenticator app. Keep it private: it is shown only when two-factor authentication is enabled. `manage.py enable2fa` automatically encrypts the stored secret with a key derived from `Settings.secret_key` when `cryptography` is installed (`uv add cryptography`); without it, `hayavega diagnose` reports that the secret is stored in plaintext instead. Calling `enable_totp`/`authenticate`/`auth_routes` directly from your own code needs `secret_key=` passed explicitly -- see [Authentication](docs/topics/auth.md#two-factor-authentication-totp).
 
 The generated project also exposes JSON authentication endpoints: `POST /api/auth/login`, `GET /api/auth/me`, and `POST /api/auth/logout`. Login accepts `username`, `password`, and optional `totp_code`; it returns a Bearer session token. Use HTTPS before exposing these endpoints outside local development.
 

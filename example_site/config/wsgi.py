@@ -1,6 +1,6 @@
 """WSGI entry point for production servers -- gunicorn, waitress, uWSGI, etc.
 
-`hayavega launch`/`hayavega.py launch` is for development only; point a real
+`hayavega launch`/`manage.py launch` is for development only; point a real
 server at the `application` object below instead. For example:
 
     gunicorn config.wsgi:application --workers 5 --bind 0.0.0.0:8000   # Linux/macOS
