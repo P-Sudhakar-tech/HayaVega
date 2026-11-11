@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from benchmarks.run import SCENARIOS, benchmark_target, build_targets  # noqa: E402
+from benchmarks.run import SCENARIOS, aggregate, benchmark_target, build_targets  # noqa: E402
 
 BASELINE_PATH = Path(__file__).resolve().parent / "results" / "perf_baseline.json"
 
@@ -30,6 +30,12 @@ DURATION = "5s"
 CONNECTIONS = 50
 WARMUP_REQUESTS = 50
 REGRESSION_THRESHOLD = -0.15
+# A single 5s sample is noisy enough on shared CI runners (observed ~2x
+# run-to-run swings on db_list with zero code changes) to blow past the
+# 15% regression threshold on noise alone. runs=3 + the median (not the
+# full suite's runs=5 -- this gate needs to stay fast on every push/PR)
+# smooths the worst of that without materially slowing the gate down.
+RUNS = 3
 
 GATE_SCENARIOS = [s for s in SCENARIOS if s[0] in {"json_echo", "db_list"}]
 
@@ -42,11 +48,12 @@ def measure() -> dict[str, float]:
         connections=CONNECTIONS,
         warmup_requests=WARMUP_REQUESTS,
         scenarios=GATE_SCENARIOS,
+        runs=RUNS,
     )
     if result.error:
         print(f"error running Hayavega target: {result.error}", file=sys.stderr)
         sys.exit(1)
-    return {name: result.scenarios[name][0].requests_per_sec for name, _method, _path in GATE_SCENARIOS}
+    return {name: aggregate(result.scenarios[name]).requests_per_sec_median for name, _method, _path in GATE_SCENARIOS}
 
 
 def load_baseline() -> dict[str, dict[str, float]]:
