@@ -136,16 +136,18 @@ every published Linux table with an explicit `error` cell, never
 silently dropped. See `docs/performance.md` for the published Linux
 numbers (run `42812292945`).
 
-**A second, newer gap, disclosed up front rather than discovered the hard
-way on the next CI run:** the `benchmark-linux` job's install step above
-predates the four targets added in "Eight-way comparison" below and does
-not yet install `granian`, `robyn`, or `blacksheep`. Until that install
-step is updated (tracked as follow-on CI work, not part of adding these
-targets), Granian, Robyn, and Blacksheep will all report `error` on
-Linux CI -- a missing-dependency gap, not a performance finding, and not
-evidence those targets behave differently on Linux. Raw ASGI needs only
-`uvicorn`, already installed above, so it is unaffected. The 8-way
-numbers below are Windows-only for now.
+**Update: Granian, Robyn, and Blacksheep are now installed and covered by
+Linux CI too.** The `benchmark-linux` job's install step in
+`.github/workflows/ci.yml` installs `granian robyn blacksheep` alongside
+the original dependencies, and a real CI run completed cleanly with real
+throughput numbers for all three on `ubuntu-latest` (e.g. Granian measured
+roughly 43264 req/s on `json_echo` in that run -- an order of magnitude
+above its Windows number, consistent with a faster/less-contended CI
+runner rather than a bug). Linux CI now exercises all eight targets.
+Django remains the one disclosed exception described above -- a separate,
+pre-existing, unrelated issue with Django's own waitress target on this
+specific runner, not connected to the Granian/Robyn/Blacksheep install gap
+that used to exist here.
 
 ## Performance regression gate
 
@@ -165,38 +167,81 @@ can actually fail the job.** `db_list` is informational-only: real CI runs
 on GitHub's shared `ubuntu-latest` runners measured `db_list` medians of
 75, 465, and 838 req/s across separate jobs with **zero code changes
 between them** -- a roughly 10x spread. That is between-VM noise: each CI
-job gets a freshly-provisioned runner, and `db_list`'s disk-I/O-bound
-throughput (via SQLite) is highly sensitive to whatever disk/CPU
-characteristics that particular VM happens to have that run. Repeating
-samples within one job (`runs=3` + median) cannot smooth this out, since
-it only reduces noise *within* one VM's run, not the variance that shows
-up *across* VMs. `json_echo` (pure CPU-bound dispatch overhead, no disk
-I/O) proved far more stable across the same real CI measurements --
-roughly 3200-6300 req/s, no order-of-magnitude swings -- so it was kept as
-the sole gated (`BLOCKING_SCENARIOS = {"json_echo"}`) scenario, while
-`db_list` is still measured and printed every run (never hidden) so a real
-regression there is still visible, just not blocking.
+job gets a freshly-provisioned runner. The exact cause of this variance is
+unresolved, but it is plausibly related to the WSGI/waitress Linux
+tail-latency anomaly already documented in `docs/performance.md`'s "Linux
+(CI), repeated-run methodology" section (`db_list` measured 86 req/s for
+Hayavega's WSGI transport vs. 3926 req/s for Hayavega's own ASGI transport
+on the identical scenario/data on the same kind of runner, at a 100%
+success rate -- not confirmed disk-I/O-bound, since a 20-row SQLite file
+that's hot in the page cache isn't meaningfully disk-bound at that
+throughput, and Hayavega's own ASGI transport measured ~3926 req/s on
+that exact same scenario). Repeating samples within one job (`runs=3` +
+median) cannot smooth this out, since it only reduces noise *within* one
+VM's run, not the variance that shows up *across* VMs. `json_echo` (pure
+CPU-bound dispatch overhead, no disk I/O) proved far more stable across
+the same real CI measurements -- roughly 3200-6300 req/s, no
+order-of-magnitude swings -- so it was kept as the sole gated
+(`BLOCKING_SCENARIOS = {"json_echo"}`) scenario, while `db_list` is still
+measured and printed every run (never hidden) so a real regression there
+is still visible, just not blocking.
+
+**Stated plainly, as a real coverage gap rather than a footnote: this gate
+does not catch `db_list` regressions.** A change to ORM query behavior,
+row-hydration logic, SQLite connection handling, or anything else that
+only affects `db_list`'s throughput will not fail this job, no matter how
+severe -- `db_list` is measured and printed for visibility only. Only a
+`json_echo` regression (WSGI dispatch-overhead changes) can actually block
+a merge through this gate today. Closing this gap would need either a
+less noisy `db_list` measurement environment or a separate, dedicated
+investigation into the variance described above.
 
 **Known, disclosed residual limitation: even gating on `json_echo` alone
-is not risk-free.** Real CI samples for `json_echo` ranged roughly
-3200-6300 req/s against the 15% threshold, so an occasional false-positive
-failure from pure CI-runner noise -- with zero real regression -- remains
-possible, just far less likely than it would be gating on `db_list`. This
-is a deliberate, accepted trade-off, not an oversight: chasing it further
-has diminishing returns against a free shared runner's inherent variance.
+is not risk-free.** Six real CI samples recorded across this plan's work
+measured `json_echo` at 3223, 4213, 4047, 6295, 4232, and 4202 req/s.
+Against the committed baseline (~4232 req/s) and the 15% regression
+threshold, one of those six samples (3223, a -23.8% deviation from
+baseline) would have failed the gate outright with zero real regression --
+roughly 1 in 6 observed, not a vague "far less likely." This is a
+deliberate, accepted trade-off, not an oversight: chasing it further has
+diminishing returns against a free shared runner's inherent variance.
 
 **Refreshing the baseline** is a deliberate, manual action a maintainer
 takes after confirming a throughput change is real and intended --
-**never** as a way to silence a failing gate:
+**never** as a way to silence a failing gate.
 
-```powershell
-python benchmarks/perf_gate.py --refresh-baseline
-```
+**Running `--refresh-baseline` locally on a dev machine does NOT produce a
+usable baseline and the result should never be committed.** This plan's
+own history confirms it: a locally-run (Windows dev machine) baseline
+measured `db_list` at roughly 1434 req/s, while the real CI runner
+measures it around 100 req/s under identical code -- wildly different
+environments that do not transfer. The committed baseline in
+`benchmarks/results/perf_baseline.json` must come from the CI runner
+itself, not a local run, since `perf_gate.py` is only ever actually run
+against the CI environment (see the `perf` job in `.github/workflows/ci.yml`).
 
-This re-measures both scenarios and prints each one's old -> new value
-before overwriting `benchmarks/results/perf_baseline.json` -- the baseline
-is never refreshed silently, and the printed diff is the record of what
-changed and why a human chose to accept it.
+The actual, correct procedure used to produce the committed baseline:
+
+1. Temporarily change the `perf` job's `run` step in
+   `.github/workflows/ci.yml` from `python benchmarks/perf_gate.py` to
+   `python benchmarks/perf_gate.py --refresh-baseline`.
+2. Push that temporary change to a branch (it does not need to merge to
+   `main` -- the point is to get a real run on GitHub's actual CI runner).
+3. Read the real printed `(none) -> <value>` (or `<old> -> <new>`) numbers
+   from that CI run's logs -- this is the real, CI-measured throughput,
+   not a local approximation of it.
+4. Copy those numbers into `benchmarks/results/perf_baseline.json` by hand
+   (or commit the file `--refresh-baseline` wrote during that CI run, if
+   the job uploads it) and commit the change with the printed diff in the
+   commit message as the record of what changed and why a human chose to
+   accept it.
+5. Revert the temporary `.github/workflows/ci.yml` change so the `perf`
+   job goes back to the normal checking (non-refreshing) invocation.
+
+`python benchmarks/perf_gate.py --refresh-baseline` run locally is still
+useful for a quick sanity check of the *shape* of the numbers (did they
+move in the expected direction at all), but the values it prints on a dev
+machine are not the ones that belong in the committed baseline file.
 
 ## Eight-way comparison: Granian, Robyn, Blacksheep, and a raw-ASGI baseline
 
@@ -213,13 +258,13 @@ machine as every other number in this document:
 
 | Framework | Server | `json_echo` req/s | `db_list` req/s | `template_render` req/s | `static_file` req/s |
 |---|---|---:|---:|---:|---:|
-| Hayavega (WSGI) | waitress | **4368** | **1926** | 1441 | 1579 |
+| Hayavega (WSGI) | waitress | 4368 | 1926 | 1441 | 1579 |
 | FastAPI | uvicorn | 1690 | 706 | 739 | 621 |
-| Hayavega (ASGI) | uvicorn | 3175 | 1939 | 1458 | 1343 |
+| Hayavega (ASGI) | uvicorn | 3175 | **1939** | 1458 | 1343 |
 | Django | waitress | 2223 | 344 | 316 | 1204 |
-| Raw ASGI | uvicorn | 4687 | 1108 | 1149 | **4863** |
-| Granian | granian | **5171** | 1439 | **1506** | **5375** |
-| Robyn | self-hosted | **14303** | 1491 | 1446 | **4252** |
+| Raw ASGI | uvicorn | 4687 | 1108 | 1149 | 4863 |
+| Granian | granian | 5171 | 1439 | **1506** | **5375** |
+| Robyn | self-hosted | **14303** | 1491 | 1446 | 4252 |
 | Blacksheep | uvicorn | 4327 | 1062 | 989 | 1178 |
 
 _req/s, median of 5 runs at 200 connections; 100% success rate on every
@@ -227,9 +272,14 @@ cell above -- see `benchmarks/results/RESULTS.md` for p50/p90/p99 and the
 full min/max spread._ Bold marks whichever target leads each column.
 
 **Disclosed plainly, not rounded up to a clean sweep: Hayavega (WSGI)
-does not win every scenario against these four harder targets.** It wins
-`db_list` outright against all seven other targets (1.3x-5.6x), and it
-edges `template_render` against everything except Granian (1441 vs
+does not win every scenario against these four harder targets.** On
+`db_list`, it decisively leads FastAPI, Django, Raw ASGI, Granian, Robyn,
+and Blacksheep (1.3x-5.6x) -- but Hayavega's own ASGI transport edges it
+out by a hair on the identical scenario (1939 vs 1926, 0.7%, effectively
+a tie, not a loss). So the honest claim is a lead against six of the
+seven other targets in this table, not "all seven" -- one of those seven
+is Hayavega's own other transport, and that one is a tie rather than a
+win. It edges `template_render` against everything except Granian (1441 vs
 Granian's 1506, a real but modest 4.5% loss) and ties Robyn there
 (1441 vs 1446, 0.3% -- noise, not a finding). But on `json_echo` and
 `static_file` -- the two scenarios that do the least work per request,

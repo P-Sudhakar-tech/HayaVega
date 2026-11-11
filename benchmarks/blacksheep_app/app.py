@@ -12,7 +12,7 @@ jinja2), so /posts uses that -- the real templating story for this
 framework -- rather than the no-templating stand-in used for Robyn/raw ASGI
 in benchmarks/robyn_app and benchmarks/raw_asgi_app.
 
-Run standalone: uvicorn benchmarks.blacksheep_app.app:application --port 9007
+Run standalone: uvicorn benchmarks.blacksheep_app.app:application --port 9008
 Served for real benchmark runs by benchmarks/run.py.
 """
 
@@ -83,4 +83,4 @@ if __name__ == "__main__":
     import uvicorn
 
     seed()
-    uvicorn.run(application, host="127.0.0.1", port=9007)
+    uvicorn.run(application, host="127.0.0.1", port=9008)

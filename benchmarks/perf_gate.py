@@ -46,15 +46,24 @@ GATE_SCENARIOS = [s for s in SCENARIOS if s[0] in {"json_echo", "db_list"}]
 # measured db_list medians (already runs=3 + statistics.median, see RUNS above)
 # of 75, 465, and 838 req/s with *zero code changes between them* -- a ~10x
 # spread. That's between-VM noise: each CI job gets a freshly provisioned
-# runner, and db_list's absolute throughput (disk-I/O-bound, via sqlite) is
-# extremely sensitive to whatever disk/CPU characteristics that particular VM
-# happens to have. Raising RUNS further (even to 10) cannot fix this -- more
-# repeats only smooth noise *within* one VM's run, not the variance that only
-# shows up *across* VMs. json_echo (pure CPU dispatch overhead, no disk I/O)
-# doesn't share this problem and has stayed comparably stable across the same
-# CI runs. So db_list is measured and printed on every run (never hidden --
-# this project discloses rather than silently drops inconvenient numbers) but
-# no longer fails the gate on its own; only json_echo blocks the job.
+# runner. The exact cause is unresolved -- it is NOT confirmed to be
+# disk-I/O-bound: docs/performance.md's Linux comparison table shows
+# Hayavega's own ASGI transport getting ~3926 req/s on this identical
+# db_list scenario/data on the same kind of runner, while the WSGI
+# transport (the one this gate measures) gets ~86 req/s there, at 100%
+# success -- a 20-row SQLite table hot in the page cache isn't meaningfully
+# disk-bound at that throughput. The more likely cause is plausibly the
+# WSGI/waitress-specific Linux tail-latency anomaly already documented in
+# docs/performance.md's "Linux (CI), repeated-run methodology" section
+# (see also benchmarks/README.md's "Performance regression gate" section
+# for the cross-reference). Raising RUNS further (even to 10) cannot fix
+# this either way -- more repeats only smooth noise *within* one VM's run,
+# not the variance that only shows up *across* VMs. json_echo (pure CPU
+# dispatch overhead, no disk I/O) doesn't share this problem and has stayed
+# comparably stable across the same CI runs. So db_list is measured and
+# printed on every run (never hidden -- this project discloses rather than
+# silently drops inconvenient numbers) but no longer fails the gate on its
+# own; only json_echo blocks the job.
 BLOCKING_SCENARIOS = {"json_echo"}
 
 

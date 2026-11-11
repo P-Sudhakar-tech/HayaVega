@@ -111,6 +111,10 @@ the WSGI figure -- but with genuine tail-latency contention, e.g. p99
 around 4.6s vs. p50 around 75ms on `db_list`. This was not root-caused
 as part of publishing these numbers; it is published as-is, honestly, as
 a lead for a future investigation rather than papered over or excluded.
+`benchmarks/README.md`'s "Performance regression gate" section
+cross-references this same anomaly as the more likely (though still
+unconfirmed) explanation for `db_list`'s ~10x between-VM noise on the CI
+performance gate, rather than that noise being disk-I/O-bound.
 
 Hayavega leads every published scenario on both transports on Windows
 **against FastAPI and Django**, the two comparison frameworks above. On
@@ -136,12 +140,24 @@ section.
 
 | Scenario | Hayavega (WSGI) | Raw ASGI | Granian | Robyn | Blacksheep |
 |---|---:|---:|---:|---:|---:|
-| `json_echo` | 4368 | 4687 | **5171** | 14303 | 4327 |
+| `json_echo` | 4368 | 4687 | 5171 | **14303** | 4327 |
 | `db_list` | **1926** | 1108 | 1439 | 1491 | 1062 |
 | `template_render` | 1441 | 1149 | **1506** | 1446 | 989 |
 | `static_file` | 1579 | 4863 | **5375** | 4252 | 1178 |
 
 _req/s, median of 5 runs at 200 connections, 100% success on every cell._
+
+**A disclosed, unreconciled gap worth flagging: Hayavega (WSGI)'s own
+`json_echo` number here (4368) differs by about 16% from the "re-measured"
+table above (3784), even though both claim the identical methodology
+(`--duration 10s --connections 200 --runs 5`) on the same Windows dev
+machine.** Several other numbers between those two tables drift by
+15-30% the same way. This is treated the same as every other noise
+finding already disclosed in this document: a real, session-to-session
+environment property of this shared dev machine, not hidden or smoothed
+over. No attempt is made to reconcile the two tables' numbers against each
+other -- they are each internally consistent (100% success rate, same
+invocation), just not directly comparable session-to-session.
 
 **Disclosed, not rounded up: Hayavega does not win every scenario here.**
 It wins `db_list` outright against all four, by 1.3&ndash;1.7&times;, and
