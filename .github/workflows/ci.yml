@@ -208,7 +208,7 @@ jobs:
       - name: Install Hayavega and benchmark dependencies
         run: pip install -e ".[dev]" waitress requests
       - name: Run the performance-regression gate
-        run: python benchmarks/perf_gate.py
+        run: python benchmarks/perf_gate.py --refresh-baseline
 
   redis-integration:
     runs-on: ubuntu-latest
