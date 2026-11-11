@@ -201,6 +201,10 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Install oha (prebuilt binary -- keeps this gate fast on every push/PR)
+        run: |
+          curl -L -o /usr/local/bin/oha https://github.com/hatoo/oha/releases/latest/download/oha-linux-amd64
+          chmod +x /usr/local/bin/oha
       - name: Install Hayavega and benchmark dependencies
         run: pip install -e ".[dev]" waitress requests
       - name: Run the performance-regression gate
