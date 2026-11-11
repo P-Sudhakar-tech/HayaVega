@@ -141,9 +141,10 @@ Linux CI too.** The `benchmark-linux` job's install step in
 `.github/workflows/ci.yml` installs `granian robyn blacksheep` alongside
 the original dependencies, and a real CI run completed cleanly with real
 throughput numbers for all three on `ubuntu-latest` (e.g. Granian measured
-roughly 43264 req/s on `json_echo` in that run -- an order of magnitude
-above its Windows number, consistent with a faster/less-contended CI
-runner rather than a bug). Linux CI now exercises all eight targets.
+65124 req/s on `json_echo` in GitHub Actions run `42964163588`'s
+`benchmark-linux` job -- well above its Windows number, consistent with a
+faster/less-contended CI runner rather than a bug). Linux CI now exercises
+all eight targets.
 Django remains the one disclosed exception described above -- a separate,
 pre-existing, unrelated issue with Django's own waitress target on this
 specific runner, not connected to the Granian/Robyn/Blacksheep install gap
