@@ -1,0 +1,8 @@
+{
+  "json_echo": {
+    "requests_per_sec": 2968.1088
+  },
+  "db_list": {
+    "requests_per_sec": 1434.0432
+  }
+}
