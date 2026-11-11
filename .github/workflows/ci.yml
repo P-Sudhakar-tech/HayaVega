@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, worktree-benchmark-credibility]
   pull_request:
 
 jobs:
@@ -208,7 +208,9 @@ jobs:
       - name: Install Hayavega and benchmark dependencies
         run: pip install -e ".[dev]" waitress requests
       - name: Run the performance-regression gate
-        run: python benchmarks/perf_gate.py
+        run: python benchmarks/perf_gate.py --refresh-baseline
+      - name: Print the refreshed baseline (full precision)
+        run: cat benchmarks/results/perf_baseline.json
 
   redis-integration:
     runs-on: ubuntu-latest

@@ -5,6 +5,9 @@ target only, at a CI-appropriate duration (short and lower-fidelity than
 Phase A's full statistical methodology -- this needs to be fast on every
 PR, not maximally precise), and compares each scenario's requests_per_sec
 against the committed baseline in benchmarks/results/perf_baseline.json.
+Both scenarios are always measured and printed, but only `json_echo`
+actually fails the job on a regression -- see BLOCKING_SCENARIOS below for
+why db_list is informational-only on shared CI runners.
 
 Usage:
     python benchmarks/perf_gate.py                  # check against baseline
@@ -38,6 +41,21 @@ REGRESSION_THRESHOLD = -0.15
 RUNS = 3
 
 GATE_SCENARIOS = [s for s in SCENARIOS if s[0] in {"json_echo", "db_list"}]
+
+# json_echo only. Three real CI runs on GitHub's shared ubuntu-latest runners
+# measured db_list medians (already runs=3 + statistics.median, see RUNS above)
+# of 75, 465, and 838 req/s with *zero code changes between them* -- a ~10x
+# spread. That's between-VM noise: each CI job gets a freshly provisioned
+# runner, and db_list's absolute throughput (disk-I/O-bound, via sqlite) is
+# extremely sensitive to whatever disk/CPU characteristics that particular VM
+# happens to have. Raising RUNS further (even to 10) cannot fix this -- more
+# repeats only smooth noise *within* one VM's run, not the variance that only
+# shows up *across* VMs. json_echo (pure CPU dispatch overhead, no disk I/O)
+# doesn't share this problem and has stayed comparably stable across the same
+# CI runs. So db_list is measured and printed on every run (never hidden --
+# this project discloses rather than silently drops inconvenient numbers) but
+# no longer fails the gate on its own; only json_echo blocks the job.
+BLOCKING_SCENARIOS = {"json_echo"}
 
 
 def measure() -> dict[str, float]:
@@ -76,6 +94,9 @@ def check(measured: dict[str, float], baseline: dict[str, dict[str, float]]) -> 
         pct_change = (measured_value - baseline_value) / baseline_value
         print(f"{name}: {measured_value:.0f} req/s (baseline {baseline_value:.0f} req/s, {pct_change:+.1%})")
         if pct_change < REGRESSION_THRESHOLD:
+            if name not in BLOCKING_SCENARIOS:
+                print(f"{name}: {measured_value:.0f} req/s vs baseline {baseline_value:.0f} req/s ({pct_change:.1%}) -- informational only, not gated (see BLOCKING_SCENARIOS)")
+                continue
             print(f"{name}: {measured_value:.0f} req/s vs baseline {baseline_value:.0f} req/s ({pct_change:.1%})")
             failed = True
     return failed
