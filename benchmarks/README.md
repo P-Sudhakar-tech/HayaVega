@@ -142,9 +142,11 @@ Linux CI too.** The `benchmark-linux` job's install step in
 the original dependencies, and a real CI run completed cleanly with real
 throughput numbers for all three on `ubuntu-latest` (e.g. Granian measured
 65124 req/s on `json_echo` in GitHub Actions run `42964163588`'s
-`benchmark-linux` job -- well above its Windows number, consistent with a
-faster/less-contended CI runner rather than a bug). Linux CI now exercises
-all eight targets.
+`benchmark-linux` job -- roughly 12.6x its Windows number, a gap too large
+to attribute to the CI runner alone and not yet investigated; Hayavega's
+own WSGI `json_echo` number only moved about 1.4x between the same two
+environments, so the two platforms are not simply offset by a constant
+factor). Linux CI now exercises all eight targets.
 Django remains the one disclosed exception described above -- a separate,
 pre-existing, unrelated issue with Django's own waitress target on this
 specific runner, not connected to the Granian/Robyn/Blacksheep install gap
@@ -176,8 +178,7 @@ Hayavega's WSGI transport vs. 3926 req/s for Hayavega's own ASGI transport
 on the identical scenario/data on the same kind of runner, at a 100%
 success rate -- not confirmed disk-I/O-bound, since a 20-row SQLite file
 that's hot in the page cache isn't meaningfully disk-bound at that
-throughput, and Hayavega's own ASGI transport measured ~3926 req/s on
-that exact same scenario). Repeating samples within one job (`runs=3` +
+throughput). Repeating samples within one job (`runs=3` +
 median) cannot smooth this out, since it only reduces noise *within* one
 VM's run, not the variance that shows up *across* VMs. `json_echo` (pure
 CPU-bound dispatch overhead, no disk I/O) proved far more stable across
@@ -214,9 +215,10 @@ takes after confirming a throughput change is real and intended --
 **Running `--refresh-baseline` locally on a dev machine does NOT produce a
 usable baseline and the result should never be committed.** This plan's
 own history confirms it: a locally-run (Windows dev machine) baseline
-measured `db_list` at roughly 1434 req/s, while the real CI runner
-measures it around 100 req/s under identical code -- wildly different
-environments that do not transfer. The committed baseline in
+measured `db_list` at roughly 1434 req/s, while the committed CI baseline
+is ~111.5 req/s (with real CI samples ranging 75-838 req/s run to run --
+see the between-VM noise discussion above) under identical code -- wildly
+different environments that do not transfer. The committed baseline in
 `benchmarks/results/perf_baseline.json` must come from the CI runner
 itself, not a local run, since `perf_gate.py` is only ever actually run
 against the CI environment (see the `perf` job in `.github/workflows/ci.yml`).
