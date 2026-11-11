@@ -147,6 +147,57 @@ evidence those targets behave differently on Linux. Raw ASGI needs only
 `uvicorn`, already installed above, so it is unaffected. The 8-way
 numbers below are Windows-only for now.
 
+## Performance regression gate
+
+A `perf` job in `.github/workflows/ci.yml` runs `benchmarks/perf_gate.py`
+on every PR, failing the job if Hayavega's own throughput regresses
+against a committed baseline (`benchmarks/results/perf_baseline.json`).
+This is a separate, fast, CI-appropriate gate from the full cross-framework
+suite above -- it does not compare against FastAPI/Django/anything else,
+it only compares Hayavega's own `json_echo` and `db_list` scenarios,
+against the Hayavega (WSGI) target only, run at `--duration 5s
+--connections 50`, `runs=3`, median-based (via `benchmarks.run.aggregate()`),
+against **a 15% regression threshold** (`REGRESSION_THRESHOLD = -0.15` in
+`benchmarks/perf_gate.py`).
+
+**Both scenarios are always measured and printed, but only `json_echo`
+can actually fail the job.** `db_list` is informational-only: real CI runs
+on GitHub's shared `ubuntu-latest` runners measured `db_list` medians of
+75, 465, and 838 req/s across separate jobs with **zero code changes
+between them** -- a roughly 10x spread. That is between-VM noise: each CI
+job gets a freshly-provisioned runner, and `db_list`'s disk-I/O-bound
+throughput (via SQLite) is highly sensitive to whatever disk/CPU
+characteristics that particular VM happens to have that run. Repeating
+samples within one job (`runs=3` + median) cannot smooth this out, since
+it only reduces noise *within* one VM's run, not the variance that shows
+up *across* VMs. `json_echo` (pure CPU-bound dispatch overhead, no disk
+I/O) proved far more stable across the same real CI measurements --
+roughly 3200-6300 req/s, no order-of-magnitude swings -- so it was kept as
+the sole gated (`BLOCKING_SCENARIOS = {"json_echo"}`) scenario, while
+`db_list` is still measured and printed every run (never hidden) so a real
+regression there is still visible, just not blocking.
+
+**Known, disclosed residual limitation: even gating on `json_echo` alone
+is not risk-free.** Real CI samples for `json_echo` ranged roughly
+3200-6300 req/s against the 15% threshold, so an occasional false-positive
+failure from pure CI-runner noise -- with zero real regression -- remains
+possible, just far less likely than it would be gating on `db_list`. This
+is a deliberate, accepted trade-off, not an oversight: chasing it further
+has diminishing returns against a free shared runner's inherent variance.
+
+**Refreshing the baseline** is a deliberate, manual action a maintainer
+takes after confirming a throughput change is real and intended --
+**never** as a way to silence a failing gate:
+
+```powershell
+python benchmarks/perf_gate.py --refresh-baseline
+```
+
+This re-measures both scenarios and prints each one's old -> new value
+before overwriting `benchmarks/results/perf_baseline.json` -- the baseline
+is never refreshed silently, and the printed diff is the record of what
+changed and why a human chose to accept it.
+
 ## Eight-way comparison: Granian, Robyn, Blacksheep, and a raw-ASGI baseline
 
 Wired into `benchmarks/run.py`'s `build_targets()` alongside the original
