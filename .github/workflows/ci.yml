@@ -173,6 +173,43 @@ jobs:
           HAYAVEGA_TEST_MYSQL_PASSWORD: hayavega
         run: pytest tests/test_mysql_integration.py --no-cov -v
 
+  benchmark-linux:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install oha
+        run: cargo install oha --locked
+      - name: Install Hayavega and comparison frameworks
+        run: pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress requests granian robyn blacksheep
+      - name: Run the benchmark suite (CI-appropriate duration, full concurrency/repeat methodology)
+        run: python benchmarks/run.py --duration 5s --connections 200 --runs 5
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-linux
+          path: benchmarks/results/RESULTS.md
+
+  perf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install oha (prebuilt binary -- keeps this gate fast on every push/PR)
+        run: |
+          curl -L -o /usr/local/bin/oha https://github.com/hatoo/oha/releases/latest/download/oha-linux-amd64
+          chmod +x /usr/local/bin/oha
+      - name: Install Hayavega and benchmark dependencies
+        run: pip install -e ".[dev]" waitress requests
+      - name: Run the performance-regression gate
+        run: python benchmarks/perf_gate.py
+
   redis-integration:
     runs-on: ubuntu-latest
     services:

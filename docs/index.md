@@ -13,7 +13,9 @@ Open-source Python framework
 
 # Hayavega
 
-Welcome to Hayavega &mdash; the super-fastest Python web framework.
+Welcome to Hayavega &mdash; a Python web framework benchmarked openly
+against FastAPI, Django, and Rust-core alternatives like Robyn and
+Granian, with every result published, including the ones it doesn't win.
 {: .hayavega-welcome }
 
 A conventional, batteries-included project structure. Automatic, interactive API documentation, generated from your code. A Rust core where it actually wins the benchmark, and honestly disclosed where it doesn't.
