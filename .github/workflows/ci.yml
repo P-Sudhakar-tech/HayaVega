@@ -202,7 +202,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install Hayavega and benchmark dependencies
-        run: pip install -e ".[dev]" waitress
+        run: pip install -e ".[dev]" waitress requests
       - name: Run the performance-regression gate
         run: python benchmarks/perf_gate.py
 
