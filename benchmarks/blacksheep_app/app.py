@@ -21,8 +21,8 @@ import tempfile
 from pathlib import Path
 
 from blacksheep import Application, get
-from blacksheep.server.responses import view
 from blacksheep.server.rendering.jinja2 import JinjaRenderer
+from blacksheep.server.responses import view
 from blacksheep.settings.html import html_settings
 from jinja2 import FileSystemLoader
 
