@@ -1,6 +1,6 @@
 site_name: Hayavega
 site_description: A structured Python web framework with automatic, interactive API documentation and a Rust-accelerated core
-site_url: https://hayavega-framework.vercel.app/
+site_url: https://hayavega.vercel.app/
 copyright: Released under the MIT License.
 
 docs_dir: docs

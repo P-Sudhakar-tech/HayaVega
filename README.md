@@ -7,7 +7,7 @@ Hayavega is an early, runnable experiment in a conventional, batteries-included 
 **A browsable documentation site** (tutorials, topic guides, a generated
 API reference, and the published benchmark numbers) lives in
 [`docs/`](docs/index.md) and is published at
-[hayavega-framework.vercel.app](https://hayavega-framework.vercel.app/)
+[hayavega.vercel.app](https://hayavega.vercel.app/)
 (built via `vercel.json`, which runs `mkdocs build` and serves its
 `site/` output directly -- the standalone `index.html` landing page is
 not part of this deploy). This README stays the first thing a
