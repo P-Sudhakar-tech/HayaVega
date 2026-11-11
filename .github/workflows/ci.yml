@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, worktree-benchmark-credibility]
   pull_request:
 
 jobs:
@@ -185,7 +185,7 @@ jobs:
       - name: Install oha
         run: cargo install oha --locked
       - name: Install Hayavega and comparison frameworks
-        run: pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress requests
+        run: pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress requests granian robyn blacksheep
       - name: Run the benchmark suite (CI-appropriate duration, full concurrency/repeat methodology)
         run: python benchmarks/run.py --duration 5s --connections 200 --runs 5
       - name: Upload results
@@ -193,6 +193,18 @@ jobs:
         with:
           name: benchmark-results-linux
           path: benchmarks/results/RESULTS.md
+
+  perf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Hayavega and benchmark dependencies
+        run: pip install -e ".[dev]" waitress
+      - name: Run the performance-regression gate
+        run: python benchmarks/perf_gate.py
 
   redis-integration:
     runs-on: ubuntu-latest
