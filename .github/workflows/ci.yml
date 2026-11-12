@@ -126,6 +126,14 @@ jobs:
         run: pip install -e ".[dev]" "psycopg[binary]"
         env:
           HAYAVEGA_SKIP_NATIVE_BUILD: "1"
+      - name: Measure connection-pooling throughput (informational)
+        env:
+          HAYAVEGA_TEST_POSTGRES_NAME: hayavega_test
+          HAYAVEGA_TEST_POSTGRES_HOST: localhost
+          HAYAVEGA_TEST_POSTGRES_PORT: "5432"
+          HAYAVEGA_TEST_POSTGRES_USER: hayavega
+          HAYAVEGA_TEST_POSTGRES_PASSWORD: hayavega
+        run: python benchmarks/connection_pooling_postgres_mysql.py
       - name: Run the opt-in PostgreSQL integration test
         env:
           HAYAVEGA_TEST_POSTGRES_NAME: hayavega_test
@@ -164,6 +172,14 @@ jobs:
         run: pip install -e ".[dev]" pymysql cryptography
         env:
           HAYAVEGA_SKIP_NATIVE_BUILD: "1"
+      - name: Measure connection-pooling throughput (informational)
+        env:
+          HAYAVEGA_TEST_MYSQL_NAME: hayavega_test
+          HAYAVEGA_TEST_MYSQL_HOST: localhost
+          HAYAVEGA_TEST_MYSQL_PORT: "3306"
+          HAYAVEGA_TEST_MYSQL_USER: hayavega
+          HAYAVEGA_TEST_MYSQL_PASSWORD: hayavega
+        run: python benchmarks/connection_pooling_postgres_mysql.py
       - name: Run the opt-in MySQL/MariaDB integration test
         env:
           HAYAVEGA_TEST_MYSQL_NAME: hayavega_test
