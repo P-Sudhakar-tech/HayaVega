@@ -255,25 +255,39 @@ larger than everything above combined.
 
 ## Phase 5 -- Postgres/MySQL connection-pooling rigor (parity with the SQLite work)
 
-- [ ] `hayavega.db.enable_connection_pooling()`/`enable_readonly_connection_pooling()`
+- [x] `hayavega.db.enable_connection_pooling()`/`enable_readonly_connection_pooling()`
       were benchmarked exhaustively for SQLite (see
       `INDUSTRY_LEADERSHIP_ROADMAP.md`'s "Connection pooling, attempted"
       section -- a real win for ASGI, a real regression for WSGI, both
-      measured and disclosed). The same rigor has never been applied to the
-      PostgreSQL/MySQL integration paths (`tests/test_postgresql_integration.py`,
-      `tests/test_mysql_integration.py`), which currently only verify
-      correctness, not throughput under concurrency.
-- [ ] Benchmark pooling behavior against both real database engines under
-      realistic concurrency (CI's existing `postgres:16`/`mysql:8` service
-      containers are already wired for correctness tests -- reuse them for
-      a throughput comparison, not a new environment).
+      measured and disclosed). The same rigor has now been applied to
+      PostgreSQL/MySQL.
+- [x] **Benchmarked pooling against both real database engines under
+      realistic concurrency.** Added
+      `benchmarks/connection_pooling_postgres_mysql.py`, mirroring the
+      SQLite investigation's own framework-free methodology (16 threads,
+      200 queries each, pooled vs. unpooled, timed end to end), wired
+      into the existing `postgresql-integration`/`mysql-integration` CI
+      jobs -- reusing their already-wired `postgres:16`/`mysql:8` service
+      containers, not a new environment. **Real result (GitHub Actions
+      run `43242780767`): PostgreSQL 331 -> 3168 q/s (9.58x), MySQL 392
+      -> 11052 q/s (28.20x)** -- a clean, decisive win for both engines,
+      unlike SQLite's split result, which makes sense rather than
+      contradicting it: PostgreSQL/MySQL are real client-server
+      databases paying a TCP handshake plus authentication exchange on
+      every fresh `connect()`, which SQLite's in-process, file-based
+      model doesn't have. See `benchmarks/README.md`'s new "Connection
+      pooling against real PostgreSQL/MySQL" section for the full
+      writeup, including the one thing this did NOT measure (an
+      HTTP-level confirmation through a real served app, since no
+      PostgreSQL/MySQL benchmark app exists in this suite yet).
 
 ### Acceptance criteria
 
 - Published, reproducible numbers for pooled vs. unpooled connections
   against both PostgreSQL and MySQL, matching the disclosure standard the
   SQLite work already set (including disclosing a regression if one is
-  found, as the WSGI case already was for SQLite).
+  found, as the WSGI case already was for SQLite) -- **done**: both
+  engines show a clean win, no regression found.
 
 ## Phase 6 -- Memory: investigated, found healthy, not a fix item
 

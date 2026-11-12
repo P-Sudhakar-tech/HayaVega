@@ -2033,3 +2033,53 @@ messages for malformed queries, on both paths (`tests/test_graphql.py`'s
 `NativeParserBridgeTests` exercises both explicitly). `execute()`'s own
 logic past parsing -- binding variables, depth/field-count limits,
 calling resolvers, projecting results -- is completely unchanged.
+
+## Connection pooling against real PostgreSQL/MySQL: a clean win, unlike SQLite's split result
+
+`enable_connection_pooling()` was benchmarked exhaustively for SQLite
+(see `INDUSTRY_LEADERSHIP_ROADMAP.md`'s "Connection pooling, attempted"
+section) -- a real win under ASGI/uvicorn, a real ~10-15% *regression*
+under WSGI/waitress. The same rigor had never been applied to the
+PostgreSQL/MySQL paths, which only had correctness coverage
+(`tests/test_postgresql_integration.py`, `tests/test_mysql_integration.py`),
+not a throughput measurement under concurrency.
+
+`benchmarks/connection_pooling_postgres_mysql.py` mirrors that SQLite
+investigation's own framework-free methodology exactly: 16 threads, 200
+queries each, pooled vs. unpooled, timed end to end -- no HTTP server,
+no framework view code, isolating the effect to connection reuse itself.
+Wired into the existing `postgresql-integration`/`mysql-integration` CI
+jobs (informational, not a gate), reusing their already-wired
+`postgres:16`/`mysql:8` service containers.
+
+**Real measured result, GitHub Actions run `43242780767`:**
+
+| Engine | Unpooled | Pooled | Ratio |
+|---|---:|---:|---:|
+| PostgreSQL | 331 q/s | 3168 q/s | **9.58x** |
+| MySQL | 392 q/s | 11052 q/s | **28.20x** |
+
+Unlike SQLite's split result (a real win for one concurrency model, a
+real regression for the other), this is a clean, decisive win for both
+engines with no caveat attached -- and that asymmetry makes sense rather
+than contradicting the SQLite finding: SQLite is an in-process, file-based
+engine with no network handshake to amortize, so holding a connection
+open mostly avoids file-open overhead (small, and apparently outweighed
+by contention under WSGI's thread count). PostgreSQL and MySQL are real
+client-server databases -- even over `localhost` in a CI container, every
+fresh `connect()` pays a real TCP handshake plus the database's own
+authentication exchange (MySQL 8's `caching_sha2_password` in particular
+is not a cheap handshake), which pooling amortizes across 200 queries
+instead of paying once per query. This is a measured result, not a
+restated assumption: the ratio difference between PostgreSQL (9.58x) and
+MySQL (28.20x) on the identical methodology shows the handshake/auth cost
+itself varies by engine, not just by "network vs. no network."
+
+**Not yet done, disclosed as open follow-up work:** this measures raw
+connection throughput, not an HTTP-level benchmark through a real
+`benchmarks/*_app` served by waitress/uvicorn the way the SQLite work's
+`db_list`/`template_render` scenarios were -- no such app exists yet for
+PostgreSQL/MySQL in this benchmark suite. Given how large and
+one-directional this result already is, an HTTP-level confirmation would
+very likely show the same direction, but that is an expectation, not
+something this investigation measured.
