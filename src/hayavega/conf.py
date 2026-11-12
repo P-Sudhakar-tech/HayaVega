@@ -21,6 +21,8 @@ class ProjectSettings:
     server_host: str
     server_port: int
     server_engine: str
+    server_workers: int
+    server_processes: int
     server_tls_cert: str | None
     server_tls_key: str | None
     security: dict
@@ -114,6 +116,20 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
     if server_engine not in {"python", "rust"}:
         raise ValueError(f"{module.__name__}: Settings.server.engine must be 'python' or 'rust' -- got {server_engine!r}. Fix Settings.server.engine in {module.__name__}.")
 
+    workers = server.get("WORKERS", 8)
+    if not isinstance(workers, int) or workers < 1:
+        raise ValueError(f"{module.__name__}: Settings.server.workers must be a positive integer -- got {workers!r}. Fix Settings.server.workers in {module.__name__}.")
+
+    processes = server.get("PROCESSES", 1)
+    if not isinstance(processes, int) or processes < 1:
+        raise ValueError(f"{module.__name__}: Settings.server.processes must be a positive integer -- got {processes!r}. Fix Settings.server.processes in {module.__name__}.")
+    if processes > 1 and server_engine != "rust":
+        # Same "fail loudly, don't silently ignore" precedent as
+        # tls_cert/tls_key below: processes>1 needs SO_REUSEPORT, which
+        # hayavega.runtime's wsgiref server has no multi-process story for
+        # in this version.
+        raise ValueError(f"{module.__name__}: Settings.server.processes > 1 is only supported with Settings.server.engine = 'rust' (got {server_engine!r}). Set Settings.server.engine = 'rust', or remove processes, in {module.__name__}.")
+
     tls_cert = server.get("TLS_CERT")
     tls_key = server.get("TLS_KEY")
     if (tls_cert is None) != (tls_key is None):
@@ -138,6 +154,8 @@ def load_settings_from_module(module: ModuleType) -> ProjectSettings:
         server_host=server.get("HOST", "127.0.0.1"),
         server_port=port,
         server_engine=server_engine,
+        server_workers=workers,
+        server_processes=processes,
         server_tls_cert=tls_cert,
         server_tls_key=tls_key,
         security=_section(config, "security"),
