@@ -78,6 +78,41 @@ class SettingsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Settings.server.engine"):
             load_settings_from_module(module)
 
+    def test_server_workers_defaults_to_eight(self):
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={})
+        self.assertEqual(load_settings_from_module(module).server_workers, 8)
+
+    def test_server_workers_is_configurable(self):
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={"workers": 16})
+        self.assertEqual(load_settings_from_module(module).server_workers, 16)
+
+    def test_rejects_non_positive_server_workers(self):
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={"workers": 0})
+        with self.assertRaisesRegex(ValueError, "Settings.server.workers"):
+            load_settings_from_module(module)
+
+    def test_server_processes_defaults_to_one(self):
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={})
+        self.assertEqual(load_settings_from_module(module).server_processes, 1)
+
+    def test_server_processes_is_configurable_with_the_rust_engine(self):
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={"engine": "rust", "processes": 4})
+        self.assertEqual(load_settings_from_module(module).server_processes, 4)
+
+    def test_rejects_non_positive_server_processes(self):
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={"processes": 0})
+        with self.assertRaisesRegex(ValueError, "Settings.server.processes"):
+            load_settings_from_module(module)
+
+    def test_rejects_multiprocess_under_the_python_engine(self):
+        """processes>1 needs SO_REUSEPORT, which hayavega.runtime's wsgiref
+        server has no multi-process story for in this version -- same
+        "fail loudly, don't silently ignore" precedent as tls_cert/tls_key
+        under the python engine."""
+        module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={"engine": "python", "processes": 2})
+        with self.assertRaisesRegex(ValueError, "Settings.server.processes"):
+            load_settings_from_module(module)
+
     def test_security_section_passes_through_to_the_uppercase_dict_other_modules_consume(self):
         module = _module(database={"engine": "sqlite3", "name": "hayavega.sqlite3"}, server={}, security={"force_https": True, "custom_flag": "x"})
         settings = load_settings_from_module(module)

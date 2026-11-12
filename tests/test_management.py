@@ -75,6 +75,18 @@ class ManagementTests(unittest.TestCase):
 
     @patch("hayavega.management.commands.serve_rust")
     @patch("hayavega.management.commands.load_settings")
+    def test_launch_passes_workers_and_processes_from_settings_to_the_rust_runtime(self, load_settings, serve_rust):
+        load_settings.return_value = SimpleNamespace(root_urlconf="test_project_urls", server_host="127.0.0.1", server_port=8000, server_engine="rust", server_workers=16, server_processes=4)
+        urls = ModuleType("test_project_urls")
+        urls.urlpatterns = []
+        with patch.dict(sys.modules, {"test_project_urls": urls}):
+            execute_from_command_line(["hayavega.py", "launch", "8001", "--noreload"])
+        serve_rust.assert_called_once()
+        self.assertEqual(serve_rust.call_args.kwargs["workers"], 16)
+        self.assertEqual(serve_rust.call_args.kwargs["processes"], 4)
+
+    @patch("hayavega.management.commands.serve_rust")
+    @patch("hayavega.management.commands.load_settings")
     def test_launch_reports_an_unavailable_rust_runtime_without_crashing(self, load_settings, serve_rust):
         load_settings.return_value = SimpleNamespace(root_urlconf="test_project_urls", server_host="127.0.0.1", server_port=8000, server_engine="rust")
         serve_rust.side_effect = RustRuntimeUnavailableError("hayavega_native was not built")

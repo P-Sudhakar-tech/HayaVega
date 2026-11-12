@@ -96,7 +96,7 @@ def _launch(args: list[str]) -> None:
     server_engine = getattr(settings, "server_engine", "python")
     try:
         if server_engine == "rust":
-            serve_rust(urls.urlpatterns, host, int(port or 8000), hardening=hardening, debug=debug, tls_cert=getattr(settings, "server_tls_cert", None), tls_key=getattr(settings, "server_tls_key", None))
+            serve_rust(urls.urlpatterns, host, int(port or 8000), hardening=hardening, debug=debug, workers=getattr(settings, "server_workers", 8), processes=getattr(settings, "server_processes", 1), tls_cert=getattr(settings, "server_tls_cert", None), tls_key=getattr(settings, "server_tls_key", None))
         else:
             serve(urls.urlpatterns, host, int(port or 8000), hardening=hardening, debug=debug)
     except RustRuntimeUnavailableError as error:
