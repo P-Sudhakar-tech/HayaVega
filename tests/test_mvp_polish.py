@@ -1,6 +1,8 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from hayavega import Response, TestClient, path, render_template, static_routes
 from hayavega.runtime import create_application
@@ -50,6 +52,80 @@ class MvpPolishTests(unittest.TestCase):
             self.assertEqual(initial.headers["Cache-Control"], "public, max-age=600")
             self.assertEqual(cached.status_code, 304)
             self.assertEqual(cached.content, b"")
+
+    def test_static_routes_caches_resolved_paths_across_requests(self):
+        """`Path.resolve()` is a real filesystem syscall -- profiling the
+        static_file benchmark scenario found it dominates request time
+        (over a third of all CPU time in that route). A second request for
+        a file already resolved once must not call `Path.resolve()` again."""
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "mark.svg").write_text("<svg/>", encoding="utf-8")
+            app = create_application(static_routes(directory, "assets"))
+            client = TestClient(app)
+            client.get("/assets/mark.svg")  # first request: resolves and caches
+            with patch("hayavega.static.Path.resolve", side_effect=AssertionError("resolve() must not be called again for an already-cached path")):
+                response = client.get("/assets/mark.svg")
+            self.assertEqual(response.text, "<svg/>")
+
+    def test_static_routes_caches_file_content_until_mtime_changes(self):
+        """Mirrors templates.py's own mtime-invalidated caching (`_compile_cached`):
+        re-reading an unchanged static file's bytes on every single request is
+        wasted work -- a second request for the same, unmodified file must not
+        call `Path.read_bytes()` again."""
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "mark.svg").write_text("<svg/>", encoding="utf-8")
+            app = create_application(static_routes(directory, "assets"))
+            client = TestClient(app)
+            client.get("/assets/mark.svg")  # first request: reads and caches
+            with patch("hayavega.static.Path.read_bytes", side_effect=AssertionError("read_bytes() must not be called again for an unmodified cached file")):
+                response = client.get("/assets/mark.svg")
+            self.assertEqual(response.text, "<svg/>")
+
+    def test_static_routes_serves_fresh_content_after_the_file_is_modified(self):
+        """The cache must not mean serving stale content forever -- editing
+        the file (and therefore its mtime) must be picked up on the next
+        request, the same guarantee templates.py's own cache already makes."""
+        with tempfile.TemporaryDirectory() as directory:
+            file_path = Path(directory, "mark.svg")
+            file_path.write_text("<svg/>", encoding="utf-8")
+            app = create_application(static_routes(directory, "assets"))
+            client = TestClient(app)
+            first = client.get("/assets/mark.svg")
+            original_mtime = file_path.stat().st_mtime
+            file_path.write_text("<svg class='updated'/>", encoding="utf-8")
+            # `write_text()` sets mtime to "now", which can collide with the
+            # original mtime on a coarse filesystem clock if both writes land
+            # in the same tick -- set it explicitly, after the content write,
+            # to a value guaranteed different from what was cached.
+            new_mtime = original_mtime + 10
+            os.utime(file_path, (new_mtime, new_mtime))
+            second = client.get("/assets/mark.svg")
+            self.assertEqual(first.text, "<svg/>")
+            self.assertEqual(second.text, "<svg class='updated'/>")
+            self.assertNotEqual(first.headers["ETag"], second.headers["ETag"])
+
+    def test_static_routes_404s_for_a_directory_instead_of_a_file(self):
+        """A path that resolves to a real, in-bounds filesystem entry that
+        isn't a regular file (a directory) must still 404, not error or
+        leak directory-listing behavior."""
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "subdir").mkdir()
+            app = create_application(static_routes(directory, "assets"))
+            self.assertEqual(TestClient(app).get("/assets/subdir").status_code, 404)
+
+    def test_static_routes_still_404s_if_a_cached_file_is_removed_afterward(self):
+        """Caching the resolved path must not mean serving stale content or
+        crashing once the underlying file is gone -- existence is still
+        checked fresh on every request; only the expensive path-resolution
+        step is skipped for an already-seen path."""
+        with tempfile.TemporaryDirectory() as directory:
+            file_path = Path(directory, "mark.svg")
+            file_path.write_text("<svg/>", encoding="utf-8")
+            app = create_application(static_routes(directory, "assets"))
+            client = TestClient(app)
+            self.assertEqual(client.get("/assets/mark.svg").status_code, 200)
+            file_path.unlink()
+            self.assertEqual(client.get("/assets/mark.svg").status_code, 404)
 
     def test_static_routes_rejects_a_negative_max_age(self):
         with tempfile.TemporaryDirectory() as directory:

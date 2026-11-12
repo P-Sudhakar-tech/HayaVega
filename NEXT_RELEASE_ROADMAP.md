@@ -97,6 +97,35 @@ plan's already-large fix wave.
       documented allowlist for Django (the one target with a disclosed,
       accepted, CI-environment-specific failure) so the job can fail loudly
       on a *new* regression without permanently red-lighting on a known one.
+- [x] **Rust runtime: `static_file` regression found and fixed.** A routine
+      spot-check of the live docs site (2026-11-12) found the "Rust runtime
+      vs. reference WSGI server" numbers in `docs/performance.md` no longer
+      matched reality -- re-measured, `static_file` had flipped from a
+      claimed 1.60x win to a real, reproducible 0.41-0.54x loss (confirmed
+      at both concurrency 30 and concurrency 1, ruling out queuing effects).
+      Real profiling (`py-spy` attached to the running server mid-benchmark,
+      not a guess) found the actual cause: `hayavega.static`'s `serve()`
+      called `Path.resolve()` (a real filesystem syscall) on every single
+      request, accounting for over a third of that route's CPU time.
+      **Fixed** in two steps, both via TDD: (1) cache the resolved,
+      in-bounds path per request path, populated only on success so an
+      attacker sending arbitrary never-repeating paths can't grow it
+      unboundedly; (2) merge the separate `is_file()` check and content
+      read into one `stat()`-based, mtime-invalidated cache, mirroring
+      `templates.py`'s own existing `_compile_cached` pattern exactly (same
+      "one syscall, not two" fix that module's own history already made).
+      A file modified or removed after being cached is still detected
+      correctly (fresh `stat()` every request) -- regression tests prove
+      both. **Result: `static_file` is now a genuine 1.44-1.45x win**,
+      confirmed across two clean re-measurements after clearing stale
+      leftover processes that had silently corrupted an earlier
+      measurement (the benchmark harness's own `wait_until_ready()` only
+      polls the port, so it had been measuring an old process still
+      running pre-fix code). Every scenario in this comparison is now a
+      real win, not three wins and one disclosed loss. See
+      `src/hayavega/static.py`, `tests/test_mvp_polish.py`'s
+      `test_static_routes_caches_*`/`test_static_routes_serves_fresh_*`
+      tests, and the updated numbers in `docs/performance.md`.
 
 ### Acceptance criteria
 
@@ -108,6 +137,10 @@ plan's already-large fix wave.
   to fail, not just a quietly-wrong artifact.
 - Django's already-disclosed failure continues to show as an `error` row
   without failing the job, proving the allowlist works as intended.
+- The `static_file` regression's root cause is identified via real
+  profiling data and fixed with a re-measured, published before/after
+  comparison -- **done**: 0.41-0.54x loss to 1.44-1.45x win, confirmed
+  across two clean runs.
 
 ## Phase 3 -- Rust build tuning (free, zero-risk win, never attempted)
 
