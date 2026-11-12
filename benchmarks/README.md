@@ -152,6 +152,19 @@ pre-existing, unrelated issue with Django's own waitress target on this
 specific runner, not connected to the Granian/Robyn/Blacksheep install gap
 that used to exist here.
 
+**The `benchmark-linux` CI job now fails loudly on any *other* target
+error.** Until this was added, `benchmark_target()`'s own
+`except Exception: result.error = str(error)` recorded a failure in the
+published table, but nothing made the CI job itself fail -- a silently
+broken target (e.g. a missing dependency reintroducing the exact
+Granian/Robyn/Blacksheep install gap described above) would have stayed
+invisible unless someone read the artifact by hand. `benchmarks/run.py`'s
+`--fail-on-error` flag (passed in `.github/workflows/ci.yml`) exits
+non-zero if any target errors, except the ones in `KNOWN_ERROR_ALLOWLIST`
+(Django, the disclosed exception above) -- an explicit, documented
+allowlist, not a blanket "ignore all errors," so a *new* regression still
+fails the job.
+
 ## Performance regression gate
 
 A `perf` job in `.github/workflows/ci.yml` runs `benchmarks/perf_gate.py`

@@ -24,6 +24,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
+# Django does not complete on the real GitHub Actions Linux runner (times
+# out at full concurrency; not reproducible locally) -- see
+# benchmarks/README.md's "Known, disclosed limitation" section for the full
+# writeup of the three genuine debugging attempts that didn't resolve it.
+# Kept here as an explicit, documented allowlist (not a blanket "ignore all
+# errors") so --fail-on-error can fail loudly on a *new* regression -- e.g.
+# the granian/robyn/blacksheep install gap this project already found and
+# fixed once -- without permanently red-lighting on this one known,
+# accepted exception.
+KNOWN_ERROR_ALLOWLIST = {"Django"}
+
 SCENARIOS = [
     ("json_echo", "GET", "/echo"),
     ("db_list", "GET", "/posts.json"),
@@ -227,6 +238,15 @@ def benchmark_target(target: Target, *, duration: str, connections: int, warmup_
     return result
 
 
+def unexpected_errors(results: list[TargetResult], *, allowlist: set[str]) -> list[str]:
+    """Target names that errored and are not in the known-error allowlist --
+    the thing --fail-on-error actually fails on. A target's error is
+    recorded in the published table either way (see benchmark_target's own
+    `except Exception` handling); this only decides whether that recorded
+    error should also fail the CI job."""
+    return [result.target.name for result in results if result.error and result.target.name not in allowlist]
+
+
 def render_markdown(results: list[TargetResult], *, duration: str, connections: int) -> str:
     lines = [
         "# Hayavega benchmark results",
@@ -266,6 +286,8 @@ def main() -> None:
     parser.add_argument("--connections", type=int, default=50, help="oha -c concurrency (default: 50)")
     parser.add_argument("--requests-warmup", type=int, default=50, dest="warmup_requests")
     parser.add_argument("--runs", type=int, default=1, help="Repeat each scenario this many times and report median + spread (default: 1)")
+    parser.add_argument("--fail-on-error", action="store_true", help="Exit non-zero if any target errored, except those in --allow-error (default: Django -- see KNOWN_ERROR_ALLOWLIST)")
+    parser.add_argument("--allow-error", action="append", default=None, help="Target name allowed to error without failing the job (repeatable). Defaults to KNOWN_ERROR_ALLOWLIST when omitted.")
     args = parser.parse_args()
 
     if shutil.which("oha") is None:
@@ -281,6 +303,12 @@ def main() -> None:
     markdown = render_markdown(results, duration=args.duration, connections=args.connections)
     (RESULTS_DIR / "RESULTS.md").write_text(markdown, encoding="utf-8")
     print(f"\nWrote {RESULTS_DIR / 'RESULTS.md'}")
+
+    if args.fail_on_error:
+        allowlist = KNOWN_ERROR_ALLOWLIST if args.allow_error is None else set(args.allow_error)
+        unexpected = unexpected_errors(results, allowlist=allowlist)
+        if unexpected:
+            raise SystemExit(f"--fail-on-error: unexpected target failure(s), not in the allowlist ({sorted(allowlist)}): {', '.join(unexpected)}. See the error detail printed above, or benchmarks/results/RESULTS.md.")
 
 
 if __name__ == "__main__":

@@ -187,7 +187,7 @@ jobs:
       - name: Install Hayavega and comparison frameworks
         run: pip install -e ".[dev]" fastapi "uvicorn[standard]" jinja2 django waitress requests granian robyn blacksheep
       - name: Run the benchmark suite (CI-appropriate duration, full concurrency/repeat methodology)
-        run: python benchmarks/run.py --duration 5s --connections 200 --runs 5
+        run: python benchmarks/run.py --duration 5s --connections 200 --runs 5 --fail-on-error
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
