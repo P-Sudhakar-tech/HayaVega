@@ -125,12 +125,87 @@ class RustRuntimeParityTests(unittest.TestCase):
         self.assertIn(b"a=1&b=2", response.read())
 
 
+@unittest.skipUnless(NATIVE_AVAILABLE, "hayavega_native is not built; see the native-extension CI job")
+class RustRuntimeReusePortTests(unittest.TestCase):
+    """Verifies the real SO_REUSEPORT behavior `hayavega.rust_runtime.serve`'s
+    `processes` option depends on, through the public `hayavega_native`
+    API -- not a Rust-level unit test, because this crate's
+    `extension-module` feature means a standalone `cargo test` binary can't
+    link against libpython (see server.rs's comment where the Rust test
+    module used to be)."""
+
+    @unittest.skipIf(sys.platform != "win32", "exercises the Windows-specific rejection directly; Linux's reuse_port-sharing behavior is covered below")
+    def test_serve_wsgi_rejects_reuse_port_directly_on_windows(self):
+        import hayavega_native
+
+        with self.assertRaisesRegex(ValueError, "no real equivalent on Windows"):
+            hayavega_native.serve_wsgi(create_application([]), "127.0.0.1", _free_port(), 1, None, None, True)
+
+    @unittest.skipIf(sys.platform == "win32", "SO_REUSEPORT has no real equivalent on Windows; covered by the rejection test above instead")
+    def test_two_servers_can_share_one_port_with_reuse_port(self):
+        import hayavega_native
+
+        port = _free_port()
+        app = create_application([path("rp", lambda request: {"ok": True}, methods=("GET",))])
+
+        def run(result):
+            try:
+                hayavega_native.serve_wsgi(app, "127.0.0.1", port, 2, None, None, True)
+            except Exception as error:  # noqa: BLE001 -- captured for the assertion below, not swallowed
+                result.append(error)
+
+        first_errors: list[Exception] = []
+        second_errors: list[Exception] = []
+        threading.Thread(target=run, args=(first_errors,), daemon=True).start()
+        _wait_until_ready("127.0.0.1", port)
+        threading.Thread(target=run, args=(second_errors,), daemon=True).start()
+        time.sleep(0.3)
+
+        self.assertEqual(second_errors, [], "a second reuse_port=True server should bind the same port successfully")
+        response = urllib.request.urlopen(f"http://127.0.0.1:{port}/rp", timeout=2)
+        self.assertEqual(response.status, 200)
+
+    @unittest.skipIf(sys.platform == "win32", "SO_REUSEPORT has no real equivalent on Windows; covered by the rejection test above instead")
+    def test_without_reuse_port_a_second_server_cannot_bind_the_same_port(self):
+        import hayavega_native
+
+        port = _free_port()
+        app = create_application([])
+        threading.Thread(target=lambda: hayavega_native.serve_wsgi(app, "127.0.0.1", port, 2, None, None, False), daemon=True).start()
+        _wait_until_ready("127.0.0.1", port)
+        with self.assertRaises(ValueError):
+            hayavega_native.serve_wsgi(app, "127.0.0.1", port, 2, None, None, False)
+
+
 class RustRuntimeUnavailableTests(unittest.TestCase):
     def test_serve_raises_an_actionable_error_when_hayavega_native_is_missing(self):
         if NATIVE_AVAILABLE:
             self.skipTest("hayavega_native is built in this environment; this test targets the fallback path")
         with self.assertRaisesRegex(RustRuntimeUnavailableError, "hayavega_native was not built"):
             serve_rust([], "127.0.0.1", _free_port())
+
+    def test_serve_rejects_multiprocess_on_windows_where_reuse_port_has_no_equivalent(self):
+        """processes>1 needs SO_REUSEPORT for real multi-core scaling, which
+        has no real equivalent on Windows -- patching sys.platform and a
+        fake hayavega_native module (so the import succeeds) lets this
+        exercise that specific rejection on any CI platform, not just a
+        real Windows runner."""
+        import types
+
+        fake_native = types.ModuleType("hayavega_native")
+        original_native = sys.modules.get("hayavega_native", None)
+        original_platform = sys.platform
+        sys.modules["hayavega_native"] = fake_native
+        sys.platform = "win32"
+        try:
+            with self.assertRaisesRegex(RustRuntimeUnavailableError, "no real equivalent on Windows"):
+                serve_rust([], "127.0.0.1", _free_port(), processes=2)
+        finally:
+            sys.platform = original_platform
+            if original_native is None:
+                sys.modules.pop("hayavega_native", None)
+            else:
+                sys.modules["hayavega_native"] = original_native
 
     def test_serve_raises_an_actionable_error_when_hayavega_native_import_fails(self):
         """`serve()` imports `hayavega_native` inside the function body on every
