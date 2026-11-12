@@ -91,6 +91,8 @@ class RateLimiterBackendError(RuntimeError):
 class RateLimiter:
     """Thread-safe, in-memory fixed-window request limiter for one process."""
 
+    _PRUNE_SCAN_LIMIT = 8
+
     def __init__(self, limit: int, window_seconds: int, max_clients: int = 10_000):
         if limit < 1 or window_seconds < 1 or max_clients < 1:
             raise ValueError("Rate limit, window, and max_clients must be positive integers.")
@@ -99,15 +101,41 @@ class RateLimiter:
         self._lock = Lock()
 
     def _prune(self, now: float) -> None:
-        """Drop globally idle keys before applying the bounded LRU policy."""
-        expired = []
-        for key, entries in self._requests.items():
+        """Drop idle keys from the *front* of the LRU order, bounded to
+        `_PRUNE_SCAN_LIMIT` per call -- not every tracked client.
+
+        Previously scanned every key in `_requests` on every `allow()`
+        call: with `max_clients` (10,000 by default) distinct clients
+        tracked, a single `allow()` call measured at ~2.76ms (a ~2,700x
+        slowdown vs. one tracked client, ~1us) -- found via a real
+        HRMS load-test build (hayavega-hrms's FINDINGS.md). Every
+        request serializes through this one lock-protected call, so
+        that capped total process throughput at ~363 req/s regardless
+        of hardware, no matter how many worker threads/processes were
+        configured.
+
+        Correctness of the bound: `move_to_end()` in `allow()` keeps
+        recently-active keys at the back of `self._requests`, so the
+        front holds the least-recently-touched ones. A key's position
+        therefore tracks the most recent timestamp ever appended to its
+        own deque -- so once the front key's entries are confirmed
+        expired, every key behind it (touched at least as recently) is
+        at least as fresh, and scanning stops there rather than
+        continuing past it. A key that's gone idle doesn't vanish
+        instantly, but it's bounded: `allow()`'s own `max_clients` LRU
+        eviction (`popitem(last=False)`) is the backstop that still
+        caps memory even if pruning falls behind under sustained load
+        from many distinct clients.
+        """
+        scanned = 0
+        while self._requests and scanned < self._PRUNE_SCAN_LIMIT:
+            key, entries = next(iter(self._requests.items()))
             while entries and entries[0] <= now - self.window_seconds:
                 entries.popleft()
-            if not entries:
-                expired.append(key)
-        for key in expired:
+            if entries:
+                break
             del self._requests[key]
+            scanned += 1
 
     def allow(self, key: str, now: float | None = None) -> bool:
         now = time.monotonic() if now is None else now
