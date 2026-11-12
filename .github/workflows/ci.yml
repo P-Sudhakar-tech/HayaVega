@@ -96,7 +96,7 @@ jobs:
           python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Hayavega with test dependencies (builds and bundles hayavega_native automatically)
-        run: pip install -v -e ".[dev]"
+        run: pip install -e ".[dev]"
       - name: Confirm the native extension loaded, then run the tests it backs
         run: |
           python -c "import hayavega_native; print(hayavega_native.SignalDispatcher)"

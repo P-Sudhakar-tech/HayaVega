@@ -15,4 +15,4 @@ rustls-pemfile = "2.2.0"
 rusqlite = { version = "0.41", features = ["bundled"] }
 
 [target.'cfg(unix)'.dependencies]
-socket2 = "0.5"
+socket2 = { version = "0.5", features = ["all"] }
