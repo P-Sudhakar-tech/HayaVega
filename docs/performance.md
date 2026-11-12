@@ -180,15 +180,32 @@ class server:
 
 | Scenario | Rust runtime | Reference WSGI server | Ratio |
 |---|---:|---:|---:|
-| `json_echo` | 8642 req/s | 3488 req/s | **2.48&times;** |
-| `db_list` | 1486 req/s | 827 req/s | **1.80&times;** |
-| `template_render` | 1102 req/s | 712 req/s | **1.55&times;** |
-| `static_file` | 1939 req/s | 1210 req/s | **1.60&times;** |
+| `json_echo` | 10391 req/s | 4860 req/s | **2.14&times;** |
+| `db_list` | 3958 req/s | 1262 req/s | **3.14&times;** |
+| `template_render` | 2632 req/s | 1328 req/s | **1.98&times;** |
+| `static_file` | 2073 req/s | 4985 req/s | **0.42&times;** (a loss, disclosed below) |
 
-100% success rate, both targets, every run &mdash; and this reflects the
-**hardened** server (request-smuggling, response-splitting, and
-Slowloris defenses all included) with zero measured performance cost.
-See [Rust runtime](topics/rust-runtime.md).
+_Re-measured 2026-11-12 (three runs, `oha -z 10s -c 30`, 100% success every
+target every run) after a routine check found the previous numbers on this
+page no longer matched reality for one scenario. Three of four scenarios
+beat the server this page previously cited (and `db_list` beats it by more
+than before); `static_file` is now a real, reproducible **loss** -- the Rust
+runtime is roughly half the throughput of the reference server on that one
+scenario, confirmed at concurrency 30 and again at concurrency 1 (no
+queuing involved either way), and not explained by any recent code change
+(`crates/hayavega-python/src/server.rs` and `src/hayavega/static.py`, which
+both servers call identically, are unchanged since this repository's own
+rename commit). The root cause is not yet known -- it needs profiling
+(py-spy or similar attached to the running server), not another guess; see
+`NEXT_RELEASE_ROADMAP.md`'s "Rust runtime: investigate the static_file
+regression" item.
+
+This still reflects the **hardened** server (request-smuggling,
+response-splitting, and Slowloris defenses all included); the hardening
+pass itself showed zero measured performance cost at the time, and nothing
+in this re-measurement changes that finding -- the loss disclosed above is
+specific to `static_file` on every scenario tested, not a general
+regression. See [Rust runtime](topics/rust-runtime.md).
 
 ## More Rust-acceleration wins since
 
@@ -230,6 +247,12 @@ synthetic microbenchmark) surfaced two real framework-level fixes:
 
 This project's standing rule: publish what loses, not only what wins.
 
+- **The Rust runtime's `static_file` scenario**: a real, reproducible
+  0.42&ndash;0.54&times; result (slower, not faster) against the reference
+  WSGI server &mdash; found via a re-measurement on 2026-11-12, confirmed at
+  two different concurrency levels, root cause not yet identified. See the
+  "Rust runtime vs. a reference WSGI server" section above for the full
+  numbers and `NEXT_RELEASE_ROADMAP.md` for the tracked follow-up.
 - **HTTPS overhead**: ~0&ndash;12% depending on scenario, since the TLS
   handshake is paid once per connection and amortized by keep-alive, not
   paid per request &mdash; `db_list` (~12%) was the one scenario where this

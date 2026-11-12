@@ -97,6 +97,28 @@ plan's already-large fix wave.
       documented allowlist for Django (the one target with a disclosed,
       accepted, CI-environment-specific failure) so the job can fail loudly
       on a *new* regression without permanently red-lighting on a known one.
+- [ ] **Rust runtime: investigate the `static_file` regression.** A routine
+      spot-check of the live docs site (2026-11-12) found the published
+      "Rust runtime vs. reference WSGI server" numbers in
+      `docs/performance.md` no longer matched reality: re-measured on the
+      same machine (three runs, `oha -z 10s -c 30`, 100% success every run),
+      `json_echo`/`db_list`/`template_render` all beat the previously
+      published ratios (some substantially, e.g. `db_list` from 1.80x to
+      ~3.1x) -- but `static_file` flipped from a claimed 1.60x win to a real,
+      reproducible **0.41-0.54x loss**, confirmed at both concurrency 30 and
+      concurrency 1 (ruling out thread-pool/queuing effects). `docs/performance.md`
+      and `docs/index.md` were corrected to the real current numbers and the
+      loss in the same change that added this item. The root cause is not
+      yet known: neither `crates/hayavega-python/src/server.rs` nor
+      `src/hayavega/static.py` (which both servers call identically) have
+      changed since this repository's own rename commit, and both servers
+      run the exact same Python view function for this route, so the
+      difference is in the Rust HTTP layer's handling of this specific
+      response shape (binary body, three extra headers, real file I/O) --
+      not something to keep guessing at without a profiler. Attach `py-spy`
+      (or similar) to the running Rust server process mid-benchmark to get a
+      real answer, following this project's own standing rule of measuring
+      rather than guessing before changing anything.
 
 ### Acceptance criteria
 
@@ -108,6 +130,12 @@ plan's already-large fix wave.
   to fail, not just a quietly-wrong artifact.
 - Django's already-disclosed failure continues to show as an `error` row
   without failing the job, proving the allowlist works as intended.
+- The `static_file` regression's root cause is identified via real
+  profiling data (not a guess), and either fixed with a re-measured,
+  published before/after comparison, or documented as an accepted,
+  understood limitation if it turns out not to be fixable -- matching this
+  project's standard of disclosing a negative result as thoroughly as a
+  positive one.
 
 ## Phase 3 -- Rust build tuning (free, zero-risk win, never attempted)
 
