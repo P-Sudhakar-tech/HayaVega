@@ -2083,3 +2083,90 @@ PostgreSQL/MySQL in this benchmark suite. Given how large and
 one-directional this result already is, an HTTP-level confirmation would
 very likely show the same direction, but that is an expectation, not
 something this investigation measured.
+
+## Python 3.13/3.14 free-threading (no-GIL): built and measured for real -- a real loss, not yet a win
+
+`NEXT_RELEASE_ROADMAP.md`'s Phase 4 flagged this as the one remaining
+item that could resolve to "revisit again in 6 months" without real
+data. It didn't need to -- a free-threaded CPython build was actually
+installed (`uv python install 3.14.8+freethreaded`, confirmed via
+`sys._is_gil_enabled() == False`, not assumed) and the full stack was
+built and measured against it for real.
+
+**Dependency compatibility, checked directly, not assumed:**
+
+- **Python 3.13t: blocked.** `cryptography`'s own build dependency,
+  `cffi`, refuses outright: `RuntimeError: CFFI does not support the
+  free-threaded build of CPython 3.13. Upgrade to free-threaded 3.14 or
+  newer to use CFFI with the free-threaded build.` This is `cffi`'s own
+  stated position, not a Hayavega-side gap.
+- **Python 3.14t: works.** Every pure-Python dependency (`msgspec`,
+  `cryptography`+`cffi`, `mypy`, `pymysql`, `redis`, `ruff`, `coverage`)
+  installed as real `cp314t`-tagged binary wheels -- no source builds
+  needed, no missing-wheel fallback. The full test suite passes in pure-
+  Python fallback mode: 1033 passed, 20 skipped, identical to the
+  GIL-enabled result.
+- **`hayavega_native` (the PyO3/Rust extension): builds and loads
+  correctly.** `cargo build --release` against the free-threaded
+  interpreter (`PYO3_PYTHON` pointed at it explicitly) compiles cleanly
+  with `pyo3` 0.30, and importing it does **not** trigger CPython's
+  GIL-reenable warning (checked with `-W error::RuntimeWarning`, which
+  would have raised if the extension hadn't declared free-threading
+  compatibility) -- `sys._is_gil_enabled()` stays `False` after import.
+  The full native-extension-backed test suite (Signals, `mango_list`,
+  the Rust runtime, `SerializedConnection`, the GraphQL native parser)
+  passes: 163 passed, 5 skipped, identical to the GIL-enabled result.
+
+**The actual payoff question -- does removing the GIL let more worker
+threads use more CPU cores for this architecture's workload -- was then
+measured directly, not assumed from the dependency compatibility above.**
+Repeated the same `workers=1..32` sweep against `db_list`/`json_echo`
+this session's GIL-ceiling investigation already used, on the identical
+4-core machine, for a clean same-version comparison (`cpython-3.14.8`
+regular vs. `cpython-3.14.8+freethreaded`, both built against the
+identical native extension via the same `PYO3_PYTHON`-pinned `cargo
+build`):
+
+| workers | db_list (GIL) | db_list (free-threaded) | json_echo (GIL) | json_echo (free-threaded) |
+|---|---:|---:|---:|---:|
+| 1 | 2275 | 657 | 7436 | 1695 |
+| 2 | 4503 | 1423 | 11759 | 4768 |
+| 4 | 4255 | 1419 | 11213 | 8500 |
+| 8 | 4073 | 1364 | 10877 | 7765 |
+| 16 | 4204 | 1316 | 10878 | 6848 |
+| 32 | 3657 | 1254 | 10515 | 5481 |
+
+req/s, 8s duration, 30 connections, `oha`. **Two real findings, neither
+flattering to free-threading on this specific architecture:**
+
+1. **A large single-thread performance tax, consistent with CPython's
+   own documented cost of free-threading today.** Even at `workers=1`
+   (no concurrency at all, nothing for the GIL to contend over), the
+   free-threaded build is 3.46x slower on `db_list` and 4.39x slower on
+   `json_echo` than the identical code on the identical machine under
+   the regular GIL-enabled build. This matches CPython's own disclosed,
+   accepted trade-off for the free-threading effort (specializing
+   adaptive interpreter optimizations and biased reference counting
+   currently cost real per-operation overhead), not a Hayavega-specific
+   regression.
+2. **No multi-core scaling win to offset that tax.** Both builds
+   plateau/decline after 2-4 workers on this 4-core machine -- the
+   free-threaded build does not scale further than the GIL-enabled one
+   does. A plausible (not confirmed) explanation: `db_list`'s own
+   bottleneck may already be SQLite's own connection/locking behavior
+   rather than Python bytecode execution contending on the GIL, which
+   is consistent with this document's own standing "environment
+   ceiling" finding from the SQLite connection-pooling investigation
+   above -- removing a lock that wasn't the actual bottleneck wouldn't
+   be expected to help, and it didn't.
+
+**Conclusion, stated plainly: free-threading is not adopted.** Not
+because the ecosystem isn't ready (it demonstrably is, on 3.14t, for
+every dependency this project uses) but because the real, measured
+result on this workload is a straightforward loss -- slower in absolute
+terms, with no compensating scaling benefit. This is a negative result,
+disclosed as thoroughly as a positive one, matching
+`RUST_CORE_REWRITE_ROADMAP.md`'s own rejected-candidate precedent. Worth
+re-measuring again as free-threaded CPython's single-thread performance
+tax continues to shrink in future releases, or against a workload that
+is more clearly Python-bytecode-bound rather than SQLite-bound.

@@ -230,16 +230,32 @@ larger than everything above combined.
       underlying capability. See
       `crates/hayavega-python/src/server.rs`, `src/hayavega/rust_runtime.py`,
       and `docs/topics/rust-runtime.md`.
-- [ ] **Evaluate Python 3.13's free-threaded (no-GIL) build.** The one
-      change that would remove the GIL ceiling structurally rather than
-      working around it with more processes. Needs checking whether
-      `hayavega_native` (PyO3-based) and this project's other C-extension
-      dependencies (`msgspec`, `rusqlite` via the Rust side, `cryptography`)
-      have free-threaded wheels or build support yet, before any real
-      investment -- the ecosystem's free-threading support was still
-      maturing as of this project's own knowledge cutoff, so this item may
-      resolve to "revisit again in 6 months," which is a legitimate outcome
-      to document, not a failure to deliver.
+- [x] **Evaluate Python 3.13/3.14's free-threaded (no-GIL) build --
+      done with a real build, not deferred.** Installed a genuine
+      free-threaded CPython (`uv python install 3.14.8+freethreaded`,
+      verified via `sys._is_gil_enabled() == False`) and tested the
+      whole stack against it directly. **Python 3.13t is blocked**:
+      `cryptography`'s own `cffi` dependency refuses to build on it,
+      by `cffi`'s own explicit design (its error message says to use
+      3.14t instead). **Python 3.14t works**: every dependency installs
+      as real `cp314t` wheels, the full pure-Python test suite passes
+      (1033/1033), and `hayavega_native` (the PyO3/Rust extension)
+      builds, loads, and correctly declares free-threading compatibility
+      (no GIL-reenable warning; the native-extension test suite passes,
+      163/163). **The actual payoff -- real multi-core scaling -- was
+      then measured directly: a clean loss, not a win.** A same-version
+      (3.14.8 regular vs. 3.14.8+freethreaded) `workers=1..32` sweep on
+      the identical 4-core machine found the free-threaded build 3.46x
+      slower on `db_list` and 4.39x slower on `json_echo` even at
+      `workers=1` (no concurrency, nothing for a GIL to contend over) --
+      a real, disclosed single-thread performance tax, consistent with
+      CPython's own documented free-threading trade-off today -- and
+      neither build scales past 2-4 workers on this machine, so there's
+      no multi-core win to offset that tax. See `benchmarks/README.md`'s
+      new "Python 3.13/3.14 free-threading" section for the full
+      methodology and numbers. **Not adopted** -- a genuine negative
+      result, disclosed as thoroughly as a positive one, not "revisit
+      in 6 months" deferred without data.
 
 ### Acceptance criteria (for whichever of the two, if either, proceeds past evaluation)
 
