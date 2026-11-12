@@ -145,33 +145,49 @@ plan's already-large fix wave.
   comparison -- **done**: 0.41-0.54x loss to 1.44-1.45x win, confirmed
   across two clean runs.
 
-## Phase 3 -- Rust build tuning (free, zero-risk win, never attempted)
+## Phase 3 -- Rust build tuning: investigated, not adopted (2026-11-12)
 
-- [ ] **Add `[profile.release]` to `Cargo.toml`**: `lto = true`,
-      `codegen-units = 1`, `panic = "abort"`. No `[profile.release]` section
-      currently exists at all in this workspace, meaning every native build
-      (the Rust runtime, `SerializedConnection`, the GraphQL lexer/parser,
-      the Signals dispatcher) has shipped on Rust's unoptimized defaults the
-      entire time. Benchmark before and after against the existing Rust
-      runtime vs. FastAPI/waitress suites
-      (`benchmarks/rust_runtime_vs_fastapi.py`, `benchmarks/rust_runtime_vs_wsgi.py`)
-      before publishing any new performance claim, following this project's
-      own standing "benchmark first, wire in only on a decisive win"
-      principle -- `panic = "abort"` in particular changes unwinding
-      behavior across the PyO3 boundary and needs verifying it doesn't
-      change error-handling behavior for Python callers, not just assumed
-      safe because it's a common recommendation.
+- [x] **`panic = "abort"` -- tested, rejected, a real correctness risk
+      caught before shipping.** `crates/hayavega-python/src/server.rs`'s
+      connection-handling loop deliberately wraps each connection in
+      `std::panic::catch_unwind` so one panicking connection logs an error
+      and is dropped, instead of taking the whole server process down --
+      exactly the hardening concern `INDUSTRY_LEADERSHIP_ROADMAP.md`
+      already flagged as dedicated work. `panic = "abort"` disables stack
+      unwinding entirely, which makes `catch_unwind` a no-op: a single
+      panicking connection would abort the whole process instead of being
+      recovered. Rejected before it reached a benchmark, let alone a
+      merge.
+- [x] **`lto = true` + `codegen-units = 1` -- benchmarked, found
+      negligible, not adopted.** Built and installed the extension with
+      only these two settings (no `panic = "abort"`), ran the full Rust
+      test suite (`cargo test --manifest-path crates/hayavega-core/Cargo.toml`,
+      20/20 passing) and the hardening/TLS test suites (16 passed, 1
+      skipped, same as baseline) to confirm no regression, then
+      re-measured `benchmarks/rust_runtime_vs_wsgi.py` twice against the
+      pre-change baseline. Result: every scenario landed within run-to-run
+      noise of the unmodified build (`json_echo` 10546/10474/10518 req/s,
+      `db_list` 3849/3998/4021, `template_render` 2694/2742/2711,
+      `static_file` 7175/6919/6775 across baseline + two post-build runs).
+      This server's bottleneck is I/O/syscall/GIL-bound, not CPU-bound
+      Rust code LTO would speed up, so there is no decisive win to
+      publish. Reverted; not merged. Following this project's own
+      "benchmark first, wire in only on a decisive win" principle in the
+      other direction: a measured non-win is reported honestly instead of
+      shipped as a claimed one, matching `RUST_CORE_REWRITE_ROADMAP.md`'s
+      own rejected-candidate precedent.
 
 ### Acceptance criteria
 
 - A real before/after benchmark run (same methodology as every other
   performance claim in this repo: `oha`, multiple runs, real numbers)
-  backs whatever improvement (or lack of one) gets published.
+  backs whatever improvement (or lack of one) gets published -- **done**:
+  no improvement found, reported as such, nothing shipped.
 - The existing Rust test suite (`cargo test -p hayavega-core`) and the
   Rust-runtime hardening tests (`tests/test_rust_runtime_hardening.py`)
-  still pass with `panic = "abort"` -- a hand-written HTTP server's panic
-  recovery behavior under adversarial input (already a dedicated concern in
-  `INDUSTRY_LEADERSHIP_ROADMAP.md`'s hardening pass) must not regress.
+  were verified against the candidate build before any benchmark ran --
+  **done**, and this is what caught the `panic = "abort"` regression risk
+  before it could reach production.
 
 ## Phase 4 -- Multi-process scaling and free-threading (the real structural ceiling; needs its own design pass before starting)
 
