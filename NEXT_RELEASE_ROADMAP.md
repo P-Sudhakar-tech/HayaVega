@@ -36,17 +36,20 @@ A public package with zero release notes anywhere is a real gap for a
 project whose entire stated identity is "every claim is falsifiable and
 documented" -- this phase closes that gap before anything else ships.
 
-- [ ] **Write `CHANGELOG.md`**, starting with a `v0.1.0` entry covering
+- [x] **Write `CHANGELOG.md`**, starting with a `v0.1.0` entry covering
       what actually shipped (the headline items: Signals, the Rust runtime,
       ASGI support, the benchmark suite, the security hardening pass, the
-      scaffold fixes). Follow [Keep a Changelog](https://keepachangelog.com/)
+      scaffold fixes). Follows [Keep a Changelog](https://keepachangelog.com/)
       conventions, matching this project's existing preference for
       well-known formats over inventing its own (e.g. OpenAPI over a
-      hand-rolled schema, Keep a Changelog over a bespoke log format).
-- [ ] **Create a real GitHub Release for the `v0.1.0` tag**, retroactively,
-      with notes drawn from the new `CHANGELOG.md` entry. `gh release list`
-      currently returns nothing -- the tag exists, but there is no release
-      page a visitor would actually find.
+      hand-rolled schema, Keep a Changelog over a bespoke log format). See
+      `CHANGELOG.md`.
+- [ ] **Create a real GitHub Release for the `v0.1.0` tag** -- deliberately
+      **deferred, not done**, on explicit instruction: the project is not to
+      be made more public right now, and a GitHub Release is a public-facing
+      page. `CHANGELOG.md` already carries the same content a Release would
+      show, so nothing is lost by leaving this undone; revisit only when
+      asked to.
 - [ ] **Fix the stale "docs publish is blocked" language** in
       `UPCOMING_IMPROVEMENT_ROADMAP.md`'s Week 16 section. The docs site is
       confirmed live at `https://hayavega.vercel.app/` (verified via a real
