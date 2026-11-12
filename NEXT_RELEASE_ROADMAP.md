@@ -103,19 +103,16 @@ plan's already-large fix wave.
       8678 (3.7x) is real Linux-side confirmation that this session's
       `static_file` regression fix is a genuine win, not a Windows-only
       artifact.
-- [ ] **`benchmark-linux`'s `run.py` always exits 0, regardless of per-target
-      errors.** This was a Review Focus item in the benchmark-credibility
-      plan that was never actually implemented -- `benchmark_target()`'s
-      existing `except Exception: result.error = str(error)` records a
-      failure in the published table, but nothing makes the CI job itself
-      fail when that happens, so a silently-broken target (e.g. a missing
-      dependency reintroducing the exact `granian`/`robyn`/`blacksheep`
-      install gap this session already found and fixed once) would stay
-      invisible unless someone reads the artifact by hand. Add a
-      `--fail-on-error` flag to `benchmarks/run.py`, with an explicit,
-      documented allowlist for Django (the one target with a disclosed,
-      accepted, CI-environment-specific failure) so the job can fail loudly
-      on a *new* regression without permanently red-lighting on a known one.
+- [x] **`benchmark-linux`'s `run.py` no longer always exits 0.** Added a
+      `--fail-on-error` flag (`unexpected_errors()`, verified directly
+      with real assertions, not just read over) plus `KNOWN_ERROR_ALLOWLIST
+      = {"Django"}` -- an explicit, documented allowlist, not a blanket
+      "ignore all errors," so a *new* regression (e.g. the
+      Granian/Robyn/Blacksheep install gap this session already found and
+      fixed once) still fails the job loudly. Wired into
+      `.github/workflows/ci.yml`'s `benchmark-linux` job. See
+      `benchmarks/README.md`'s updated "Known, disclosed limitation"
+      section.
 - [x] **Rust runtime: `static_file` regression found and fixed.** A routine
       spot-check of the live docs site (2026-11-12) found the "Rust runtime
       vs. reference WSGI server" numbers in `docs/performance.md` no longer
