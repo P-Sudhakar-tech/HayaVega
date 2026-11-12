@@ -232,6 +232,63 @@ larger than everything above combined.
   SQLite work already set (including disclosing a regression if one is
   found, as the WSGI case already was for SQLite).
 
+## Phase 6 -- Memory: investigated, found healthy, not a fix item
+
+A direct request this session ("memory optimisation is also need to be
+implemented in the next release") was investigated with the same real-data
+discipline as the CPU-profiling work in Phase 2, using this project's own
+established `tracemalloc`-peak methodology (`benchmarks/memory_profile_templates.py`;
+RSS-based tools like `memory_profiler` show false-zero here due to CPython's
+own refcounting freeing garbage immediately, and Scalene doesn't build on
+Windows without MS C++ Build Tools).
+
+- [x] **Per-request peak memory, measured across all four benchmarked
+      routes** (`json_echo`, `db_list`, `template_render`, `static_file`),
+      2000 calls each against the real `hayavega.runtime.create_application`
+      WSGI callable. Result: 1.75-5.26 KiB median peak per call, with
+      median == p90 == max on every route (no variance, no growth across
+      calls). `template_render` is highest, plausibly from compiled-template
+      execution context plus escaped HTML string construction -- expected,
+      not wasteful.
+- [x] **Stress-tested the two new caches added in Phase 2's `static_file`
+      fix** (`_resolved`/`_content_cache` in `src/hayavega/static.py`) for
+      unbounded-growth risk, since they hold one entry per distinct file
+      path ever legitimately served for the life of the process. Served
+      2000 distinct real files through them: ~1.6 KiB held per cached file,
+      ~3.2 MiB total for 2000 files. Bounded by real files actually served
+      (the attacker-controlled-growth vector was already closed when the
+      cache was built -- only successful, in-bounds resolutions are cached),
+      not a leak, but worth documenting as a real characteristic: a
+      long-running process serving a very large, ever-changing set of static
+      assets (e.g. thousands of user-uploaded files) will hold this cache's
+      memory for the process lifetime. Fine for a typical project's
+      asset count; a correct caveat to put in `docs/topics/deployment.md` if
+      this framework is ever used for large-scale static/media hosting
+      without a reverse proxy or CDN in front of it.
+- [ ] **No fixable inefficiency was found**, and none is invented here --
+      current memory usage across the hot paths is already minimal. Nothing
+      in this phase changes production code.
+- [ ] **Add a memory metric to the benchmark suite** (`benchmarks/run.py`
+      currently tracks throughput/latency only) so a future regression --
+      e.g. an accidental unbounded cache, or a dependency upgrade that stops
+      streaming a response body -- would show up the same way the
+      `static_file` CPU regression did, rather than requiring someone to
+      think to go looking for one.
+- [ ] **Document the static-asset cache lifetime caveat** above in
+      `docs/topics/deployment.md`'s existing static-files guidance.
+
+### Acceptance criteria
+
+- `docs/topics/deployment.md` states the static-cache lifetime
+  characteristic plainly, with the real per-file cost measured here.
+- `benchmarks/run.py` (or a new, adjacent script) reports a real
+  memory number per target, using the same `tracemalloc`-peak methodology,
+  not an estimate.
+- No memory-related code change ships without a profiled before/after,
+  matching the standard every performance claim in this repo already holds
+  itself to -- including the possibility that the honest finding stays "no
+  fix was needed."
+
 ## What stays deferred, correctly, and why
 
 These remain open items in earlier roadmaps but are **not** part of this
