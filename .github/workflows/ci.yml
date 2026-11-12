@@ -209,6 +209,8 @@ jobs:
         run: pip install -e ".[dev]" waitress requests
       - name: Run the performance-regression gate
         run: python benchmarks/perf_gate.py
+      - name: Measure per-request memory (informational -- no regression threshold yet)
+        run: python benchmarks/memory_profile_routes.py
 
   redis-integration:
     runs-on: ubuntu-latest
