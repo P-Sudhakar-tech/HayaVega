@@ -1,5 +1,6 @@
 {
   "buildCommand": "python3 -m pip install --break-system-packages -e \".[docs]\" && python3 -m mkdocs build",
   "outputDirectory": "site",
-  "framework": null
+  "framework": null,
+  "ignoreCommand": "git describe --tags --exact-match HEAD >/dev/null 2>&1 && exit 1 || exit 0"
 }
