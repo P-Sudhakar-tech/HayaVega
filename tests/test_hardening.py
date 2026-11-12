@@ -1,6 +1,8 @@
 import logging
 import sys
+import time
 import unittest
+from collections import deque
 from unittest.mock import MagicMock, patch
 
 from hayavega import HardeningOptions, Response, path
@@ -115,6 +117,37 @@ class HardeningTests(unittest.TestCase):
         limiter.allow("old", now=0)
         limiter.allow("new", now=11)
         self.assertEqual(limiter.stats()["tracked_clients"], 1)
+
+    def test_allow_cost_does_not_scale_with_the_number_of_tracked_clients(self):
+        """allow()'s own pruning must not scan every tracked client on
+        every call -- found via a real HRMS load-test build (see
+        hayavega-hrms's FINDINGS.md): with 10,000 tracked clients (this
+        class's own max_clients default), a single allow() call measured
+        at ~2.76ms, a ~2,700x slowdown vs. one tracked client (~1us) --
+        capping total process throughput at ~363 req/s regardless of
+        hardware, since every request serializes through this one
+        lock-protected call. Populates many tracked, still-active
+        (non-expired) clients so the cost can only come from scanning
+        them, then asserts a single allow() call for one already-tracked
+        key stays fast -- a generous threshold (50ms) well above any
+        system-noise/CI-runner-jitter margin, but orders of magnitude
+        below what a real O(n) scan over this many clients costs."""
+        limiter = RateLimiter(limit=1_000_000, window_seconds=3600, max_clients=200_000)
+        now = time.monotonic()
+        # Populate directly, not via 200,000 allow() calls: under the
+        # unfixed O(n) implementation, that setup loop is itself O(n^2)
+        # (each call scans everything tracked so far) and would never
+        # finish in a reasonable time -- exactly the bug this test exists
+        # to catch, so the setup can't depend on allow() already being fast.
+        for index in range(200_000):
+            limiter._requests[f"client-{index}"] = deque([now])
+        limiter._requests["client-0"] = deque([now])
+
+        start = time.perf_counter()
+        limiter.allow("client-0", now)
+        elapsed = time.perf_counter() - start
+
+        self.assertLess(elapsed, 0.05, f"allow() took {elapsed * 1000:.2f}ms with 200,000 tracked clients -- its cost must not scale with the number of tracked clients")
 
     def test_rate_limiter_rejects_non_positive_configuration(self):
         with self.assertRaises(ValueError):
