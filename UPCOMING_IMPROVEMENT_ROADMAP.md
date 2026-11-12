@@ -566,25 +566,27 @@ already living in this repo, with:
       Documented in `README.md`. As real versions get tagged, running
       `mike deploy <version>` again against the same local branch builds
       up genuine version history to switch between.
-- [ ] **Explicit publish step** (GitHub Pages or equivalent) -- still not
-      wired, and for a stronger reason than before: this repository is
-      **private**. GitHub Pages either isn't available at all for a
-      private repo (GitHub Free), or, on plans where it is, the published
-      site is public by default regardless of the repo's visibility --
-      private code, public docs is a real, separate decision, not a
-      config detail. Until that's explicitly decided, docs stay local-only
-      (see `README.md`'s build/serve/version-switch commands above); the
-      CI `docs` job continues to only prove the site *builds*, never
-      deploys it anywhere.
+- [x] **Explicit publish step** -- delivered via Vercel (`vercel.json` runs
+      `mkdocs build` and serves the `site/` output directly), not GitHub
+      Pages. The site is live at `https://hayavega.vercel.app/` -- verified
+      directly (a real HTTP request returns 200 with the real built
+      content, not a placeholder). The repository/package visibility
+      question this item was originally blocked on has since been resolved
+      in the other direction: `hayavega` is now a public package on PyPI
+      (see `NEXT_RELEASE_ROADMAP.md`), so public docs are no longer a
+      separate decision from public code.
 
 ### Acceptance criteria
 
 - [ ] A reader can select a specific past Hayavega version and see
       documentation that matches that version's actual behavior -- the
-      mechanism works locally (verified above) but there is only one
-      version (`dev`) deployed to switch between, since no release has
-      been tagged yet; this criterion is satisfied mechanically and will
-      be satisfied in substance once a second real version exists.
+      mechanism works locally (verified above), and `v0.1.0` is now a real
+      tagged release (see `NEXT_RELEASE_ROADMAP.md`), but the live site at
+      `https://hayavega.vercel.app/` still only serves the current `main`
+      build, not a version switcher deployed via `mike`; this criterion is
+      satisfied mechanically and will be satisfied in substance once a
+      second tagged version exists and both are actually deployed through
+      `mike` rather than this site's current single-build Vercel setup.
 - [x] Every topic guide links to the real test(s), module, or example app
       demonstrating the behavior it describes (e.g. `topics/rust-runtime.md`
       -> `tests/test_rust_runtime_hardening.py`; `topics/models.md` ->

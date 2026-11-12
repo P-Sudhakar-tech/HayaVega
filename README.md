@@ -43,6 +43,12 @@ benchmark results against FastAPI and Django live in
 full methodology, scope, and honest caveats in
 [`benchmarks/README.md`](benchmarks/README.md).
 
+`hayavega` is published on PyPI (`pip install hayavega`); see
+[NEXT_RELEASE_ROADMAP.md](NEXT_RELEASE_ROADMAP.md) for what's planned after
+`v0.1.0`, including release-process housekeeping (a `CHANGELOG.md` didn't
+exist until this roadmap flagged it) and the performance work deferred
+during the benchmark-credibility effort.
+
 ## What works now
 
 - `newproject` and `newapp` scaffolding (`startproject`/`startapp` still work as deprecated aliases)
