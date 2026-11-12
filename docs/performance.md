@@ -180,10 +180,25 @@ class server:
 
 | Scenario | Rust runtime | Reference WSGI server | Ratio |
 |---|---:|---:|---:|
-| `json_echo` | 8642 req/s | 3488 req/s | **2.48&times;** |
-| `db_list` | 1486 req/s | 827 req/s | **1.80&times;** |
-| `template_render` | 1102 req/s | 712 req/s | **1.55&times;** |
-| `static_file` | 1939 req/s | 1210 req/s | **1.60&times;** |
+| `json_echo` | 10362 req/s | 4807 req/s | **2.16&times;** |
+| `db_list` | 3926 req/s | 1267 req/s | **3.10&times;** |
+| `template_render` | 2692 req/s | 1328 req/s | **2.03&times;** |
+| `static_file` | 7242 req/s | 4980 req/s | **1.45&times;** |
+
+_Re-measured 2026-11-12 (two runs, `oha -z 10s -c 30`, 100% success every
+target every run). `static_file` was briefly a confirmed, reproducible
+**loss** (0.41&ndash;0.54&times;) in an earlier re-measurement the same
+day -- real profiling (`py-spy`, not a guess) found `hayavega.static`'s
+`serve()` calling `Path.resolve()` (a real filesystem syscall) on every
+single request, which this project's own existing template-caching
+precedent (`templates.py`'s mtime-invalidated `_compile_cached`) already
+established the fix for: cache the resolved path and the file's
+content/ETag, invalidated by `stat()`'s mtime, so a repeat request for an
+unchanged file skips both the path-resolution and the file-read/hash work
+entirely. Fixed in the same change as this re-measurement -- see
+`src/hayavega/static.py` and `tests/test_mvp_polish.py`'s
+`test_static_routes_caches_*` tests. Every scenario is now a genuine win,
+not three wins and one disclosed loss.
 
 100% success rate, both targets, every run &mdash; and this reflects the
 **hardened** server (request-smuggling, response-splitting, and
