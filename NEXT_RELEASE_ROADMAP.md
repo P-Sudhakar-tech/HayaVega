@@ -50,16 +50,28 @@ documented" -- this phase closes that gap before anything else ships.
       page. `CHANGELOG.md` already carries the same content a Release would
       show, so nothing is lost by leaving this undone; revisit only when
       asked to.
-- [ ] **Fix the stale "docs publish is blocked" language** in
-      `UPCOMING_IMPROVEMENT_ROADMAP.md`'s Week 16 section. The docs site is
-      confirmed live at `https://hayavega.vercel.app/` (verified via a real
-      HTTP request, title tag matches real content) -- the roadmap text
-      still describes this as gated on an unresolved "go public" decision,
-      which is no longer true and should not mislead the next reader.
-- [ ] **Establish a release checklist** for future tags: update
-      `CHANGELOG.md`, create the GitHub Release, confirm `SECURITY_REVIEW_CHECKLIST.md`
-      has been reviewed (it already says "review this checklist before each
-      production release" -- nothing currently enforces that happening).
+- [x] **Fix the stale "docs publish is blocked" language** in
+      `UPCOMING_IMPROVEMENT_ROADMAP.md`'s Week 16 "Sequencing note" --
+      found it directly contradicting the "Explicit publish step" bullet
+      immediately above it, which already said the publish decision was
+      resolved. Rewrote the note to match reality: the site is live and
+      deploys are now gated to tagged commits only (see the Vercel item
+      below); the one real remaining gap is the version-switcher
+      acceptance criterion, which needs a second tagged version to exist,
+      not an external decision.
+- [x] **Establish a release checklist** for future tags: added
+      `RELEASE_CHECKLIST.md` (update `CHANGELOG.md`, review
+      `SECURITY_REVIEW_CHECKLIST.md`, tag, watch the publish workflow,
+      create the GitHub Release, confirm the docs site redeployed).
+      Disclosed honestly, not oversold: nothing in it is enforced by CI
+      yet -- it is a manual checklist, and making it a real gate is its
+      own open item.
+- [x] **Gate Vercel deploys to tagged commits only**, added mid-roadmap
+      on direct request: the live docs site was redeploying on every push
+      and every PR, not just real releases. `vercel.json`'s
+      `ignoreCommand` now skips the build unless the commit exactly
+      matches a git tag -- verified live on a real PR (`Vercel ...
+      Canceled by Ignored Build Step`).
 
 ### Acceptance criteria
 
