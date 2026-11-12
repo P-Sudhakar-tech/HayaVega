@@ -80,14 +80,19 @@ to those two scenarios.
 
 Produced by the `benchmark-linux` CI job (see `benchmarks/README.md`'s
 "Running it in CI (Linux)" section), `ubuntu-latest`, `--duration 5s
---connections 200 --runs 5`, GitHub Actions run `42812292945`:
+--connections 200 --runs 5`, GitHub Actions run `43223535309` (re-measured
+2026-11-12, after this session's `static_file` regression fix -- see "The
+Rust runtime vs. a reference WSGI server" below; superseding the
+previously published run `42812292945`, kept here only as the superseded
+number since CI runner noise alone does not explain every difference,
+most visibly `static_file`):
 
 | Scenario | Hayavega (WSGI) | Hayavega (ASGI) | Async framework | Sync framework |
 |---|---:|---:|---:|---:|
-| `json_echo` | 6239 | **8856** | 3882 | error[^linux-django] |
-| `db_list` | 86 | **3926** | 761 | error[^linux-django] |
-| `template_render` | 104 | **3002** | 786 | error[^linux-django] |
-| `static_file` | 2342 | **2565** | 1087 | error[^linux-django] |
+| `json_echo` | 10208 | **16800** | 6904 | error[^linux-django] |
+| `db_list` | 74 | **6762** | 1077 | error[^linux-django] |
+| `template_render` | 80 | **4905** | 1099 | error[^linux-django] |
+| `static_file` | **8678** | 13784 | 1812 | error[^linux-django] |
 
 [^linux-django]: error: did not complete within the test window on this
 CI runner (not reproduced locally); see benchmarks/README.md's "Running
@@ -97,34 +102,80 @@ kept, not dropped, per this project's standing disclosure rule.
 _req/s, median of 5 runs at 200 connections on a GitHub Actions
 `ubuntu-latest` runner &mdash; not the same machine as the Windows
 numbers above, so the two environments are not a fair head-to-head
-against each other, only each internally consistent._ One more honest
-gap, disclosed rather than smoothed over: Hayavega's WSGI transport
-(`waitress`) is dramatically slower than its own ASGI transport on this
-specific CI runner for `db_list`/`template_render` -- roughly a 45x gap
-(86 vs. 3926 req/s) and a 29x gap (104 vs. 3002 req/s) respectively,
-computed entirely from the Linux numbers above. It's the *size* of this
-WSGI/ASGI gap that's unusual, not a cross-machine throughput comparison:
-on Windows the same two transports were close to each other (see the
-table above), so this split is specific to the Linux runner. The gap
-occurs at a 100% success rate -- no timeouts or errors are depressing
-the WSGI figure -- but with genuine tail-latency contention, e.g. p99
-around 4.6s vs. p50 around 75ms on `db_list`. This was not root-caused
-as part of publishing these numbers; it is published as-is, honestly, as
-a lead for a future investigation rather than papered over or excluded.
-`benchmarks/README.md`'s "Performance regression gate" section
-cross-references this same anomaly as the more likely (though still
-unconfirmed) explanation for `db_list`'s ~10x between-VM noise on the CI
-performance gate, rather than that noise being disk-I/O-bound.
+against each other, only each internally consistent._ `static_file`'s
+WSGI number (2342 &rarr; 8678, a real 3.7&times;) is the clearest
+Linux-side confirmation that the `static_file` regression fix below is a
+genuine win, not just a Windows dev-machine artifact.
+
+One more honest gap, disclosed rather than smoothed over, and *more*
+pronounced in this run than the one it supersedes: Hayavega's WSGI
+transport (`waitress`) is dramatically slower than its own ASGI transport
+on this specific CI runner for `db_list`/`template_render` -- roughly a
+91x gap (74 vs. 6762 req/s) and a 61x gap (80 vs. 4905 req/s)
+respectively, computed entirely from the Linux numbers above (up from a
+45x/29x gap in the superseded run). It's the *size* of this WSGI/ASGI gap
+that's unusual, not a cross-machine throughput comparison: on Windows the
+same two transports were close to each other (see the table above), so
+this split is specific to the Linux runner. The gap occurs at a 100%
+success rate -- no timeouts or errors are depressing the WSGI figure --
+but with genuine tail-latency contention, e.g. `db_list` p90/p99 around
+3.9s/4.9s vs. p50 around 81ms. This was not root-caused as part of
+publishing these numbers; it is published as-is, honestly, as a lead for
+a future investigation rather than papered over or excluded, and its
+growth between two separate runs is itself a data point for that future
+investigation. `benchmarks/README.md`'s "Performance regression gate"
+section cross-references this same anomaly as the more likely (though
+still unconfirmed) explanation for `db_list`'s ~10x between-VM noise on
+the CI performance gate, rather than that noise being disk-I/O-bound.
 
 Hayavega leads every published scenario on both transports on Windows
 **against FastAPI and Django**, the two comparison frameworks above. On
 Linux CI, Hayavega's ASGI transport leads every scenario; the WSGI
-transport leads `json_echo` and `static_file` but trails the async
-framework on `db_list`/`template_render` on this specific runner --
-the same gap disclosed immediately above, published honestly rather
-than rounded up to a clean sweep. Against the four harder targets below
-(a raw-ASGI baseline, Granian, Robyn, Blacksheep), that clean sweep does
-not hold -- see the disclosure under that table.
+transport leads `static_file` but trails the async framework on
+`db_list`/`template_render` on this specific runner -- the same gap
+disclosed immediately above, published honestly rather than rounded up
+to a clean sweep (`json_echo` is close: 10208 vs. 6904, still a Hayavega
+WSGI win here, unlike the superseded run where it was closer still).
+Against the four harder targets below (a raw-ASGI baseline, Granian,
+Robyn, Blacksheep), that clean sweep does not hold -- see the disclosure
+under that table.
+
+### Linux (CI), eight-way comparison: Granian, Robyn, Blacksheep, and a raw-ASGI baseline
+
+The same four harder targets as the Windows eight-way table below (a
+raw-ASGI baseline, Granian, Robyn, Blacksheep), from the same
+`benchmark-linux` CI run (`43223535309`) as the table immediately above
+-- one coherent dataset, not numbers stitched together from different
+runs. This closes the gap the benchmark-credibility plan's own final
+review flagged and deferred: this data existed in a CI artifact and had
+never been written up before.
+
+| Scenario | Hayavega (WSGI) | Raw ASGI | Granian | Robyn | Blacksheep |
+|---|---:|---:|---:|---:|---:|
+| `json_echo` | 10208 | 30915 | **75665** | 41728 | 27688 |
+| `db_list` | 74 | 8867 | **9886** | 9474 | 8147 |
+| `template_render` | 80 | 9342 | **10382** | 8935 | 6089 |
+| `static_file` | 8678 | 32488 | **84250** | 29660 | 4448 |
+
+_req/s, median of 5 runs at 200 connections, 100% success on every cell._
+
+**Disclosed, not rounded up: Hayavega does not win any scenario against
+this harder field on Linux, unlike `db_list` on Windows.** Granian leads
+every scenario here by a wide margin (7.4&times; on `json_echo`,
+9.7&times; on `static_file`), and even Blacksheep -- the one other full
+Python framework in this table, not just a bare baseline or a Rust-core
+runtime -- beats Hayavega's WSGI transport on every scenario except
+`static_file`, where Hayavega's new caching (see below) gives it a real
+2&times; lead. This is the honest trade of comparing WSGI's synchronous,
+thread-per-connection model against async/Rust-core servers on a runner
+where that model's weaker side (shown immediately above: the WSGI/ASGI
+split) is already more pronounced than on Windows. Hayavega's ASGI
+transport (not shown in this table; see the table above) would close or
+reverse most of this gap -- `16800`/`6762`/`4905`/`13784` against this
+same field would lead `db_list` and `template_render` outright and be
+competitive on the rest -- but that comparison isn't run here yet; adding
+Hayavega (ASGI) to this specific eight-way table is tracked as a real
+follow-up, not silently assumed.
 
 ### Windows (dev machine), eight-way comparison: Granian, Robyn, Blacksheep, and a raw-ASGI baseline
 

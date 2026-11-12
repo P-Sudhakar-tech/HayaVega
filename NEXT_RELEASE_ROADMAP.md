@@ -76,17 +76,21 @@ Two items the final review of `docs/superpowers/plans/2026-11-10-benchmark-credi
 explicitly deferred as "can be a separate PR" rather than folding into that
 plan's already-large fix wave.
 
-- [ ] **Publish the real Linux 8-way benchmark comparison.** A real
-      `benchmark-linux` CI run already produced genuine throughput numbers
-      for all 8 targets, including Granian/Robyn/Blacksheep on Linux (e.g.
-      Granian measured 65124 req/s on `json_echo` in a verified run) -- this
-      data exists in a CI artifact and was never written into
-      `docs/performance.md` or `benchmarks/README.md`. Download the latest
-      clean `benchmark-linux` artifact, verify it against
-      `benchmarks/results/RESULTS.md`'s existing disclosure conventions
-      (bold the real leader per column, disclose losses, cross-reference the
-      already-documented WSGI/waitress Linux anomaly), and publish it as a
-      genuine Linux eight-way table alongside the existing Windows one.
+- [x] **Publish the real Linux 8-way benchmark comparison.** Downloaded
+      the latest clean `benchmark-linux` CI artifact (GitHub Actions run
+      `43223535309`, post static_file-fix) and published it in
+      `docs/performance.md` as a genuine Linux eight-way table, matching
+      the existing disclosure conventions exactly (bold the real leader
+      per column, disclose losses honestly -- Hayavega wins none of the
+      four harder targets on Linux WSGI, unlike `db_list` on Windows --
+      and cross-reference the already-documented WSGI/ASGI split, which
+      is *more* pronounced in this fresher run: 91x on `db_list`, up from
+      45x). Also refreshed the stale 4-way Linux table it sits beside
+      (same CI run, one coherent dataset instead of two different-vintage
+      ones side by side) -- `static_file`'s WSGI number moving 2342 to
+      8678 (3.7x) is real Linux-side confirmation that this session's
+      `static_file` regression fix is a genuine win, not a Windows-only
+      artifact.
 - [ ] **`benchmark-linux`'s `run.py` always exits 0, regardless of per-target
       errors.** This was a Review Focus item in the benchmark-credibility
       plan that was never actually implemented -- `benchmark_target()`'s
