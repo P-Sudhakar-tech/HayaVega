@@ -37,7 +37,7 @@ def startproject(name: str, target: Path | None = None) -> Path:
     )
     _write(
         root / "config" / "routes.py",
-        "from hayavega import Response, api_route, path\nfrom hayavega.auth_api import auth_routes\nfrom hayavega.conf import load_settings\nfrom hayavega.graphql import Schema, graphql_view\n\n_settings = load_settings()\n\ndef home(request):\n    return Response('<h1>Welcome to Hayavega</h1><p>Your Rust-backed project is running.</p>')\n\ndef health(request):\n    return {'status': 'ok'}\n\nschema = Schema(query={'greeting': lambda request: 'Hello from Hayavega GraphQL'})\n\nurlpatterns = [path('', home), api_route('api/health', health), path('graphql', graphql_view(schema), methods=('POST',)), *auth_routes(_settings.database, secret_key=_settings.secret_key)]\n",
+        "from hayavega import Response, api_route, path\nfrom hayavega.admin import admin_routes\nfrom hayavega.auth_api import auth_routes\nfrom hayavega.conf import load_settings\nfrom hayavega.graphql import Schema, graphql_view\n\n_settings = load_settings()\n\ndef home(request):\n    return Response('<h1>Welcome to Hayavega</h1><p>Your Rust-backed project is running.</p>')\n\ndef health(request):\n    return {'status': 'ok'}\n\nschema = Schema(query={'greeting': lambda request: 'Hello from Hayavega GraphQL'})\n\nurlpatterns = [path('', home), api_route('api/health', health), path('graphql', graphql_view(schema), methods=('POST',)), *auth_routes(_settings.database, secret_key=_settings.secret_key), *admin_routes(_settings.database)]\n",
     )
     _write(
         root / "config" / "wsgi.py",
