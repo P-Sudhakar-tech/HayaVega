@@ -14,6 +14,10 @@ not part of this deploy). This README stays the first thing a
 repository visitor sees; the docs site is the deeper reference it
 points to.
 
+Deploys are gated to tagged commits only (`vercel.json`'s
+`ignoreCommand`) -- ordinary pushes and PRs build and test normally but
+do not redeploy the live docs site; only pushing a git tag does.
+
 To build or browse it locally instead:
 
 - `mkdocs build --strict` -- builds static HTML into the gitignored
