@@ -48,6 +48,35 @@ class ScaffoldTests(unittest.TestCase):
                     sys.modules.pop(name, None)
         self.assertIn(HELP_TEXT, output.getvalue())
 
+    def test_generated_routes_wire_admin_routes_by_default(self):
+        """A freshly scaffolded project should have a working /admin/ out of
+        the box once an admin user exists (via `createadmin`), not a silent
+        404 -- `admin_routes()` must be included in the generated
+        config/routes.py, not left as something a developer has to
+        discover and add manually."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = startproject("demo_admin", Path(directory))
+            sys.path.insert(0, str(root))
+            try:
+                routes = importlib.import_module("config.routes")
+                self.assertTrue(any(route.pattern == "admin" for route in routes.urlpatterns))
+
+                wsgi = importlib.import_module("config.wsgi")
+                captured = {}
+
+                def start_response(status, headers):
+                    captured["status"] = status
+
+                environ = {"PATH_INFO": "/admin", "REQUEST_METHOD": "GET", "HTTP_HOST": "localhost"}
+                wsgi.application(environ, start_response)
+                # Unauthenticated: proves the route exists and is gated,
+                # not that it's missing (a 404 would mean no such route).
+                self.assertEqual(captured["status"], "401 Unauthorized")
+            finally:
+                sys.path.remove(str(root))
+                for name in ("config.wsgi", "config.routes", "config.settings", "config"):
+                    sys.modules.pop(name, None)
+
     def test_generated_wsgi_module_exposes_a_working_wsgi_callable(self):
         """The wsgi.py a scaffolded project ships is what a real production
         server (gunicorn/waitress) is pointed at -- not just `hayavega
