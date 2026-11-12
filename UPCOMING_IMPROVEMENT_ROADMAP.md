@@ -598,11 +598,18 @@ already living in this repo, with:
 
 ### Sequencing note
 
-The version switcher is delivered and verified locally (see above). The
-one remaining deliverable, the publish step, is gated on an external
-decision (going live publicly, which this repository's private status
-makes non-trivial -- see the deliverable above) rather than remaining
-engineering work; it is small once that decision is made.
+**Stale as of 2026-11-12, corrected:** this note used to say the publish
+step was gated on an external "go public" decision. That decision has
+since been made in the other direction -- `hayavega` is a public PyPI
+package (see `NEXT_RELEASE_ROADMAP.md`), the publish step is delivered
+(see the bullet above: live at `https://hayavega.vercel.app/`, verified
+directly), and deploys are now gated to tagged commits only
+(`vercel.json`'s `ignoreCommand`), not to every push/PR. The one
+remaining gap is the version switcher's acceptance criterion above: it
+works locally via `mike`, but the live site still only serves a single
+`main` build, because only one version (`v0.1.0`) has ever been tagged.
+That's real engineering work for when a second version exists, not an
+external decision blocking it.
 
 ## Week 17: gRPC support
 
