@@ -196,16 +196,27 @@ this session in favor of the benchmark-credibility work. It is sized
 correctly here as its own phase, not a quick item, because it is genuinely
 larger than everything above combined.
 
-- [ ] **Evaluate `SO_REUSEPORT` multi-process scaling for `hayavega_native.serve_wsgi()`.**
-      The Rust runtime is currently one process with a fixed thread pool --
-      CPython's GIL means only one thread executes Python view code at a
-      time regardless of pool size. A `gunicorn`-style `-w N` multi-process
-      model (each process its own GIL) is the direct way to use more than
-      one CPU core. Needs its own scoping: how worker processes are
-      supervised/restarted, how `Settings.server`'s existing `engine =
-      "rust"` opt-in exposes a worker count, and a real multi-core benchmark
-      (this project's benchmarking has so far run single-process throughput
-      numbers almost exclusively).
+- [x] **`SO_REUSEPORT` multi-process scaling for `hayavega_native.serve_wsgi()` -- shipped as a launcher, supervision still open.**
+      Measured the GIL ceiling directly first: a `workers=1..32` sweep
+      against `db_list` plateaus hard after 2-4 workers (2200 -> ~3900-4400
+      req/s) regardless of thread count. `hayavega.rust_runtime.serve()`
+      now takes `processes=N` (default 1, unchanged behavior): each process
+      gets its own interpreter/GIL, all binding the same `host:port` via
+      `SO_REUSEPORT`. Rejected on Windows with a clear error (no real
+      equivalent there) rather than silently behaving differently. Verified
+      for real on the `native-extension` CI job (Linux), not just locally --
+      including catching and fixing a real bug first: `socket2`'s
+      `set_reuse_port` is feature-gated behind `"all"`, invisible on this
+      Windows dev machine because `cfg(unix)` excludes the whole code path
+      here, so Cargo happily built without ever compiling it. After the
+      fix, the real integration test (`tests/test_rust_runtime.py`'s
+      `RustRuntimeReusePortTests`) proved two actual server processes can
+      share one port and both serve requests. **Not done**: process
+      supervision/restart-on-crash, and `hayavega launch`/`Settings.server`
+      wiring a `processes` setting end-to-end -- this PR only lands the
+      underlying capability. See
+      `crates/hayavega-python/src/server.rs`, `src/hayavega/rust_runtime.py`,
+      and `docs/topics/rust-runtime.md`.
 - [ ] **Evaluate Python 3.13's free-threaded (no-GIL) build.** The one
       change that would remove the GIL ceiling structurally rather than
       working around it with more processes. Needs checking whether

@@ -35,6 +35,9 @@ termination, matching this project's own `DEPLOYMENT.md` guidance for
 
 from __future__ import annotations
 
+import os
+import sys
+
 from .hardening import HardeningOptions
 from .runtime import create_application
 
@@ -43,7 +46,7 @@ class RustRuntimeUnavailableError(RuntimeError):
     pass
 
 
-def serve(urlpatterns, host: str = "127.0.0.1", port: int = 8000, *, hardening: HardeningOptions | None = None, debug: bool = False, workers: int = 8, tls_cert: str | None = None, tls_key: str | None = None) -> None:
+def serve(urlpatterns, host: str = "127.0.0.1", port: int = 8000, *, hardening: HardeningOptions | None = None, debug: bool = False, workers: int = 8, processes: int = 1, tls_cert: str | None = None, tls_key: str | None = None) -> None:
     """Build the same WSGI application `hayavega.runtime.serve` would and run
     it behind the native Rust server instead of `wsgiref`.
 
@@ -66,11 +69,30 @@ def serve(urlpatterns, host: str = "127.0.0.1", port: int = 8000, *, hardening: 
     caller (`Settings.server.engine = 'rust'` in settings, checked by
     `hayavega launch`) is told plainly instead of silently starting the
     default Python server under a different name.
+
+    `processes` (default 1, i.e. today's single-process behavior) runs
+    `processes` separate OS processes, each with its own Python interpreter
+    and GIL, all binding the same `host:port` via `SO_REUSEPORT` so the
+    kernel load-balances connections across them -- this is the real way to
+    use more than one CPU core: within a single process, CPython's GIL caps
+    Python view-code execution to one thread at a time no matter how large
+    `workers` is (measured directly: a `workers` sweep from 1 to 32 plateaus
+    after 2-4 workers on every CPU-bound route). `SO_REUSEPORT` has no real
+    equivalent on Windows (`SO_REUSEADDR` there does not load-balance the
+    same way), so `processes > 1` raises `RustRuntimeUnavailableError` there
+    rather than silently falling back to single-process behavior. This is a
+    multi-process launcher, not a supervisor: a child process that exits
+    (crash or otherwise) is not restarted -- that is real, disclosed scope
+    this function does not cover yet (see `NEXT_RELEASE_ROADMAP.md`'s
+    Phase 4 for the remaining supervision/restart work).
     """
     try:
         import hayavega_native
     except ImportError as error:
         raise RustRuntimeUnavailableError("Settings.server.engine is 'rust' but hayavega_native was not built for this install. Rebuild with `cargo` on PATH (`pip install -e .` re-runs the build hook), or set Settings.server.engine to 'python' to use the standard runtime.") from error
+
+    if processes > 1 and sys.platform == "win32":
+        raise RustRuntimeUnavailableError("processes>1 needs SO_REUSEPORT for real multi-core scaling, which has no real equivalent on Windows (SO_REUSEADDR there does not load-balance the same way). Use processes=1 on Windows, or deploy on Linux for multi-process scaling.")
 
     # Environment-dependent, not a design gap: reached only when
     # hayavega_native is actually built (the ImportError above already
@@ -80,5 +102,32 @@ def serve(urlpatterns, host: str = "127.0.0.1", port: int = 8000, *, hardening: 
     # job's 100% coverage gate stays meaningful.
     application = create_application(urlpatterns, hardening=hardening, debug=debug)  # pragma: no cover
     scheme = "https" if tls_cert else "http"  # pragma: no cover
-    print(f"Hayavega development server (Rust runtime, {workers} workers): {scheme}://{host}:{port}/")  # pragma: no cover
-    hayavega_native.serve_wsgi(application, host, port, workers, tls_cert, tls_key)  # pragma: no cover
+    reuse_port = processes > 1  # pragma: no cover
+    print(f"Hayavega development server (Rust runtime, {processes} process(es) x {workers} workers): {scheme}://{host}:{port}/")  # pragma: no cover
+
+    if processes > 1:  # pragma: no cover
+        child_pids = [_fork_worker(application, host, port, workers, tls_cert, tls_key) for _ in range(processes - 1)]
+        try:
+            hayavega_native.serve_wsgi(application, host, port, workers, tls_cert, tls_key, reuse_port)
+        finally:
+            for pid in child_pids:
+                try:
+                    os.kill(pid, 15)  # SIGTERM
+                except OSError:
+                    pass
+    else:  # pragma: no cover
+        hayavega_native.serve_wsgi(application, host, port, workers, tls_cert, tls_key, reuse_port)
+
+
+def _fork_worker(application, host: str, port: int, workers: int, tls_cert: str | None, tls_key: str | None) -> int:  # pragma: no cover -- Unix-only, multi-process; see serve()'s pragma rationale
+    """Forks one additional worker process, which serves forever with
+    `reuse_port=True` and never returns to the parent's call site."""
+    import hayavega_native
+
+    pid = os.fork()
+    if pid == 0:
+        try:
+            hayavega_native.serve_wsgi(application, host, port, workers, tls_cert, tls_key, True)
+        finally:
+            os._exit(0)
+    return pid

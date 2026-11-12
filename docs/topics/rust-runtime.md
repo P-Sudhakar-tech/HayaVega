@@ -44,6 +44,29 @@ native component in this codebase plays: own socket accept, HTTP/1.1
 parsing (including real keep-alive), and response writing around
 unchanged Python request-handling code via the standard WSGI contract.
 
+### Using more than one CPU core: `processes=`
+
+`workers=` controls thread count *within* one process, and the GIL caps
+all of them to one at a time &mdash; measured directly: throughput
+plateaus after 2&ndash;4 workers on CPU-bound routes no matter how many
+more are added. To actually use more than one core, pass `processes=N`
+(default 1): each process gets its own Python interpreter and its own
+GIL, and all of them bind the same `host:port` via `SO_REUSEPORT`
+(Linux-only &mdash; it has no real equivalent on Windows, so
+`processes > 1` there raises `RustRuntimeUnavailableError` instead of
+silently behaving differently):
+
+```python title="config/settings.py"
+class server:
+    engine = "rust"
+    workers = 8
+    processes = 4  # one per CPU core is a reasonable starting point
+```
+
+This is a multi-process *launcher*, not a supervisor: a child process
+that exits is not restarted. Process supervision/restart is tracked as
+follow-up work, not shipped yet.
+
 ## TLS
 
 ```python title="config/settings.py"

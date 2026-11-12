@@ -477,6 +477,48 @@ fn handle_connection(stream: Conn, application: &Py<PyAny>, host: &str, port: u1
 /// cert/key is a startup-time mistake, not a per-connection one, so it is
 /// resolved once before the accept loop starts rather than on every
 /// connection.
+/// Binds the server's listening socket. When `reuse_port` is true (Unix
+/// only -- `SO_REUSEPORT`), multiple OS processes can each bind the same
+/// `host:port` and the kernel load-balances incoming connections across
+/// them, which is what lets `hayavega.rust_runtime.serve(processes=N)` use
+/// more than one CPU core: CPython's GIL caps one process to one thread of
+/// Python execution regardless of this server's thread-pool size (see this
+/// module's own docstring), so real multi-core scaling needs separate
+/// processes, not more threads in one. `SO_REUSEPORT` has no real
+/// equivalent on Windows (`SO_REUSEADDR` there does not load-balance the
+/// same way), so `reuse_port=true` is rejected there with a clear error
+/// instead of silently behaving differently than on Linux.
+#[cfg(unix)]
+fn bind_listener(host: &str, port: u16, reuse_port: bool) -> io::Result<TcpListener> {
+    use socket2::{Domain, Socket, Type};
+    use std::net::ToSocketAddrs;
+
+    let addr = (host, port).to_socket_addrs()?.next().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, format!("could not resolve {host}:{port}")))?;
+    let socket = Socket::new(Domain::for_address(addr), Type::STREAM, None)?;
+    socket.set_reuse_address(true)?;
+    if reuse_port {
+        socket.set_reuse_port(true)?;
+    }
+    socket.bind(&addr.into())?;
+    socket.listen(1024)?;
+    Ok(socket.into())
+}
+
+#[cfg(not(unix))]
+fn bind_listener(host: &str, port: u16, reuse_port: bool) -> io::Result<TcpListener> {
+    if reuse_port {
+        return Err(io::Error::new(io::ErrorKind::Unsupported, "reuse_port is only supported on Unix platforms (SO_REUSEPORT); it has no real equivalent on Windows"));
+    }
+    TcpListener::bind((host, port))
+}
+
+// bind_listener's behavior (SO_REUSEPORT lets two listeners share a port on
+// Unix, rejected on Windows) is verified at the Python integration-test
+// level (tests/test_rust_runtime.py), not via `cargo test` here: this
+// crate's `extension-module` feature means a standalone test binary can't
+// link against libpython, the same reason this repo's own tooling already
+// scopes `cargo test` to the hayavega-core crate only.
+
 fn load_tls_config(cert_path: &str, key_path: &str) -> Result<rustls::ServerConfig, String> {
     let cert_file = File::open(cert_path).map_err(|e| format!("could not open TLS certificate {cert_path:?}: {e}"))?;
     let certs = rustls_pemfile::certs(&mut BufReader::new(cert_file)).collect::<Result<Vec<_>, _>>().map_err(|e| format!("could not parse TLS certificate {cert_path:?} as PEM: {e}"))?;
@@ -491,9 +533,9 @@ fn load_tls_config(cert_path: &str, key_path: &str) -> Result<rustls::ServerConf
 }
 
 #[pyfunction]
-#[pyo3(signature = (application, host, port, workers=8, tls_cert=None, tls_key=None))]
-pub fn serve_wsgi(py: Python<'_>, application: Py<PyAny>, host: String, port: u16, workers: usize, tls_cert: Option<String>, tls_key: Option<String>) -> PyResult<()> {
-    let listener = TcpListener::bind((host.as_str(), port)).map_err(|e| PyValueError::new_err(format!("could not bind {host}:{port}: {e}")))?;
+#[pyo3(signature = (application, host, port, workers=8, tls_cert=None, tls_key=None, reuse_port=false))]
+pub fn serve_wsgi(py: Python<'_>, application: Py<PyAny>, host: String, port: u16, workers: usize, tls_cert: Option<String>, tls_key: Option<String>, reuse_port: bool) -> PyResult<()> {
+    let listener = bind_listener(&host, port, reuse_port).map_err(|e| PyValueError::new_err(format!("could not bind {host}:{port}: {e}")))?;
     let listener = Arc::new(listener);
     let application = Arc::new(application);
     let workers = workers.max(1);
