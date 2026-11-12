@@ -308,17 +308,20 @@ Windows without MS C++ Build Tools).
       asset count; a correct caveat to put in `docs/topics/deployment.md` if
       this framework is ever used for large-scale static/media hosting
       without a reverse proxy or CDN in front of it.
-- [ ] **No fixable inefficiency was found**, and none is invented here --
+- [x] **No fixable inefficiency was found**, and none is invented here --
       current memory usage across the hot paths is already minimal. Nothing
       in this phase changes production code.
-- [ ] **Add a memory metric to the benchmark suite** (`benchmarks/run.py`
-      currently tracks throughput/latency only) so a future regression --
-      e.g. an accidental unbounded cache, or a dependency upgrade that stops
-      streaming a response body -- would show up the same way the
-      `static_file` CPU regression did, rather than requiring someone to
-      think to go looking for one.
-- [ ] **Document the static-asset cache lifetime caveat** above in
-      `docs/topics/deployment.md`'s existing static-files guidance.
+- [x] **Add a memory metric to the benchmark suite.** Added
+      `benchmarks/memory_profile_routes.py`, promoting this session's
+      investigation into a real, repo-committed script using the same
+      `tracemalloc`-peak methodology, wired into the `perf` CI job
+      (informational only -- no committed baseline/threshold yet, the
+      same first step `db_list` took in `perf_gate.py` before its own
+      gate was trusted). See `benchmarks/README.md`'s new "Per-request
+      memory, measured in CI" section.
+- [x] **Document the static-asset cache lifetime caveat** above in
+      `docs/topics/deployment.md`'s existing static-files guidance --
+      added a dedicated "Static files" section there.
 
 ### Acceptance criteria
 

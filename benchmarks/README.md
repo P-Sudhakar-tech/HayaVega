@@ -259,6 +259,33 @@ useful for a quick sanity check of the *shape* of the numbers (did they
 move in the expected direction at all), but the values it prints on a dev
 machine are not the ones that belong in the committed baseline file.
 
+## Per-request memory, measured in CI (informational, not yet a gate)
+
+`benchmarks/memory_profile_routes.py`, added to the `perf` job alongside
+`perf_gate.py`, measures per-request peak memory for Hayavega's own four
+benchmark routes using the same `tracemalloc`-peak methodology already
+established in "Line-by-line memory profiling" below -- see that section
+for why RSS-based tools and Scalene don't fit this question. Unlike
+`perf_gate.py`'s HTTP-level benchmarking (a separate OS process per
+target), this calls `create_application()`'s real WSGI callable directly
+in the same process as the measurement, since `tracemalloc` can only see
+inside the process it runs in -- an HTTP-level, subprocess-based
+benchmark structurally can't answer "how much does this one call
+allocate," which is also why this script covers Hayavega's own routes
+only, not the cross-framework targets.
+
+**No regression threshold is enforced yet.** This establishes the
+measurement and prints it on every CI run so a future regression is at
+least visible in the job's own output -- the same first step `db_list`
+took in the gate above before enough stable CI data existed to justify
+gating on it. A real run of this suite (before any committed code existed
+to regress) found per-request peak memory already minimal across all
+four routes (1.75-5.26 KiB, no variance across repeated calls) -- see
+`NEXT_RELEASE_ROADMAP.md`'s Phase 6 for the full investigation this
+script was promoted from. Turning this into a real blocking gate (a
+committed baseline + threshold, the same two-step process `perf_gate.py`
+went through) is open follow-up work.
+
 ## Eight-way comparison: Granian, Robyn, Blacksheep, and a raw-ASGI baseline
 
 Wired into `benchmarks/run.py`'s `build_targets()` alongside the original

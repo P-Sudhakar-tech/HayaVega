@@ -42,6 +42,23 @@ production-server recommendation of its own &mdash; see
 [Rust runtime](rust-runtime.md) for the full scope and its benchmarked
 result against `waitress`.
 
+## Static files
+
+`static_routes()` caches each served file's resolved path and content in
+memory, keyed by mtime, so a repeat request skips re-reading the file from
+disk ([Rust runtime](rust-runtime.md)'s sibling fix for the same pattern
+in `templates.py` predates this). Measured cost: about 1.6 KiB held per
+distinct file ever served, for the life of the process -- fine for a
+typical project's handful to low hundreds of static assets, but a real
+characteristic to know about before using it to serve a large or
+ever-growing set of files (e.g. thousands of user-uploaded assets): the
+cache has no eviction, and memory grows with the number of *distinct*
+files actually requested, not with request volume. A reverse proxy or
+CDN in front of the application, serving static assets directly instead
+of routing every request through it, is the right choice at that scale
+regardless of this cache -- the same guidance `static_routes()`'s own
+docstring already gives for development/small-deployment use.
+
 ## Reverse proxy and HTTPS
 
 A real deployment terminates TLS and HTTP/2 at a reverse proxy (nginx,
