@@ -134,7 +134,7 @@ this project's "stop after 2-3 genuine attempts and disclose" standard,
 this is published as an open, disclosed gap -- the Django row is kept in
 every published Linux table with an explicit `error` cell, never
 silently dropped. See `docs/performance.md` for the published Linux
-numbers (run `42812292945`).
+numbers (run `43223535309`, re-measured 2026-11-12, superseding `42812292945`).
 
 **Update: Granian, Robyn, and Blacksheep are now installed and covered by
 Linux CI too.** The `benchmark-linux` job's install step in
